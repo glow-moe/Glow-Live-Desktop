@@ -41,6 +41,9 @@ func main() {
 	w.SetSize(winW, winH, webview.HintFixed)
 	w.Navigate(url)
 	// Park it in the bottom-right corner once the GTK loop is up.
-	w.Dispatch(func() { moveBottomRight(w.Window(), winW, winH) })
+	w.Dispatch(func() {
+		moveBottomRight(w.Window(), winW, winH)
+		enableCloseToTray(w.Window()) // Windows: close button hides to tray
+	})
 	w.Run()
 }
