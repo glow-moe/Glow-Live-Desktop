@@ -1,0 +1,4 @@
+Name: webkit2gtk-4.0
+Description: alias to webkit2gtk-4.1 (Ubuntu 24.04 ships 4.1)
+Version: 2.52.3
+Requires: webkit2gtk-4.1

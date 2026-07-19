@@ -1,0 +1,6 @@
+# Discord application ids, injected at build time so they stay out of git.
+# Copy to ".appids" and fill with your own apps (each named after its game).
+APP_GLOW=
+APP_LOL=
+APP_FH6=
+APP_FH5=

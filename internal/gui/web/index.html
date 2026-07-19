@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>glow L!VE</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 16px;
+        width: 100%;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: #4a2c5a;
+        background: #fdf3fa;
+        user-select: none;
+      }
+      .head { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+      .logo {
+        font-weight: 800; font-size: 17px; letter-spacing: -0.01em;
+        background: linear-gradient(100deg, #ff66b3, #9b5cff);
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+      }
+      .live {
+        font-weight: 900; font-size: 11px; letter-spacing: 0.12em;
+        color: #a24fc0; background: #f6e4f7; border: 1px solid #eccbee;
+        padding: 2px 7px; border-radius: 6px;
+      }
+      .ver {
+        margin-left: auto; font-size: 10px; font-weight: 800; letter-spacing: 0.03em;
+        color: #a24fc0; background: #f6e4f7; border: 1px solid #eccbee;
+        padding: 2px 9px; border-radius: 999px;
+      }
+      .card {
+        background: #fff; border: 1px solid #f3d9ef; border-radius: 16px;
+        padding: 16px; box-shadow: 0 8px 24px -14px rgba(155, 92, 255, 0.4);
+      }
+      .muted { color: #9a7fa8; font-size: 12px; line-height: 1.5; }
+      label.fld { display: block; font-size: 11px; font-weight: 700; color: #7a5c88; margin: 12px 0 5px; }
+      input[type="text"], input[type="password"] {
+        width: 100%; padding: 10px 12px; font-size: 13px; font-family: ui-monospace, monospace;
+        color: #4a2c5a; background: #fdf3fa; border: 1px solid #eccbee; border-radius: 10px; outline: none;
+      }
+      input:focus { border-color: #ff9ed6; }
+      .btn {
+        width: 100%; margin-top: 10px; padding: 11px; border: none; border-radius: 999px;
+        font-size: 13px; font-weight: 800; color: #fff; cursor: pointer;
+        background: linear-gradient(100deg, #ff66b3, #9b5cff);
+      }
+      .btn:disabled { opacity: 0.55; cursor: default; }
+      .btn.ghost { color: #a24fc0; background: #f6e4f7; border: 1px solid #eccbee; }
+      .row { display: flex; align-items: center; gap: 11px; }
+      .pfp {
+        position: relative; overflow: hidden;
+        width: 42px; height: 42px; border-radius: 50%; flex: 0 0 auto;
+        display: grid; place-items: center; font-weight: 900; font-size: 17px; color: #fff;
+        background: linear-gradient(135deg, #ff66b3, #9b5cff); border: 2px solid #ff9ed6; box-shadow: 0 0 0 2px #fff;
+      }
+      .pfp img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      .uname { font-weight: 800; font-size: 15px; }
+      .sub { font-size: 11px; color: #9a7fa8; }
+      .status {
+        margin-top: 14px; padding: 12px 14px; border-radius: 12px;
+        background: #fdf3fa; border: 1px solid #f3d9ef; display: flex; align-items: center; gap: 10px;
+      }
+      .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; background: #cbb6d6; }
+      .dot.on { background: #34d399; box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.18); animation: pulse 1.4s infinite; }
+      .dot.err { background: #f0708a; }
+      @keyframes pulse { 50% { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0.06); } }
+      .st-main { font-weight: 800; font-size: 13px; }
+      .st-sub { font-size: 11px; color: #9a7fa8; margin-top: 1px; }
+      .games { display: flex; gap: 6px; margin-top: 12px; }
+      .chip {
+        font-size: 10.5px; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase;
+        color: #a24fc0; background: #f6e4f7; border: 1px solid #eccbee; padding: 4px 9px; border-radius: 999px;
+      }
+      .chip.hot { color: #fff; background: linear-gradient(100deg, #ff66b3, #9b5cff); border-color: transparent; }
+      .delay { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+      .delay input { flex: 1; accent-color: #b05cff; }
+      .delay .val { font-size: 12px; font-weight: 800; color: #7a5c88; min-width: 46px; text-align: right; }
+      .split { display: flex; gap: 8px; margin-top: 12px; }
+      .split .btn { margin-top: 0; }
+      .hide { display: none !important; }
+      .foot { margin-top: 12px; text-align: center; font-size: 10px; color: #bda6c8; }
+      .foot a { color: #a24fc0; text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <div class="head">
+      <span class="logo">glow</span>
+      <span class="live">L!VE</span>
+      <span class="ver" id="ver">Dev Build</span>
+    </div>
+
+    <!-- ── Not linked ── -->
+    <div class="card" id="panel-link">
+      <div class="muted">
+        Link this PC to your <b>glow.moe</b> profile. Your live match (League) and
+        driving telemetry (Forza) then show on your page - only while this runs.
+      </div>
+      <button class="btn" id="btn-browser">Link with browser</button>
+      <div class="foot" style="margin-top:12px">
+        You'll approve this device on glow.moe - no keys to copy or paste.
+      </div>
+    </div>
+
+    <!-- ── Linked ── -->
+    <div class="card hide" id="panel-live">
+      <div class="row">
+        <div class="pfp" id="pfp"><img id="pfp-img" alt="" hidden /><span id="pfp-txt">?</span></div>
+        <div>
+          <div class="uname" id="uname">@you</div>
+          <div class="sub">linked to glow.moe</div>
+        </div>
+      </div>
+
+      <div class="status">
+        <span class="dot" id="dot"></span>
+        <div style="flex:1; min-width:0">
+          <div class="st-main" id="st-main">Idle</div>
+          <div class="st-sub" id="st-sub">press Start and load a game</div>
+        </div>
+      </div>
+
+      <div class="games">
+        <span class="chip" id="chip-lol">League</span>
+        <span class="chip" id="chip-forza">Forza</span>
+      </div>
+
+      <div class="delay">
+        <span class="sub">Stream delay</span>
+        <span class="val" id="delay-val" style="flex:1; text-align:right">live</span>
+      </div>
+      <a href="#" id="settings-link" class="foot" style="display:block; margin-top:8px">
+        Delay &amp; name masking - set on glow.moe → L!VE ↗
+      </a>
+
+      <div class="split">
+        <button class="btn ghost" id="btn-toggle">Stop</button>
+      </div>
+      <div class="foot"><a id="relink" href="#">unlink / switch account</a></div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const api = (p, body) =>
+        fetch("/api/" + p, body ? { method: "POST", body: JSON.stringify(body) } : {})
+          .then((r) => r.json())
+          .catch(() => ({}));
+
+      // ── Link action (browser authorize only - no key handling) ──
+      $("btn-browser").onclick = async () => {
+        $("btn-browser").disabled = true;
+        $("btn-browser").textContent = "Waiting for browser…";
+        await api("link", { browser: true });
+      };
+
+      // ── Control (single toggle: Stop while running, Start when stopped) ──
+      let running = false;
+      $("btn-toggle").onclick = () => api(running ? "stop" : "start");
+
+      // ── Open the site's L!VE settings in the browser ──
+      $("settings-link").onclick = (e) => {
+        e.preventDefault();
+        api("open-settings");
+      };
+
+      // ── Poll status ──
+      function render(s) {
+        if (s.version) $("ver").textContent = s.version;
+        const linked = s.linked;
+        $("panel-link").classList.toggle("hide", linked);
+        $("panel-live").classList.toggle("hide", !linked);
+        if (s.linking) {
+          $("btn-browser").textContent = "Waiting for browser…";
+          $("btn-browser").disabled = true;
+        } else {
+          $("btn-browser").textContent = "Link with browser";
+          $("btn-browser").disabled = false;
+        }
+        if (!linked) return;
+
+        const name = s.username || "you";
+        $("uname").textContent = "@" + name;
+        const initial = (name[0] || "?").toUpperCase();
+        const img = $("pfp-img");
+        if (s.avatar && img.dataset.src !== s.avatar) {
+          img.dataset.src = s.avatar;
+          img.onload = () => { img.hidden = false; $("pfp-txt").textContent = ""; };
+          img.onerror = () => { img.hidden = true; $("pfp-txt").textContent = initial; };
+          img.src = "/api/avatar?v=" + Date.now(); // proxied through Go
+        } else if (!s.avatar) {
+          img.hidden = true;
+          img.dataset.src = "";
+          $("pfp-txt").textContent = initial;
+        }
+
+        running = s.running;
+        $("btn-toggle").textContent = running ? "Stop" : "Start";
+
+        const st = s.status || {};
+        const d = st.delay || 0;
+        $("delay-val").textContent = d === 0 ? "live" : d + "s";
+        const dot = $("dot");
+        dot.className = "dot" + (st.err ? " err" : st.inGame ? " on" : "");
+        if (!running) {
+          $("st-main").textContent = "Idle";
+          $("st-sub").textContent = "press Start and load a game";
+        } else if (st.err) {
+          $("st-main").textContent = "Problem";
+          $("st-sub").textContent = st.err;
+        } else if (st.inGame) {
+          $("st-main").textContent = "LIVE - " + (st.game === "forza" ? "Forza" : "League");
+          $("st-sub").textContent = (st.detail || "") + (st.pushes ? "  ·  " + st.pushes + " pushes" : "");
+        } else {
+          $("st-main").textContent = "Watching for a game…";
+          $("st-sub").textContent = "League (Practice Tool counts) or Forza Data Out";
+        }
+        $("chip-lol").classList.toggle("hot", running && st.game === "league");
+        $("chip-forza").classList.toggle("hot", running && st.game === "forza");
+      }
+
+      async function tick() {
+        render(await api("status"));
+      }
+      $("relink").onclick = (e) => {
+        e.preventDefault();
+        api("link", { unlink: true });
+      };
+      tick();
+      setInterval(tick, 1000);
+    </script>
+  </body>
+</html>

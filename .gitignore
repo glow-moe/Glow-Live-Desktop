@@ -1,0 +1,8 @@
+# Secrets: Discord app ids injected at build time
+.appids
+
+# Build output (ship binaries as GitHub Releases, not in the tree)
+/dist/
+
+# Local
+*.log
