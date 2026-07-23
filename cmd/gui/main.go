@@ -45,5 +45,8 @@ func main() {
 		moveBottomRight(w.Window(), winW, winH)
 		enableCloseToTray(w.Window()) // Windows: close button hides to tray
 	})
+	// Auto-tuck into the tray once the collector starts pushing. The server fires
+	// this (from an HTTP handler goroutine); marshal it onto the GUI thread.
+	srv.SetHideToTray(func() { w.Dispatch(func() { hideToTray(w.Window()) }) })
 	w.Run()
 }

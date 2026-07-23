@@ -71,13 +71,26 @@ static void glow_restore(HWND hwnd) {
     SetForegroundWindow(hwnd);
 }
 
+// glow_hide_to_tray tucks the window into the system tray and pops the one-time
+// "still running here" balloon. Shared by the close button and the auto-hide
+// that fires once the collector starts pushing (see glow_hide / hideToTray).
+static void glow_hide_to_tray(HWND hwnd) {
+    if (!IsWindowVisible(hwnd)) return; // already in the tray
+    ShowWindow(hwnd, SW_HIDE);
+    glow_add_tray(hwnd, g_balloonShown ? 0 : 1);
+    g_balloonShown = 1;
+}
+
+// glow_hide is the void* entry point Go calls to auto-hide to the tray.
+static void glow_hide(void *win) {
+    if (win) glow_hide_to_tray((HWND)win);
+}
+
 static LRESULT CALLBACK glow_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CLOSE:
         // Hide to tray instead of quitting.
-        ShowWindow(hwnd, SW_HIDE);
-        glow_add_tray(hwnd, g_balloonShown ? 0 : 1);
-        g_balloonShown = 1;
+        glow_hide_to_tray(hwnd);
         return 0;
     case WM_EXITSIZEMOVE:
         // Dragged the widget away? Spring it back to the pinned corner.
@@ -131,6 +144,9 @@ static void glow_enable_tray(void *win) {
         SendMessageW(hwnd, WM_SETICON, ICON_BIG, (LPARAM)ic);
     }
     g_orig = (WNDPROC)SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)glow_wndproc);
+    // Keep the tray icon present the whole time (no balloon), whether the window
+    // is open or hidden, so the app is always reachable from the tray.
+    glow_add_tray(hwnd, 0);
 }
 
 // glow_pin_bottom_right parks the widget in the bottom-right of the work area
@@ -165,4 +181,11 @@ func enableCloseToTray(win unsafe.Pointer) {
 // with snap-back on drag. Called by moveBottomRight (window_windows.go).
 func pinBottomRight(win unsafe.Pointer, w, h int) {
 	C.glow_pin_bottom_right(win, C.int(w), C.int(h))
+}
+
+// hideToTray tucks the window into the system tray (with the "still running"
+// balloon), the same as pressing the close button. Fired automatically once the
+// collector starts pushing so the widget doesn't sit open on screen.
+func hideToTray(win unsafe.Pointer) {
+	C.glow_hide(win)
 }

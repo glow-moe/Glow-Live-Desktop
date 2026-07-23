@@ -31,7 +31,17 @@ type Server struct {
 	avatar     string
 	version    string
 	linking    bool
-	refreshing bool // a whoami refresh is in flight (avatar/username recovery)
+	refreshing bool   // a whoami refresh is in flight (avatar/username recovery)
+	hideToTray func() // set by main: tuck the window into the tray (Windows-only)
+}
+
+// SetHideToTray registers the callback that parks the window in the system tray
+// (wired by main to the native window). Called once the collector starts pushing
+// so the widget auto-tucks away instead of sitting open on screen.
+func (s *Server) SetHideToTray(fn func()) {
+	s.mu.Lock()
+	s.hideToTray = fn
+	s.mu.Unlock()
 }
 
 // refreshIdentity re-fetches the profile name + avatar when they're missing
@@ -90,6 +100,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/stop", s.hStop)
 	mux.HandleFunc("/api/avatar", s.hAvatar)
 	mux.HandleFunc("/api/open-settings", s.hOpenSettings)
+	mux.HandleFunc("/api/minimize", s.hMinimize)
 	return mux
 }
 
@@ -282,6 +293,19 @@ func (s *Server) hLink(w http.ResponseWriter, r *http.Request) {
 	s.orch.Start()
 	s.mu.Unlock()
 	writeJSON(w, map[string]any{"ok": true, "username": name})
+}
+
+// hMinimize tucks the window into the system tray. The frontend calls it once,
+// the moment the collector starts delivering (a game/anime is live), so the app
+// doesn't stay open on screen. No-op if the native hook isn't wired (non-Windows).
+func (s *Server) hMinimize(w http.ResponseWriter, _ *http.Request) {
+	s.mu.Lock()
+	fn := s.hideToTray
+	s.mu.Unlock()
+	if fn != nil {
+		fn()
+	}
+	writeJSON(w, map[string]any{"ok": true})
 }
 
 func (s *Server) hStart(w http.ResponseWriter, _ *http.Request) {
