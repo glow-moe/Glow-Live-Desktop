@@ -6,3 +6,6 @@
 
 # Local
 *.log
+
+# Local dev-build counter (scripts/build.sh bumps it)
+DEV

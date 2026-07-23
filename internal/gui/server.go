@@ -24,21 +24,55 @@ var webFS embed.FS
 
 // Server bundles the orchestrator + config behind an HTTP API for the frontend.
 type Server struct {
-	mu       sync.Mutex
-	cfg      config.Config
-	orch     *orchestrator.Orchestrator
-	username string
-	avatar   string
-	version  string
-	linking  bool
+	mu         sync.Mutex
+	cfg        config.Config
+	orch       *orchestrator.Orchestrator
+	username   string
+	avatar     string
+	version    string
+	linking    bool
+	refreshing bool // a whoami refresh is in flight (avatar/username recovery)
+}
+
+// refreshIdentity re-fetches the profile name + avatar when they're missing
+// (e.g. the startup whoami raced a cold network). Runs at most once at a time.
+func (s *Server) refreshIdentity() {
+	s.mu.Lock()
+	if s.refreshing || s.cfg.Token == "" {
+		s.mu.Unlock()
+		return
+	}
+	s.refreshing = true
+	endpoint, tok := s.cfg.Endpoint, s.cfg.Token
+	s.mu.Unlock()
+
+	name, av, uid := whoami(endpoint, tok)
+
+	s.mu.Lock()
+	if name != "" {
+		s.username = name
+	}
+	if av != "" {
+		s.avatar = av
+	}
+	s.refreshing = false
+	s.mu.Unlock()
+	if name != "" {
+		s.orch.SetUsername(name)
+	}
+	if uid != "" {
+		s.orch.SetUserID(uid)
+	}
 }
 
 // NewServer wires the server to the saved config.
 func NewServer(cfg config.Config, version string) *Server {
 	s := &Server{cfg: cfg, version: version, orch: orchestrator.New(cfg)}
 	if cfg.Token != "" {
-		s.username, s.avatar = whoami(cfg.Endpoint, cfg.Token)
+		var uid string
+		s.username, s.avatar, uid = whoami(cfg.Endpoint, cfg.Token)
 		s.orch.SetUsername(s.username)
+		s.orch.SetUserID(uid)
 		s.orch.Start() // already linked → auto-start collecting
 	}
 	return s
@@ -112,6 +146,7 @@ func (s *Server) hAvatar(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) hStatus(w http.ResponseWriter, _ *http.Request) {
 	s.mu.Lock()
 	linked := s.cfg.Token != ""
+	needIdentity := linked && (s.username == "" || s.avatar == "")
 	out := map[string]any{
 		"version":  s.version,
 		"linked":   linked,
@@ -122,15 +157,20 @@ func (s *Server) hStatus(w http.ResponseWriter, _ *http.Request) {
 		"status":   s.orch.Status(),
 	}
 	s.mu.Unlock()
+	// Recover the name/avatar if the startup whoami came back empty (cold network).
+	if needIdentity {
+		go s.refreshIdentity()
+	}
 	writeJSON(w, out)
 }
 
 func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		var body struct {
-			DelaySec *int    `json:"delaySec"`
-			PollMs   *int    `json:"pollMs"`
-			Endpoint *string `json:"endpoint"`
+			DelaySec      *int    `json:"delaySec"`
+			PollMs        *int    `json:"pollMs"`
+			Endpoint      *string `json:"endpoint"`
+			AnimePresence *bool   `json:"animePresence"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		s.mu.Lock()
@@ -143,6 +183,9 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 		if body.Endpoint != nil && *body.Endpoint != "" {
 			s.cfg.Endpoint = *body.Endpoint
 		}
+		if body.AnimePresence != nil {
+			s.cfg.AnimePresence = *body.AnimePresence
+		}
 		s.cfg.Normalize()
 		cfg := s.cfg
 		s.mu.Unlock()
@@ -151,9 +194,10 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	out := map[string]any{
-		"delaySec": s.cfg.DelaySec,
-		"pollMs":   s.cfg.PollMs,
-		"endpoint": s.cfg.Endpoint,
+		"delaySec":      s.cfg.DelaySec,
+		"pollMs":        s.cfg.PollMs,
+		"endpoint":      s.cfg.Endpoint,
+		"animePresence": s.cfg.AnimePresence,
 	}
 	s.mu.Unlock()
 	writeJSON(w, out)
@@ -203,11 +247,12 @@ func (s *Server) hLink(w http.ResponseWriter, r *http.Request) {
 				s.mu.Unlock()
 				_ = config.Save(cfg)
 				s.orch.SetConfig(cfg)
-				name, av := whoami(cfg.Endpoint, tok)
+				name, av, uid := whoami(cfg.Endpoint, tok)
 				s.mu.Lock()
 				s.username = name
 				s.avatar = av
 				s.orch.SetUsername(name)
+				s.orch.SetUserID(uid)
 				s.orch.Start() // auto-start after linking
 			}
 			s.mu.Unlock()
@@ -228,11 +273,12 @@ func (s *Server) hLink(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	_ = config.Save(cfg)
 	s.orch.SetConfig(cfg)
-	name, av := whoami(cfg.Endpoint, tok)
+	name, av, uid := whoami(cfg.Endpoint, tok)
 	s.mu.Lock()
 	s.username = name
 	s.avatar = av
 	s.orch.SetUsername(name)
+	s.orch.SetUserID(uid)
 	s.orch.Start()
 	s.mu.Unlock()
 	writeJSON(w, map[string]any{"ok": true, "username": name})
@@ -264,27 +310,28 @@ func trimToken(s string) string {
 }
 
 // whoami resolves the linked profile's username + avatar (Bearer /api/live/whoami).
-func whoami(endpoint, token string) (string, string) {
+func whoami(endpoint, token string) (username, avatar, id string) {
 	if token == "" {
-		return "", ""
+		return "", "", ""
 	}
-	// /api/live/me returns the profile avatar (or the account photo) - the same
-	// endpoint the browser extension uses, so a user with no uploaded avatar
-	// still gets their OAuth photo.
+	// /api/live/me returns the profile id + avatar (or the account photo) - the
+	// same endpoint the browser extension uses, so a user with no uploaded avatar
+	// still gets their OAuth photo. The id lets us read our own anime snapshot.
 	req, err := http.NewRequest(http.MethodGet, pair.BaseFrom(endpoint)+"/api/live/me", nil)
 	if err != nil {
-		return "", ""
+		return "", "", ""
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	resp, err := (&http.Client{Timeout: 6 * time.Second}).Do(req)
 	if err != nil {
-		return "", ""
+		return "", "", ""
 	}
 	defer resp.Body.Close()
 	var out struct {
+		ID        string `json:"id"`
 		Username  string `json:"username"`
 		AvatarURL string `json:"avatarUrl"`
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&out)
-	return out.Username, out.AvatarURL
+	return out.Username, out.AvatarURL, out.ID
 }

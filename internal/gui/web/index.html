@@ -126,7 +126,13 @@
       <div class="games">
         <span class="chip" id="chip-lol">League</span>
         <span class="chip" id="chip-forza">Forza</span>
+        <span class="chip" id="chip-anime">Anime</span>
       </div>
+
+      <label style="display:flex; align-items:center; gap:8px; margin-top:12px; cursor:pointer">
+        <input type="checkbox" id="anime-toggle" style="accent-color:#b05cff" />
+        <span class="sub">Show anime on Discord (needs the browser extension)</span>
+      </label>
 
       <div class="delay">
         <span class="sub">Stream delay</span>
@@ -166,6 +172,13 @@
         api("open-settings");
       };
 
+      // ── Anime on Discord toggle (local setting, on by default) ──
+      api("config").then((c) => {
+        $("anime-toggle").checked = c.animePresence !== false;
+      });
+      $("anime-toggle").onchange = () =>
+        api("config", { animePresence: $("anime-toggle").checked });
+
       // ── Poll status ──
       function render(s) {
         if (s.version) $("ver").textContent = s.version;
@@ -188,8 +201,15 @@
         if (s.avatar && img.dataset.src !== s.avatar) {
           img.dataset.src = s.avatar;
           img.onload = () => { img.hidden = false; $("pfp-txt").textContent = ""; };
-          img.onerror = () => { img.hidden = true; $("pfp-txt").textContent = initial; };
-          img.src = "/api/avatar?v=" + Date.now(); // proxied through Go
+          img.onerror = () => {
+            // proxy failed - try the avatar URL directly, else fall back to initials
+            if (img.src.indexOf("/api/avatar") !== -1 && s.avatar) {
+              img.src = s.avatar;
+            } else {
+              img.hidden = true; $("pfp-txt").textContent = initial;
+            }
+          };
+          img.src = "/api/avatar?v=" + Date.now(); // proxied through Go (CSP-safe)
         } else if (!s.avatar) {
           img.hidden = true;
           img.dataset.src = "";
@@ -210,15 +230,23 @@
         } else if (st.err) {
           $("st-main").textContent = "Problem";
           $("st-sub").textContent = st.err;
+        } else if (st.inGame && st.game === "anime") {
+          $("st-main").textContent = "Watching anime";
+          $("st-sub").textContent = st.detail || "";
         } else if (st.inGame) {
           $("st-main").textContent = "LIVE - " + (st.game === "forza" ? "Forza" : "League");
-          $("st-sub").textContent = (st.detail || "") + (st.pushes ? "  ·  " + st.pushes + " pushes" : "");
+          $("st-sub").textContent = st.detail || "";
+        } else if (st.game === "league") {
+          // Client up, not in a match: lobby / champ select / post-game / client.
+          $("st-main").textContent = st.detail || "In the League client";
+          $("st-sub").textContent = "";
         } else {
           $("st-main").textContent = "Watching for a game…";
-          $("st-sub").textContent = "League (Practice Tool counts) or Forza Data Out";
+          $("st-sub").textContent = "";
         }
         $("chip-lol").classList.toggle("hot", running && st.game === "league");
         $("chip-forza").classList.toggle("hot", running && st.game === "forza");
+        $("chip-anime").classList.toggle("hot", running && st.game === "anime");
       }
 
       async function tick() {

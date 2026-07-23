@@ -24,14 +24,18 @@ type Config struct {
 	// LeaguePath optionally points at the League install dir (for the client
 	// lockfile) when it isn't in a standard location.
 	LeaguePath string `json:"leaguePath"`
+	// AnimePresence mirrors what you're watching (fed by the browser extension
+	// through glow.moe) to Discord Rich Presence while no game is running.
+	AnimePresence bool `json:"animePresence"`
 }
 
 // Default returns sane starting settings (no token yet).
 func Default() Config {
 	return Config{
-		Endpoint: "https://glow.moe/api/live/ingest",
-		DelaySec: 0,
-		PollMs:   1500,
+		Endpoint:      "https://glow.moe/api/live/ingest",
+		DelaySec:      0,
+		PollMs:        1500,
+		AnimePresence: true,
 	}
 }
 

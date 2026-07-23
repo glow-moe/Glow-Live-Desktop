@@ -17,6 +17,7 @@ import (
 	"github.com/glow-moe/glow-collector/internal/ddragon"
 	"github.com/glow-moe/glow-collector/internal/discord"
 	"github.com/glow-moe/glow-collector/internal/forza"
+	"github.com/glow-moe/glow-collector/internal/lcu"
 	"github.com/glow-moe/glow-collector/internal/live"
 	"github.com/glow-moe/glow-collector/internal/pair"
 	"github.com/glow-moe/glow-collector/internal/poster"
@@ -51,6 +52,78 @@ func fetchSettings(endpoint, token string) (liveSettings, bool) {
 		return s, false
 	}
 	return s, true
+}
+
+// animeSnap is the "now watching" the browser extension pushes to glow.moe. The
+// extension owns detection; we only read it back and mirror it to Discord.
+type animeSnap struct {
+	Title   string `json:"title"`
+	Episode int    `json:"episode"`
+	Poster  string `json:"poster"`
+}
+
+// fetchAnime reads the profile's current anime "now watching" from glow.moe
+// (public read, keyed by the user id). ok is false when nothing is playing.
+func fetchAnime(endpoint, userID string) (animeSnap, bool) {
+	var out struct {
+		Live     bool       `json:"live"`
+		Snapshot *animeSnap `json:"snapshot"`
+	}
+	// userID is a cuid ([a-z0-9]), safe to place in the query without escaping.
+	u := pair.BaseFrom(endpoint) + "/api/live/read?u=" + userID + "&game=anime"
+	resp, err := (&http.Client{Timeout: 6 * time.Second}).Get(u)
+	if err != nil {
+		return animeSnap{}, false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return animeSnap{}, false
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil || !out.Live || out.Snapshot == nil {
+		return animeSnap{}, false
+	}
+	return *out.Snapshot, out.Snapshot.Title != ""
+}
+
+// animeDetail is the one-line status the GUI shows for anime.
+func animeDetail(a animeSnap) string {
+	if a.Episode > 0 {
+		return fmt.Sprintf("%s · Ep %d", a.Title, a.Episode)
+	}
+	return a.Title
+}
+
+// animeActivity builds the Discord Rich Presence for anime. It runs under the
+// shared glow app, so Discord's headline reads "glow.moe" (the local IPC can't
+// set the Watching type, and the site lacks the activities.write scope); the
+// title + episode land in the details/state lines.
+func animeActivity(a animeSnap, username string) discord.Activity {
+	state := ""
+	if a.Episode > 0 {
+		state = fmt.Sprintf("Episode %d", a.Episode)
+	}
+	large := glowIcon
+	if a.Poster != "" {
+		large = a.Poster
+	}
+	act := discord.Activity{
+		Type:    3, // Watching (so Discord reads "Watching glow.moe", not "Playing")
+		Details: a.Title,
+		State:   state,
+		Assets: &discord.Assets{
+			LargeImage: large,
+			LargeText:  a.Title,
+			SmallImage: glowIcon,
+			SmallText:  "glow.moe",
+		},
+	}
+	if username != "" {
+		act.Buttons = []discord.Button{
+			{Label: "Anime profile", URL: "https://glow.moe/" + username + "/anime"},
+			{Label: "View my Glow profile", URL: "https://glow.moe/" + username},
+		}
+	}
+	return act
 }
 
 // Per-game Discord apps. Each is named after the game, so the "Playing X" line
@@ -130,6 +203,7 @@ type Orchestrator struct {
 	dc           *discord.Client
 	dcApp        string // app id the current client is connected with
 	username     string
+	userID       string // profile cuid, for reading own anime "now watching"
 	startMs      int64
 	lastPresence time.Time
 	presenceOn   bool
@@ -151,6 +225,13 @@ func (o *Orchestrator) OnStatus(fn func(Status)) { o.onStatus = fn }
 func (o *Orchestrator) SetUsername(name string) {
 	o.mu.Lock()
 	o.username = name
+	o.mu.Unlock()
+}
+
+// SetUserID sets the profile id used to read the anime "now watching" back.
+func (o *Orchestrator) SetUserID(id string) {
+	o.mu.Lock()
+	o.userID = id
 	o.mu.Unlock()
 }
 
@@ -266,6 +347,7 @@ func (o *Orchestrator) tick() {
 	cfg := o.cfg
 	uname := o.username
 	start := o.startMs
+	uid := o.userID
 	settings := o.settings
 	stale := time.Since(o.settingsAt) > 60*time.Second
 	o.mu.Unlock()
@@ -308,6 +390,36 @@ func (o *Orchestrator) tick() {
 		return
 	}
 
+	// League out-of-game: the client is up but you're not in a match - lobby,
+	// queue, champion select, the loading screen, post-game, or just sitting in
+	// the client (which carries your rank / mastery / last-5 match results). We
+	// push it exactly like the old console did, so the profile shows the same
+	// out-of-game card AND mirror the state to Discord (under the LoL app, so it
+	// still reads "Playing League of Legends"); the in-game HUD takes over once a
+	// match loads.
+	if lob, err := lcu.Fetch(cfg.LeaguePath); err == nil && lob != nil {
+		snap := snapshot.FromLobby(lob, ddragon.Version(), time.Now().UnixMilli())
+		st := Status{Game: "league", InGame: false, Detail: lob.Label, Pushes: o.pushes, Delay: effDelay}
+		o.push(cfg, effDelay, snap, &st)
+		o.presence(orGlow(appLoL), leagueLobbyActivity(snap.Lobby, uname))
+		o.set(st)
+		return
+	}
+
+	// Anime: no game running, so mirror what you're watching (detected + pushed
+	// by the browser extension, read back from glow.moe) to Discord. We only set
+	// the local Rich Presence here; the extension owns detection and the push.
+	if cfg.AnimePresence && cfg.Token != "" && uid != "" {
+		if a, ok := fetchAnime(cfg.Endpoint, uid); ok {
+			st := Status{Game: "anime", InGame: true, Detail: animeDetail(a), Pushes: o.pushes, Delay: effDelay}
+			if err := o.presence(orGlow(""), animeActivity(a, uname)); err != nil {
+				st.Err = "Discord: " + err.Error()
+			}
+			o.set(st)
+			return
+		}
+	}
+
 	// Nothing running.
 	o.clearPresence()
 	o.set(Status{Detail: "Waiting for a game…", Pushes: o.pushes, Delay: effDelay})
@@ -342,12 +454,15 @@ func (o *Orchestrator) emit(s Status) {
 
 // useApp returns a Discord client connected with appID, reconnecting if the app
 // changed (each game has its own app, so "Playing X" reads the game name).
-func (o *Orchestrator) useApp(appID string) *discord.Client {
+func (o *Orchestrator) useApp(appID string) (*discord.Client, error) {
+	if appID == "" {
+		return nil, fmt.Errorf("no Discord app id for this game")
+	}
 	o.mu.Lock()
 	if o.dc != nil && o.dcApp == appID {
 		dc := o.dc
 		o.mu.Unlock()
-		return dc
+		return dc, nil
 	}
 	old := o.dc
 	o.dc = nil
@@ -359,34 +474,38 @@ func (o *Orchestrator) useApp(appID string) *discord.Client {
 	}
 	dc, err := discord.Connect(appID)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	o.mu.Lock()
 	o.dc = dc
 	o.dcApp = appID
 	o.mu.Unlock()
-	return dc
+	return dc, nil
 }
 
 // presence publishes a pre-built activity via the game's own app (so the header
 // says "Playing <game>"), throttled to every 5s. The activity already carries
 // its images, timestamps and buttons.
-func (o *Orchestrator) presence(appID string, a discord.Activity) {
+func (o *Orchestrator) presence(appID string, a discord.Activity) error {
 	o.mu.Lock()
 	throttled := time.Since(o.lastPresence) < 5*time.Second && o.dcApp == appID
 	o.mu.Unlock()
 	if throttled {
-		return
+		return nil
 	}
-	dc := o.useApp(appID)
+	dc, err := o.useApp(appID)
 	if dc == nil {
-		return
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("Discord not running")
 	}
 	go func() { _ = dc.SetActivity(a) }()
 	o.mu.Lock()
 	o.lastPresence = time.Now()
 	o.presenceOn = true
 	o.mu.Unlock()
+	return nil
 }
 
 func (o *Orchestrator) clearPresence() {
@@ -478,6 +597,48 @@ func leagueActivity(s snapshot.Snapshot, gameSeconds float64, username string) d
 	if username != "" {
 		a.Buttons = []discord.Button{
 			{Label: "🔴 Live game", URL: "https://glow.moe/" + username + "/league"},
+			{Label: "View my Glow profile", URL: "https://glow.moe/" + username},
+		}
+	}
+	return a
+}
+
+// leagueLobbyActivity is the out-of-game LoL presence (lobby / queue / champ
+// select / in the client). It runs under the LoL app, so Discord still reads
+// "Playing League of Legends"; the phase + queue/champ land in details/state.
+func leagueLobbyActivity(lob *snapshot.Lobby, username string) discord.Activity {
+	details := lob.Label // "In a lobby" / "In champion select" / "In the client" …
+	state := lob.QueueName
+	if state == "" {
+		state = lob.ModeLabel
+	}
+	// In champ select the picked champion is the interesting bit.
+	if lob.ChampName != "" {
+		state = "Locked in " + lob.ChampName
+	}
+	if state == "" && lob.Level > 0 {
+		state = fmt.Sprintf("Level %d", lob.Level)
+	}
+	// Big image: the picked champ tile if any, else the summoner icon.
+	large, largeText := glowIcon, "League of Legends"
+	if lob.ChampKey != "" {
+		large, largeText = ddragon.TileURL(lob.ChampKey, 0), lob.ChampName
+	} else if lob.IconURL != "" {
+		large, largeText = lob.IconURL, lob.Summoner
+	}
+	a := discord.Activity{
+		Details: details,
+		State:   state,
+		Assets: &discord.Assets{
+			LargeImage: large,
+			LargeText:  largeText,
+			SmallImage: glowIcon,
+			SmallText:  "glow.moe",
+		},
+	}
+	if username != "" {
+		a.Buttons = []discord.Button{
+			{Label: "League profile", URL: "https://glow.moe/" + username + "/league"},
 			{Label: "View my Glow profile", URL: "https://glow.moe/" + username},
 		}
 	}
