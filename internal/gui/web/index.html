@@ -164,6 +164,9 @@
 
       // ── Control (single toggle: Stop while running, Start when stopped) ──
       let running = false;
+      // Auto-tuck into the tray once, the moment it starts delivering to Discord
+      // or the site, so the widget doesn't sit open on screen all the time.
+      let autoHidden = false;
       $("btn-toggle").onclick = () => api(running ? "stop" : "start");
 
       // ── Open the site's L!VE settings in the browser ──
@@ -247,6 +250,14 @@
         $("chip-lol").classList.toggle("hot", running && st.game === "league");
         $("chip-forza").classList.toggle("hot", running && st.game === "forza");
         $("chip-anime").classList.toggle("hot", running && st.game === "anime");
+
+        // The moment it starts delivering (a game/anime is live → pushing to the
+        // site and/or Discord), tuck the window into the tray. Once per session,
+        // so reopening from the tray keeps it open.
+        if (!autoHidden && st.inGame) {
+          autoHidden = true;
+          api("minimize");
+        }
       }
 
       async function tick() {
