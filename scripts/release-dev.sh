@@ -37,6 +37,7 @@ git tag -f dev >/dev/null
 git push -f origin dev >/dev/null
 
 NOTES="$(cat UNRELEASED.md)
+
 | file | platform |
 |---|---|
 | glow-collector-linux-x64 | Linux x64 |
