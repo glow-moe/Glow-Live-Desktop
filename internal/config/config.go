@@ -39,6 +39,20 @@ type Config struct {
 	// HideOnGame tucks the window into the tray the moment a game goes live.
 	// A missing key stays true, which is the behavior the app always had.
 	HideOnGame bool `json:"hideOnGame"`
+	// SeenGames is every Steam game this app has watched run, so the settings can
+	// list them for the per-game toggle. Purely local; never sent to glow.
+	SeenGames []SeenGame `json:"seenGames"`
+	// HiddenGames are the appids the user turned off: the app publishes no
+	// presence for them (it leaves Discord to the game, or just stays quiet).
+	// Local only.
+	HiddenGames []int `json:"hiddenGames"`
+}
+
+// SeenGame is one Steam title the app has encountered, remembered so the
+// settings list can offer a toggle for it even when it is not running.
+type SeenGame struct {
+	AppID int    `json:"appId"`
+	Name  string `json:"name"`
 }
 
 // Default returns sane starting settings (no token yet).

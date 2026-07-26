@@ -20,6 +20,7 @@ import (
 	"github.com/glow-moe/glow-collector/internal/config"
 	"github.com/glow-moe/glow-collector/internal/orchestrator"
 	"github.com/glow-moe/glow-collector/internal/pair"
+	"github.com/glow-moe/glow-collector/internal/update"
 )
 
 //go:embed web
@@ -37,6 +38,7 @@ type Server struct {
 	refreshing bool   // a whoami refresh is in flight (avatar/username recovery)
 	hideToTray func() // set by main: tuck the window into the tray
 	showWindow func() // set by main: bring the window back on screen
+	updateVer  string // latest release when this build is behind it, else ""
 }
 
 // SetShowWindow registers the callback a second launch (or the tray) uses to
@@ -90,6 +92,8 @@ func (s *Server) refreshIdentity() {
 // NewServer wires the server to the saved config.
 func NewServer(cfg config.Config, version string) *Server {
 	s := &Server{cfg: cfg, version: version, orch: orchestrator.New(cfg)}
+	s.orch.OnSeenGame(s.recordSeenGame)
+	go s.watchUpdates()
 	if cfg.Token != "" {
 		var uid string
 		s.username, s.avatar, uid = whoami(cfg.Endpoint, cfg.Token)
@@ -98,6 +102,30 @@ func NewServer(cfg config.Config, version string) *Server {
 		s.orch.Start() // already linked → auto-start collecting
 	}
 	return s
+}
+
+// watchUpdates checks for a newer release on startup and every few hours after,
+// from the user's own machine. A dev build never reports an update.
+func (s *Server) watchUpdates() {
+	check := func() {
+		if v, ok := update.Check(s.version); ok {
+			s.mu.Lock()
+			s.updateVer = v
+			s.mu.Unlock()
+		}
+	}
+	check()
+	t := time.NewTicker(6 * time.Hour)
+	defer t.Stop()
+	for range t.C {
+		check()
+	}
+}
+
+// hOpenDownload opens the releases page in the user's browser.
+func (s *Server) hOpenDownload(w http.ResponseWriter, _ *http.Request) {
+	openURL(update.ReleasesPage)
+	writeJSON(w, map[string]any{"ok": true})
 }
 
 // Handler returns the mux serving the UI + API.
@@ -114,6 +142,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/open-settings", s.hOpenSettings)
 	mux.HandleFunc("/api/minimize", s.hMinimize)
 	mux.HandleFunc("/api/show", s.hShow)
+	mux.HandleFunc("/api/open-download", s.hOpenDownload)
 	return mux
 }
 
@@ -198,6 +227,7 @@ func (s *Server) hStatus(w http.ResponseWriter, _ *http.Request) {
 		"linking":  s.linking,
 		"running":  s.orch.Running(),
 		"status":   s.orch.Status(),
+		"update":   map[string]any{"version": s.updateVer, "url": update.ReleasesPage},
 	}
 	s.mu.Unlock()
 	// Recover the name/avatar if the startup whoami came back empty (cold network).
@@ -218,6 +248,10 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 			AutoStart     *bool   `json:"autoStart"`
 			StartHidden   *bool   `json:"startHidden"`
 			HideOnGame    *bool   `json:"hideOnGame"`
+			HideGame      *struct {
+				AppID  int  `json:"appId"`
+				Hidden bool `json:"hidden"`
+			} `json:"hideGame"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		s.mu.Lock()
@@ -249,6 +283,10 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 		if body.HideOnGame != nil {
 			s.cfg.HideOnGame = *body.HideOnGame
 		}
+		// Per-game hide: one appid on/off. Purely local, never sent to glow.
+		if body.HideGame != nil {
+			s.setGameHiddenLocked(body.HideGame.AppID, body.HideGame.Hidden)
+		}
 		s.cfg.Normalize()
 		cfg := s.cfg
 		s.mu.Unlock()
@@ -265,9 +303,50 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 		"autoStart":     s.cfg.AutoStart,
 		"startHidden":   s.cfg.StartHidden,
 		"hideOnGame":    s.cfg.HideOnGame,
+		"seenGames":     s.cfg.SeenGames,
+		"hiddenGames":   s.cfg.HiddenGames,
 	}
 	s.mu.Unlock()
 	writeJSON(w, out)
+}
+
+// setGameHiddenLocked adds or removes an appid from HiddenGames. Caller holds
+// s.mu.
+func (s *Server) setGameHiddenLocked(appID int, hidden bool) {
+	if appID <= 0 {
+		return
+	}
+	out := s.cfg.HiddenGames[:0]
+	for _, id := range s.cfg.HiddenGames {
+		if id != appID {
+			out = append(out, id)
+		}
+	}
+	if hidden {
+		out = append(out, appID)
+	}
+	s.cfg.HiddenGames = out
+}
+
+// recordSeenGame remembers a Steam game the collector saw, so the settings list
+// can offer a toggle for it. Deduped, saved only when new. Wired as the
+// orchestrator's OnSeenGame callback.
+func (s *Server) recordSeenGame(appID int, name string) {
+	if appID <= 0 || name == "" {
+		return
+	}
+	s.mu.Lock()
+	for _, g := range s.cfg.SeenGames {
+		if g.AppID == appID {
+			s.mu.Unlock()
+			return // already known
+		}
+	}
+	s.cfg.SeenGames = append(s.cfg.SeenGames, config.SeenGame{AppID: appID, Name: name})
+	cfg := s.cfg
+	s.mu.Unlock()
+	_ = config.Save(cfg)
+	s.orch.SetConfig(cfg)
 }
 
 func (s *Server) hLink(w http.ResponseWriter, r *http.Request) {

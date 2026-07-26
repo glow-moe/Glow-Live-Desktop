@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -161,13 +162,16 @@ const forzaImage = "https://glow.moe/games/forza.png"
 
 // Status is what the GUI renders each poll.
 type Status struct {
-	Game    string `json:"game"`    // "" | "league" | "forza"
-	InGame  bool   `json:"inGame"`  // a game is being read
-	Detail  string `json:"detail"`  // e.g. "Ahri · 12:34" or "Forza · 240 mph"
-	Pushing bool   `json:"pushing"` // last tick pushed to glow.moe
-	Pushes  int    `json:"pushes"`  // total pushes this session
-	Err     string `json:"err"`     // last error ("" when fine)
-	Delay   int    `json:"delay"`   // applied stream delay (from the site), seconds
+	Game     string `json:"game"`     // "" | "league" | "forza"
+	InGame   bool   `json:"inGame"`   // a game is being read
+	Detail   string `json:"detail"`   // e.g. "Ahri · 12:34" or "Forza · 240 mph"
+	Pushing  bool   `json:"pushing"`  // last tick pushed to glow.moe
+	Pushes   int    `json:"pushes"`   // total pushes this session
+	Err      string `json:"err"`      // last error ("" when fine)
+	Delay    int    `json:"delay"`    // applied stream delay (from the site), seconds
+	AppID    int    `json:"appId"`    // Steam appid of the current game (0 if none)
+	GameName string `json:"gameName"` // Steam game name, for the settings list
+	Hidden   bool   `json:"hidden"`   // the user turned this game off in the app
 }
 
 type forzaState struct {
@@ -190,16 +194,17 @@ func (f *forzaState) get() (*forza.Snapshot, time.Time) {
 
 // Orchestrator runs the detect/push loop. Safe for the GUI to Start/Stop.
 type Orchestrator struct {
-	mu        sync.Mutex
-	cfg       config.Config
-	forzaGame string
-	forzaPort int
-	cancel    context.CancelFunc
-	running   bool
-	status    Status
-	pushes    int
-	forza     *forzaState
-	onStatus  func(Status)
+	mu         sync.Mutex
+	cfg        config.Config
+	forzaGame  string
+	forzaPort  int
+	cancel     context.CancelFunc
+	running    bool
+	status     Status
+	pushes     int
+	forza      *forzaState
+	onStatus   func(Status)
+	onSeenGame func(appID int, name string) // records a Steam game for the settings list
 
 	// Discord Rich Presence (best-effort; nil when Discord isn't running).
 	dc           *discord.Client
@@ -231,6 +236,23 @@ func New(cfg config.Config) *Orchestrator {
 
 // OnStatus registers a callback fired on every status change (nil is fine).
 func (o *Orchestrator) OnStatus(fn func(Status)) { o.onStatus = fn }
+
+// OnSeenGame registers the callback that records a Steam game into the local
+// settings list (so the user can toggle it later). Fired once per new appid.
+func (o *Orchestrator) OnSeenGame(fn func(appID int, name string)) { o.onSeenGame = fn }
+
+// gameHidden reports whether the user turned this appid off in the app. Reads
+// the live config, kept fresh by SetConfig on every save.
+func (o *Orchestrator) gameHidden(appID int) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for _, id := range o.cfg.HiddenGames {
+		if id == appID {
+			return true
+		}
+	}
+	return false
+}
 
 // SetUsername sets the profile name used for the Rich Presence button.
 func (o *Orchestrator) SetUsername(name string) {
@@ -424,10 +446,29 @@ func (o *Orchestrator) tick() {
 	if cfg.SteamPresence {
 		if id, ok := o.steamAccount(); ok {
 			if s, live := o.steamSnapshot(id); live {
-				st := Status{Game: "steam", InGame: true, Detail: steamDetail(s), Pushes: o.pushes, Delay: effDelay}
+				// Remember every game so the settings list can offer a toggle for
+				// it later, even when it is not running. The callback dedupes.
+				if o.onSeenGame != nil && s.AppID > 0 {
+					o.onSeenGame(s.AppID, s.Game)
+				}
+				// The user can turn a game off entirely: nothing to the site, and
+				// nothing to Discord. Their machine, their call - a privacy switch
+				// that stays local.
+				if o.gameHidden(s.AppID) {
+					o.clearPresence()
+					o.set(Status{Game: "steam", AppID: s.AppID, GameName: s.Game, Hidden: true, Delay: effDelay})
+					return
+				}
+				st := Status{Game: "steam", InGame: true, Detail: steamDetail(s), AppID: s.AppID, GameName: s.Game, Pushes: o.pushes, Delay: effDelay}
 				o.push(cfg, effDelay, o.steamSnapshotPayload(s), &st)
 				app, named := steamApp(s.AppID)
-				if err := o.presence(app, steamActivity(s, uname, named)); err != nil {
+				hints := steamGameHints(cfg.Endpoint, s.AppID)
+				if hints.SelfRP {
+					// The game drives its own, richer Discord presence. Step off
+					// that slot so we do not fight it; the site still gets the
+					// status above.
+					o.clearPresence()
+				} else if err := o.presence(app, steamActivity(s, uname, hints.Icon, named)); err != nil {
 					st.Err = "Discord: " + err.Error()
 				}
 				o.set(st)
@@ -843,7 +884,53 @@ func steamDetail(s steam.Snap) string {
 // rendered, and when Discord knows the game we publish under its own
 // application, so a title works the day it ships without anything being
 // registered or uploaded on our side.
-func steamActivity(s steam.Snap, username string, named bool) discord.Activity {
+// steamHints is what glow tells the app about a Steam game for Discord: the
+// square icon to use, and whether the game reports its own Rich Presence.
+type steamHints struct {
+	Icon   string `json:"icon"`
+	SelfRP bool   `json:"selfRP"`
+}
+
+// steamGameHints asks glow (which holds the SteamGridDB key) for a game's icon
+// and self-RP flag. Cached per appid for the process lifetime: one request the
+// first time a game appears, none after. A failure returns the zero value,
+// which means "no icon, not self-RP" - the safe default that keeps our presence
+// behaving as before.
+var (
+	hintMu    sync.Mutex
+	hintCache = map[int]steamHints{}
+)
+
+func steamGameHints(endpoint string, appID int) steamHints {
+	if appID <= 0 {
+		return steamHints{}
+	}
+	hintMu.Lock()
+	cached, hit := hintCache[appID]
+	hintMu.Unlock()
+	if hit {
+		return cached
+	}
+	u := pair.BaseFrom(endpoint) + "/api/steam/icon?appId=" + strconv.Itoa(appID) + "&os=" + runtime.GOOS
+	resp, err := (&http.Client{Timeout: 6 * time.Second}).Get(u)
+	if err != nil {
+		return steamHints{} // do not cache a transient failure
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return steamHints{}
+	}
+	var out steamHints
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return steamHints{}
+	}
+	hintMu.Lock()
+	hintCache[appID] = out
+	hintMu.Unlock()
+	return out
+}
+
+func steamActivity(s steam.Snap, username, large string, named bool) discord.Activity {
 	// Published under the game's own Discord app, the headline already reads
 	// "Playing Unturned", so repeating the title here would print it twice: say
 	// where it is running instead. Without a match the headline is our app, and
@@ -859,12 +946,13 @@ func steamActivity(s steam.Snap, username string, named bool) discord.Activity {
 		// encoder for the many games that publish none.
 		State: s.Detail,
 	}
-	// The box art is the large image in both cases: Discord crops the large
-	// image square, which suits a tall cover and butchers the wide banner. Even
-	// under the game's own application the assets are ours to set, and they have
-	// to be: the glow badge rides the large image's corner, so without a large
-	// image of our own there is no corner to sit in.
-	large := steam.CoverImage(s.AppID)
+	// The large image is a square icon when glow could resolve one (Discord crops
+	// this slot square, so a native icon beats a cropped cover), else the box
+	// art, else our own badge. The glow badge always rides the corner, which is
+	// why a large image of our own must always be set.
+	if large == "" {
+		large = steam.CoverImage(s.AppID)
+	}
 	if large == "" {
 		large = glowIcon
 	}

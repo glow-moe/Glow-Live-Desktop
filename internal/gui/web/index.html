@@ -82,8 +82,33 @@
       .split { display: flex; gap: 8px; margin-top: 12px; }
       .split .btn { margin-top: 0; }
       .hide { display: none !important; }
+      .update {
+        display: flex; align-items: center; gap: 8px; margin-bottom: 14px; padding: 10px 12px;
+        border-radius: 12px; font-size: 12px; font-weight: 700; color: #7a3d00;
+        background: #fff5e6; border: 1px solid #ffd9a3;
+      }
+      .update a { margin-left: auto; color: #b8620a; font-weight: 800; text-decoration: none; white-space: nowrap; }
       .foot { margin-top: 12px; text-align: center; font-size: 10px; color: #bda6c8; }
       .foot a { color: #a24fc0; text-decoration: none; }
+      .iconbtn {
+        width: 30px; height: 30px; flex: 0 0 auto; border-radius: 999px; cursor: pointer;
+        font-size: 15px; font-weight: 800; color: #a24fc0; background: #f6e4f7; border: 1px solid #eccbee;
+      }
+      .sechead {
+        margin: 16px 0 8px; font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: #b78ac9;
+      }
+      .opt { display: flex; align-items: center; gap: 8px; margin-top: 8px; cursor: pointer; }
+      .opt input { accent-color: #b05cff; flex: 0 0 auto; }
+      .grow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+      .grow .name { font-size: 12px; font-weight: 700; color: #6a4c78; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .grow .tag { font-size: 9px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #b78ac9; }
+      /* iOS-style switch */
+      .sw { position: relative; width: 34px; height: 20px; flex: 0 0 auto; }
+      .sw input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+      .sw span { position: absolute; inset: 0; border-radius: 999px; background: #e6cfe8; transition: 0.15s; }
+      .sw span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: 0.15s; }
+      .sw input:checked + span { background: linear-gradient(100deg, #ff66b3, #9b5cff); }
+      .sw input:checked + span::after { transform: translateX(14px); }
     </style>
   </head>
   <body>
@@ -91,6 +116,12 @@
       <span class="logo">glow</span>
       <span class="live">L!VE</span>
       <span class="ver" id="ver">Dev Build</span>
+    </div>
+
+    <!-- ── Update banner (shown only when a newer release is out) ── -->
+    <div class="update hide" id="update-banner">
+      <span id="update-text">A newer version is out.</span>
+      <a href="#" id="update-link">Download →</a>
     </div>
 
     <!-- ── Not linked ── -->
@@ -130,43 +161,56 @@
         <span class="chip" id="chip-anime">Anime</span>
       </div>
 
-      <label style="display:flex; align-items:center; gap:8px; margin-top:12px; cursor:pointer">
-        <input type="checkbox" id="steam-toggle" style="accent-color:#b05cff" />
+      <div class="split">
+        <button class="btn ghost" id="btn-toggle">Stop</button>
+        <button class="btn ghost" id="btn-settings" style="flex:0 0 auto; width:auto; padding:11px 16px">⚙</button>
+      </div>
+      <div class="foot"><a id="relink" href="#">unlink / switch account</a></div>
+    </div>
+
+    <!-- ── Settings ── -->
+    <div class="card hide" id="panel-settings">
+      <div class="row" style="margin-bottom:4px">
+        <button class="iconbtn" id="btn-back" title="Back">←</button>
+        <div class="uname" style="font-size:15px">Settings</div>
+      </div>
+
+      <div class="sechead">Discord</div>
+      <label class="opt">
+        <input type="checkbox" id="steam-toggle" />
         <span class="sub">Show Steam games on Discord</span>
       </label>
-
-      <label style="display:flex; align-items:center; gap:8px; margin-top:8px; cursor:pointer">
-        <input type="checkbox" id="anime-toggle" style="accent-color:#b05cff" />
+      <label class="opt">
+        <input type="checkbox" id="anime-toggle" />
         <span class="sub">Show anime on Discord (needs the browser extension)</span>
       </label>
 
-      <label style="display:flex; align-items:center; gap:8px; margin-top:8px; cursor:pointer">
-        <input type="checkbox" id="autostart-toggle" style="accent-color:#b05cff" />
+      <div class="sechead">App</div>
+      <label class="opt">
+        <input type="checkbox" id="autostart-toggle" />
         <span class="sub">Start with the computer</span>
       </label>
-
-      <label style="display:flex; align-items:center; gap:8px; margin-top:8px; cursor:pointer">
-        <input type="checkbox" id="hidden-toggle" style="accent-color:#b05cff" />
+      <label class="opt">
+        <input type="checkbox" id="hidden-toggle" />
         <span class="sub">Open in the tray</span>
       </label>
-
-      <label style="display:flex; align-items:center; gap:8px; margin-top:8px; cursor:pointer">
-        <input type="checkbox" id="hidegame-toggle" style="accent-color:#b05cff" />
+      <label class="opt">
+        <input type="checkbox" id="hidegame-toggle" />
         <span class="sub">Tuck into the tray when a game starts</span>
       </label>
 
-      <div class="delay">
-        <span class="sub">Stream delay</span>
-        <span class="val" id="delay-val" style="flex:1; text-align:right">live</span>
+      <div class="sechead">Games</div>
+      <div class="muted" style="margin-bottom:8px">
+        Turn a game off to keep it off your profile and Discord - handy for games
+        that already show their own Discord status. Stays on this PC only.
       </div>
-      <a href="#" id="settings-link" class="foot" style="display:block; margin-top:8px">
-        Delay &amp; name masking - set on glow.moe → L!VE ↗
-      </a>
+      <div id="games-list"></div>
+      <div class="muted hide" id="games-empty">Play a Steam game and it shows up here.</div>
 
-      <div class="split">
-        <button class="btn ghost" id="btn-toggle">Stop</button>
-      </div>
-      <div class="foot"><a id="relink" href="#">unlink / switch account</a></div>
+      <div class="sechead">On the site</div>
+      <a href="#" id="settings-link" class="foot" style="display:block; margin-top:2px; text-align:left">
+        Stream delay &amp; name masking - set on glow.moe → L!VE ↗
+      </a>
     </div>
 
     <script>
@@ -196,13 +240,78 @@
         api("open-settings");
       };
 
-      // ── Anime on Discord toggle (local setting, on by default) ──
+      // ── Update banner: the download link opens the releases page in the
+      //    browser (the webview itself shouldn't navigate there). ──
+      $("update-link").onclick = (e) => {
+        e.preventDefault();
+        api("open-download");
+      };
+
+      // ── Settings panel open/close. A single view flag drives visibility so the
+      //    status poll (which also toggles panels) can't fight it. ──
+      let settingsOpen = false;
+      function applyView(linked) {
+        $("panel-link").classList.toggle("hide", linked);
+        $("panel-live").classList.toggle("hide", !linked || settingsOpen);
+        $("panel-settings").classList.toggle("hide", !linked || !settingsOpen);
+      }
+      $("btn-settings").onclick = () => {
+        settingsOpen = true;
+        applyView(true);
+        renderGames();
+      };
+      $("btn-back").onclick = () => {
+        settingsOpen = false;
+        applyView(true);
+      };
+
+      // ── Per-game list. Local only: turning a game off keeps it off the
+      //    profile and Discord (the app publishes nothing for that appid). ──
+      let lastGames = ""; // avoid re-rendering an unchanged list
+      function renderGames(cfg) {
+        const draw = (c) => {
+          const seen = c.seenGames || [];
+          const hidden = new Set(c.hiddenGames || []);
+          const key = JSON.stringify([seen, [...hidden]]);
+          if (key === lastGames) return; // unchanged since last draw
+          lastGames = key;
+          $("games-empty").classList.toggle("hide", seen.length > 0);
+          const list = $("games-list");
+          list.innerHTML = "";
+          seen
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .forEach((g) => {
+              const row = document.createElement("div");
+              row.className = "grow";
+              const name = document.createElement("div");
+              name.className = "name";
+              name.textContent = g.name;
+              const sw = document.createElement("label");
+              sw.className = "sw";
+              const on = !hidden.has(g.appId);
+              sw.innerHTML =
+                '<input type="checkbox" ' + (on ? "checked" : "") + " /><span></span>";
+              sw.querySelector("input").onchange = (e) => {
+                api("config", { hideGame: { appId: g.appId, hidden: !e.target.checked } });
+              };
+              row.appendChild(name);
+              row.appendChild(sw);
+              list.appendChild(row);
+            });
+        };
+        if (cfg) draw(cfg);
+        else api("config").then(draw);
+      }
+
+      // ── Settings values (all local; never sent to glow) ──
       api("config").then((c) => {
         $("anime-toggle").checked = c.animePresence !== false;
         $("steam-toggle").checked = c.steamPresence !== false;
         $("autostart-toggle").checked = c.autoStart === true;
         $("hidden-toggle").checked = c.startHidden === true;
         $("hidegame-toggle").checked = c.hideOnGame !== false;
+        renderGames(c);
       });
       $("anime-toggle").onchange = () =>
         api("config", { animePresence: $("anime-toggle").checked });
@@ -221,9 +330,15 @@
       // ── Poll status ──
       function render(s) {
         if (s.version) $("ver").textContent = s.version;
+        const up = s.update || {};
+        if (up.version) {
+          $("update-text").textContent = up.version + " is out.";
+          $("update-banner").classList.remove("hide");
+        } else {
+          $("update-banner").classList.add("hide");
+        }
         const linked = s.linked;
-        $("panel-link").classList.toggle("hide", linked);
-        $("panel-live").classList.toggle("hide", !linked);
+        applyView(linked);
         if (s.linking) {
           $("btn-browser").textContent = "Waiting for browser…";
           $("btn-browser").disabled = true;
@@ -259,8 +374,6 @@
         $("btn-toggle").textContent = running ? "Stop" : "Start";
 
         const st = s.status || {};
-        const d = st.delay || 0;
-        $("delay-val").textContent = d === 0 ? "live" : d + "s";
         const dot = $("dot");
         dot.className = "dot" + (st.err ? " err" : st.inGame ? " on" : "");
         if (!running) {
@@ -269,6 +382,9 @@
         } else if (st.err) {
           $("st-main").textContent = "Problem";
           $("st-sub").textContent = st.err;
+        } else if (st.hidden) {
+          $("st-main").textContent = (st.gameName || "This game") + " is hidden";
+          $("st-sub").textContent = "not shown on your profile or Discord";
         } else if (st.inGame && st.game === "steam") {
           $("st-main").textContent = "Playing on Steam";
           $("st-sub").textContent = st.detail || "";
@@ -302,6 +418,9 @@
 
       async function tick() {
         render(await api("status"));
+        // Keep the games list current while settings is open, so a game you just
+        // launched appears without reopening the panel.
+        if (!$("panel-settings").classList.contains("hide")) renderGames();
       }
       $("relink").onclick = (e) => {
         e.preventDefault();
