@@ -5,8 +5,8 @@
 # number (dev<N>) still increments so builds stay distinguishable in the app and
 # the release title.
 #
-# The release notes are UNRELEASED.md, an accumulating changelog. Pass a line to
-# append it first:
+# The release notes are UNRELEASED.md, an accumulating changelog of user-facing
+# bullets only (no meta - it goes straight to people). Pass a line to append it:
 #
 #   bash scripts/release-dev.sh                       # just rebuild + republish
 #   bash scripts/release-dev.sh "Fixed the avatar"    # append, then rebuild
@@ -36,7 +36,10 @@ cp "dist/glow-collector-dev$N.exe" /tmp/glow-collector-windows-x64.exe
 git tag -f dev >/dev/null
 git push -f origin dev >/dev/null
 
-NOTES="$(cat UNRELEASED.md)
+NOTES="The latest dev build. New features land here before the next numbered
+release, so expect the odd rough edge.
+
+$(cat UNRELEASED.md)
 
 | file | platform |
 |---|---|
