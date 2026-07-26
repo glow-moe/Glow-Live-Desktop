@@ -9,10 +9,17 @@ It reads:
 - **League** from Riot's Live Client Data API (`127.0.0.1:2999`, up only while
   you're in a game)
 - **Forza** from the game's Data Out UDP telemetry
+- **Steam** from the client's own local record of the running game (registry on
+  Windows, the launcher's process arguments on Linux), plus your public Steam
+  profile card for the status line, avatar and level
 
 Only your own live data is sent, only while the app is running. Pairing is done
 in the browser (the app opens glow.moe and you approve the device), so there is
 no key to copy.
+
+Discord Rich Presence runs over Discord's local IPC pipe. The catalog that maps
+Steam games to their Discord titles is embedded in the binary, so the app makes
+no requests to Discord's servers.
 
 ## Layout
 
@@ -22,6 +29,7 @@ internal/gui/          local HTTP server + embedded UI
 internal/orchestrator  ties League + Forza detection, push and Discord RPC together
 internal/live          Riot Live Client Data API reader
 internal/forza         Forza Data Out UDP listener
+internal/steam         running-game detection + public profile card + Discord catalog
 internal/snapshot      Riot data -> the glow.moe page schema
 internal/ddragon       patch version, champion + spell icons
 internal/poster        authenticated push to the ingest endpoint

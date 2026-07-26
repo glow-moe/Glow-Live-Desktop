@@ -27,6 +27,18 @@ type Config struct {
 	// AnimePresence mirrors what you're watching (fed by the browser extension
 	// through glow.moe) to Discord Rich Presence while no game is running.
 	AnimePresence bool `json:"animePresence"`
+	// SteamPresence mirrors the Steam game (and its Rich Presence line) to
+	// Discord when no richer source is running.
+	SteamPresence bool `json:"steamPresence"`
+	// AutoStart launches the app when the computer starts (a Run key on
+	// Windows, an XDG autostart entry on Linux). The OS artifact is written or
+	// removed when this is toggled; the flag here just drives the checkbox.
+	AutoStart bool `json:"autoStart"`
+	// StartHidden opens the app straight into the tray instead of on screen.
+	StartHidden bool `json:"startHidden"`
+	// HideOnGame tucks the window into the tray the moment a game goes live.
+	// A missing key stays true, which is the behavior the app always had.
+	HideOnGame bool `json:"hideOnGame"`
 }
 
 // Default returns sane starting settings (no token yet).
@@ -36,6 +48,8 @@ func Default() Config {
 		DelaySec:      0,
 		PollMs:        1500,
 		AnimePresence: true,
+		SteamPresence: true,
+		HideOnGame:    true,
 	}
 }
 

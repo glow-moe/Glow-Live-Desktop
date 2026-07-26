@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/glow-moe/glow-collector/internal/pair"
 	"github.com/glow-moe/glow-collector/internal/poster"
 	"github.com/glow-moe/glow-collector/internal/snapshot"
+	"github.com/glow-moe/glow-collector/internal/steam"
 )
 
 // liveSettings mirrors the L!VE preferences the user sets on the site (the
@@ -204,6 +206,15 @@ type Orchestrator struct {
 	dcApp        string // app id the current client is connected with
 	username     string
 	userID       string // profile cuid, for reading own anime "now watching"
+	steamID      uint32 // Steam account id signed in on this machine (0 = none)
+	steamIDAt    time.Time
+	steamSnap    steam.Snap // last good Steam answer
+	steamSnapAt  time.Time  // when that answer arrived
+	steamPollAt  time.Time  // when the endpoint was last asked
+	steamForced  int        // appid the poll interval was last skipped for
+	steamLocalID int        // what the machine reported last tick, for quit detection
+	steamGameID  int        // appid the current session is for
+	steamGameAt  time.Time  // when that game first appeared
 	startMs      int64
 	lastPresence time.Time
 	presenceOn   bool
@@ -404,6 +415,25 @@ func (o *Orchestrator) tick() {
 		o.presence(orGlow(appLoL), leagueLobbyActivity(snap.Lobby, uname))
 		o.set(st)
 		return
+	}
+
+	// Steam: any other game launched through Steam. Sits below League and Forza
+	// because those carry real telemetry, and above anime because a running game
+	// beats a passive watch status. Steam's own Rich Presence often knows the map
+	// or mode when Discord's does not, which is the whole point of reading it.
+	if cfg.SteamPresence {
+		if id, ok := o.steamAccount(); ok {
+			if s, live := o.steamSnapshot(id); live {
+				st := Status{Game: "steam", InGame: true, Detail: steamDetail(s), Pushes: o.pushes, Delay: effDelay}
+				o.push(cfg, effDelay, o.steamSnapshotPayload(s), &st)
+				app, named := steamApp(s.AppID)
+				if err := o.presence(app, steamActivity(s, uname, named)); err != nil {
+					st.Err = "Discord: " + err.Error()
+				}
+				o.set(st)
+				return
+			}
+		}
 	}
 
 	// Anime: no game running, so mirror what you're watching (detected + pushed
@@ -639,6 +669,213 @@ func leagueLobbyActivity(lob *snapshot.Lobby, username string) discord.Activity 
 	if username != "" {
 		a.Buttons = []discord.Button{
 			{Label: "League profile", URL: "https://glow.moe/" + username + "/league"},
+			{Label: "View my Glow profile", URL: "https://glow.moe/" + username},
+		}
+	}
+	return a
+}
+
+// steamAccount resolves (and remembers) the Steam account signed in on this
+// machine. Cached because it comes from a file on disk and the poll loop runs
+// every couple of seconds; re-read periodically so switching accounts is picked
+// up without a restart.
+func (o *Orchestrator) steamAccount() (uint32, bool) {
+	o.mu.Lock()
+	id, at := o.steamID, o.steamIDAt
+	o.mu.Unlock()
+	if id != 0 && time.Since(at) < 5*time.Minute {
+		return id, true
+	}
+	if id == 0 && time.Since(at) < 30*time.Second {
+		return 0, false // no Steam here; do not stat the disk every tick
+	}
+	found, ok := steam.AccountID()
+	o.mu.Lock()
+	o.steamID, o.steamIDAt = found, time.Now()
+	o.mu.Unlock()
+	return found, ok
+}
+
+// How often the Steam community endpoint may be asked, and how long a good
+// answer stays usable. The poll loop runs every ~1.5s, which is far too fast for
+// this endpoint: hammering it earns throttled empty replies, and each of those
+// used to drop the presence and bring it straight back, so the card flickered.
+// The grace window keeps the last good answer through a failed poll or two.
+//
+// Neither delay applies to starting, quitting or switching a game: those come
+// from the machine itself and are acted on the moment they happen.
+const (
+	steamPollEvery = 25 * time.Second
+	steamKeepFor   = 90 * time.Second
+)
+
+// steamSnapshot returns what Steam last reported, refreshing at most every
+// steamPollEvery. A failed refresh does not immediately clear the presence: the
+// previous answer stands until it goes stale.
+func (o *Orchestrator) steamSnapshot(id uint32) (steam.Snap, bool) {
+	o.mu.Lock()
+	snap, good, tried, forced := o.steamSnap, o.steamSnapAt, o.steamPollAt, o.steamForced
+	o.mu.Unlock()
+
+	// Which game is running is a local question, so it is asked every tick. The
+	// endpoint is only consulted for what it alone knows: the game's own status
+	// line and the player's Steam profile.
+	localID, _, localOK := steam.RunningApp()
+	o.mu.Lock()
+	prevLocal := o.steamLocalID
+	if localOK {
+		o.steamLocalID = localID
+	}
+	o.mu.Unlock()
+	// Quitting THIS machine's game clears instantly: no reason to wait out a
+	// grace window meant for a network that went quiet. Scoped to the game the
+	// machine itself was running, because the card may be showing a game played
+	// on another PC, and this machine cannot declare that one closed.
+	if localOK && localID == 0 && prevLocal != 0 && snap.AppID == prevLocal {
+		o.mu.Lock()
+		o.steamSnap, o.steamSnapAt = steam.Snap{}, time.Time{}
+		o.mu.Unlock()
+		return steam.Snap{}, false
+	}
+	// Skipping the interval is a one-off per game, not a standing licence: a game
+	// whose name the local library cannot supply, asked while the endpoint is
+	// down, would otherwise look freshly switched on every tick forever.
+	switched := localOK && localID != 0 && snap.AppID != 0 && localID != snap.AppID && localID != forced
+
+	fresh := !good.IsZero() && time.Since(good) < steamKeepFor
+	if !switched && time.Since(tried) < steamPollEvery {
+		return snap, fresh && snap.Game != ""
+	}
+
+	s, live := steam.Fetch(id)
+
+	o.mu.Lock()
+	o.steamPollAt = time.Now()
+	if switched {
+		o.steamForced = localID
+	}
+	if live {
+		o.steamSnap, o.steamSnapAt = s, time.Now()
+	} else if !fresh {
+		// Confirmed idle (not a blip): forget the game.
+		o.steamSnap, o.steamSnapAt = steam.Snap{}, time.Time{}
+	}
+	snap, fresh = o.steamSnap, live || fresh
+	o.mu.Unlock()
+	return snap, fresh && snap.Game != ""
+}
+
+// steamAppID picks the Discord application to publish a Steam game under.
+// Discord ties the "Playing X" headline to the application, not to the payload,
+// so using the game's own registered app is what makes it read "Playing
+// Unturned". Games Discord does not know fall back to ours, which still shows
+// the title on the details line.
+// steamPayload is what the profile card on glow.moe receives. The library side
+// (playtime, achievements, genres) is already in the site's own database from
+// the Steam sync, so only the live half travels: what is running, the game's own
+// status line, and the player extras that only the live endpoint knows.
+type steamPayload struct {
+	Game      string `json:"game"`
+	AppID     int    `json:"appId"`
+	Title     string `json:"title"`
+	Detail    string `json:"detail,omitempty"`
+	NonSteam  bool   `json:"nonSteam,omitempty"`
+	StartedAt int64  `json:"startedAt"` // ms; drives "42 min this session"
+	UpdatedAt int64  `json:"updatedAt"`
+
+	Level      int    `json:"level,omitempty"`
+	Avatar     string `json:"avatar,omitempty"`
+	Persona    string `json:"persona,omitempty"`
+	BadgeName  string `json:"badgeName,omitempty"`
+	BadgeDesc  string `json:"badgeDesc,omitempty"`
+	BadgeIcon  string `json:"badgeIcon,omitempty"`
+	Background string `json:"background,omitempty"`
+}
+
+// steamSnapshotPayload builds the push body, stamping the session start so the
+// card can count from when this game actually appeared rather than from the
+// moment a viewer loaded the page.
+func (o *Orchestrator) steamSnapshotPayload(s steam.Snap) steamPayload {
+	o.mu.Lock()
+	if o.steamGameAt.IsZero() || o.steamGameID != s.AppID {
+		o.steamGameID, o.steamGameAt = s.AppID, time.Now()
+	}
+	started := o.steamGameAt
+	o.mu.Unlock()
+	return steamPayload{
+		Game:       "steam",
+		AppID:      s.AppID,
+		Title:      s.Game,
+		Detail:     s.Detail,
+		NonSteam:   s.NonSteam,
+		StartedAt:  started.UnixMilli(),
+		UpdatedAt:  time.Now().UnixMilli(),
+		Level:      s.Level,
+		Avatar:     s.Avatar,
+		Persona:    s.Persona,
+		BadgeName:  s.BadgeName,
+		BadgeDesc:  s.BadgeDesc,
+		BadgeIcon:  s.BadgeIcon,
+		Background: s.Background,
+	}
+}
+
+// named reports whether the returned application is the game's own, which is
+// what decides if the headline already carries the title.
+func steamApp(appID int) (app string, named bool) {
+	if id, ok := steam.DiscordAppID(appID); ok {
+		return strconv.FormatUint(id, 10), true
+	}
+	return orGlow(""), false
+}
+
+// steamDetail is the one-line status the app shows for a Steam game.
+func steamDetail(s steam.Snap) string {
+	if s.Detail != "" {
+		return s.Game + " · " + s.Detail
+	}
+	return s.Game
+}
+
+// steamActivity builds the Rich Presence for a Steam game.
+//
+// Nothing here is per-game: the detail line arrives from Steam already
+// rendered, and when Discord knows the game we publish under its own
+// application, so a title works the day it ships without anything being
+// registered or uploaded on our side.
+func steamActivity(s steam.Snap, username string, named bool) discord.Activity {
+	// Published under the game's own Discord app, the headline already reads
+	// "Playing Unturned", so repeating the title here would print it twice: say
+	// where it is running instead. Without a match the headline is our app, and
+	// the title has to appear somewhere.
+	details := s.Game
+	if named {
+		details = "on Steam"
+	}
+	a := discord.Activity{
+		Details: details,
+		// The game's own line goes in state: it is the field the profile card
+		// reads, so the map or mode survives the trip to glow.moe. Omitted by the
+		// encoder for the many games that publish none.
+		State: s.Detail,
+	}
+	// The box art is the large image in both cases: Discord crops the large
+	// image square, which suits a tall cover and butchers the wide banner. Even
+	// under the game's own application the assets are ours to set, and they have
+	// to be: the glow badge rides the large image's corner, so without a large
+	// image of our own there is no corner to sit in.
+	large := steam.CoverImage(s.AppID)
+	if large == "" {
+		large = glowIcon
+	}
+	a.Assets = &discord.Assets{
+		LargeImage: large,
+		LargeText:  s.Game,
+		SmallImage: glowIcon,
+		SmallText:  "glow.moe",
+	}
+	if username != "" {
+		a.Buttons = []discord.Button{
 			{Label: "View my Glow profile", URL: "https://glow.moe/" + username},
 		}
 	}

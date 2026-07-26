@@ -11,9 +11,12 @@ import (
 	"net/http"
 	"os/exec"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/glow-moe/glow-collector/internal/autostart"
 	"github.com/glow-moe/glow-collector/internal/config"
 	"github.com/glow-moe/glow-collector/internal/orchestrator"
 	"github.com/glow-moe/glow-collector/internal/pair"
@@ -32,7 +35,16 @@ type Server struct {
 	version    string
 	linking    bool
 	refreshing bool   // a whoami refresh is in flight (avatar/username recovery)
-	hideToTray func() // set by main: tuck the window into the tray (Windows-only)
+	hideToTray func() // set by main: tuck the window into the tray
+	showWindow func() // set by main: bring the window back on screen
+}
+
+// SetShowWindow registers the callback a second launch (or the tray) uses to
+// bring the window back on screen.
+func (s *Server) SetShowWindow(fn func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.showWindow = fn
 }
 
 // SetHideToTray registers the callback that parks the window in the system tray
@@ -101,6 +113,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/avatar", s.hAvatar)
 	mux.HandleFunc("/api/open-settings", s.hOpenSettings)
 	mux.HandleFunc("/api/minimize", s.hMinimize)
+	mux.HandleFunc("/api/show", s.hShow)
 	return mux
 }
 
@@ -135,7 +148,26 @@ func (s *Server) hAvatar(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "no avatar", http.StatusNotFound)
 		return
 	}
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Get(url)
+	// The CDN transcodes avatars and picks the format from Accept, so ask for one
+	// the webview can paint: an AVIF reply renders as nothing and the picture
+	// silently falls back to the initials.
+	//
+	// Asking is not enough on its own. A cached AVIF copy from before this header
+	// existed is served straight back on a HIT, Accept and all, so the URL is
+	// varied per launch to force the edge to negotiate again. That costs one
+	// origin fetch each time the app starts, which is what it does anyway.
+	sep := "?"
+	if strings.Contains(url, "?") {
+		sep = "&"
+	}
+	req, err := http.NewRequest(http.MethodGet, url+sep+"fresh="+strconv.FormatInt(time.Now().UnixNano(), 36), nil)
+	if err != nil {
+		http.Error(w, "bad avatar url", http.StatusBadGateway)
+		return
+	}
+	req.Header.Set("Accept", "image/webp,image/png,image/jpeg")
+
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		http.Error(w, "fetch failed", http.StatusBadGateway)
 		return
@@ -182,6 +214,10 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 			PollMs        *int    `json:"pollMs"`
 			Endpoint      *string `json:"endpoint"`
 			AnimePresence *bool   `json:"animePresence"`
+			SteamPresence *bool   `json:"steamPresence"`
+			AutoStart     *bool   `json:"autoStart"`
+			StartHidden   *bool   `json:"startHidden"`
+			HideOnGame    *bool   `json:"hideOnGame"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		s.mu.Lock()
@@ -197,6 +233,22 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 		if body.AnimePresence != nil {
 			s.cfg.AnimePresence = *body.AnimePresence
 		}
+		if body.SteamPresence != nil {
+			s.cfg.SteamPresence = *body.SteamPresence
+		}
+		if body.AutoStart != nil {
+			// The OS artifact is the real switch; the flag only survives when
+			// the artifact could actually be written.
+			if err := autostart.Set(*body.AutoStart); err == nil {
+				s.cfg.AutoStart = *body.AutoStart
+			}
+		}
+		if body.StartHidden != nil {
+			s.cfg.StartHidden = *body.StartHidden
+		}
+		if body.HideOnGame != nil {
+			s.cfg.HideOnGame = *body.HideOnGame
+		}
 		s.cfg.Normalize()
 		cfg := s.cfg
 		s.mu.Unlock()
@@ -209,6 +261,10 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 		"pollMs":        s.cfg.PollMs,
 		"endpoint":      s.cfg.Endpoint,
 		"animePresence": s.cfg.AnimePresence,
+		"steamPresence": s.cfg.SteamPresence,
+		"autoStart":     s.cfg.AutoStart,
+		"startHidden":   s.cfg.StartHidden,
+		"hideOnGame":    s.cfg.HideOnGame,
 	}
 	s.mu.Unlock()
 	writeJSON(w, out)
@@ -297,10 +353,23 @@ func (s *Server) hLink(w http.ResponseWriter, r *http.Request) {
 
 // hMinimize tucks the window into the system tray. The frontend calls it once,
 // the moment the collector starts delivering (a game/anime is live), so the app
-// doesn't stay open on screen. No-op if the native hook isn't wired (non-Windows).
+// doesn't stay open on screen. Honors the hideOnGame setting, and no-ops when
+// the native hook isn't wired.
 func (s *Server) hMinimize(w http.ResponseWriter, _ *http.Request) {
 	s.mu.Lock()
 	fn := s.hideToTray
+	allowed := s.cfg.HideOnGame
+	s.mu.Unlock()
+	if fn != nil && allowed {
+		fn()
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// hShow brings the window back; a duplicate launch posts here and exits.
+func (s *Server) hShow(w http.ResponseWriter, _ *http.Request) {
+	s.mu.Lock()
+	fn := s.showWindow
 	s.mu.Unlock()
 	if fn != nil {
 		fn()

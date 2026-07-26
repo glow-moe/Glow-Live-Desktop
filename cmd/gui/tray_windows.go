@@ -189,3 +189,11 @@ func pinBottomRight(win unsafe.Pointer, w, h int) {
 func hideToTray(win unsafe.Pointer) {
 	C.glow_hide(win)
 }
+
+// showWindow brings the window back from the tray; same path the tray menu's
+// Open item takes.
+func showWindow(win unsafe.Pointer) {
+	if win != nil {
+		C.glow_restore((C.HWND)(win))
+	}
+}
