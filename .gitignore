@@ -1,6 +1,9 @@
 # Secrets: Discord app ids injected at build time
 .appids
 
+# Code-signing config (Azure Trusted Signing account/profile) — see .signing.example
+.signing
+
 # Build output (ship binaries as GitHub Releases, not in the tree)
 /dist/
 

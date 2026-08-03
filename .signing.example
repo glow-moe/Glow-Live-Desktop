@@ -1,0 +1,7 @@
+# Azure Trusted / Artifact Signing config for scripts/sign-windows.sh.
+# Copy to ".signing" (untracked) and fill in. Auth itself is via `az login`
+# (an identity holding the "Trusted Signing Certificate Profile Signer" role) —
+# no secret lives here, just the account + profile + region endpoint.
+SIGN_ENDPOINT=https://wus2.codesigning.azure.net/
+SIGN_ACCOUNT=
+SIGN_PROFILE=

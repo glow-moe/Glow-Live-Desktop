@@ -27,6 +27,10 @@ N="$(cat DEV 2>/dev/null || echo 41)"
 echo "$N" > DEV; bash scripts/build.sh linux dev
 echo "$N" > DEV; bash scripts/build.sh windows dev
 
+# Authenticode-sign the Windows binary before it ships (config in ./.signing).
+[ -f .signing ] && source ./.signing
+bash scripts/sign-windows.sh "dist/glow-collector-dev$N.exe"
+
 cp "dist/glow-collector-dev$N"     /tmp/glow-collector-linux-x64
 cp "dist/glow-collector-dev$N.exe" /tmp/glow-collector-windows-x64.exe
 

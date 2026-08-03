@@ -14,6 +14,11 @@ echo "$VER" > VERSION
 
 bash scripts/build.sh linux release
 bash scripts/build.sh windows release
+
+# Authenticode-sign the Windows binary before it ships (config in ./.signing).
+[ -f .signing ] && source ./.signing
+bash scripts/sign-windows.sh "dist/glow-live-v$VER-windows-x64.exe"
+
 cp "dist/glow-live-v$VER-linux-x64"     /tmp/glow-live-v$VER-linux-x64
 cp "dist/glow-live-v$VER-windows-x64.exe" /tmp/glow-live-v$VER-windows-x64.exe
 
