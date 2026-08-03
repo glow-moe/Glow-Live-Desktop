@@ -22,11 +22,18 @@ bash scripts/sign-windows.sh "dist/glow-live-v$VER-windows-x64.exe"
 cp "dist/glow-live-v$VER-linux-x64"     /tmp/glow-live-v$VER-linux-x64
 cp "dist/glow-live-v$VER-windows-x64.exe" /tmp/glow-live-v$VER-windows-x64.exe
 
+# Versionless copies (signed exe included) so the site's download buttons —
+# releases/latest/download/glow-live-<os>-x64[.exe] — keep working with no web
+# deploy: making this release Latest auto-points them here.
+cp "dist/glow-live-v$VER-linux-x64"       "dist/glow-live-linux-x64"
+cp "dist/glow-live-v$VER-windows-x64.exe" "dist/glow-live-windows-x64.exe"
+
 git tag "v$VER"
 git push origin "v$VER"
 
 gh release create "v$VER" \
   "dist/glow-live-v$VER-linux-x64" "dist/glow-live-v$VER-windows-x64.exe" \
+  "dist/glow-live-linux-x64" "dist/glow-live-windows-x64.exe" \
   --title "glow L!VE v$VER" --notes "$(cat UNRELEASED.md)"
 
 # Start the next dev cycle from a clean slate.
