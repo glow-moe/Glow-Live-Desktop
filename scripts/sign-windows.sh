@@ -22,6 +22,11 @@ set -euo pipefail
 FILE="${1:?usage: sign-windows.sh <file.exe>}"
 [ -f "$FILE" ] || { echo "sign-windows: no such file: $FILE" >&2; exit 1; }
 
+# Load ./.signing (repo root) unless the caller already exported the config —
+# `source`d vars in a parent script aren't inherited by this child process.
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+[ -f "$ROOT/.signing" ] && source "$ROOT/.signing"
+
 : "${SIGN_ENDPOINT:=https://wus2.codesigning.azure.net/}"
 : "${SIGN_ACCOUNT:?set SIGN_ACCOUNT (Trusted Signing account name)}"
 : "${SIGN_PROFILE:?set SIGN_PROFILE (certificate profile name)}"
