@@ -194,17 +194,18 @@ func (f *forzaState) get() (*forza.Snapshot, time.Time) {
 
 // Orchestrator runs the detect/push loop. Safe for the GUI to Start/Stop.
 type Orchestrator struct {
-	mu         sync.Mutex
-	cfg        config.Config
-	forzaGame  string
-	forzaPort  int
-	cancel     context.CancelFunc
-	running    bool
-	status     Status
-	pushes     int
-	forza      *forzaState
-	onStatus   func(Status)
-	onSeenGame func(appID int, name string) // records a Steam game for the settings list
+	mu          sync.Mutex
+	cfg         config.Config
+	forzaGame   string
+	forzaPort   int
+	cancel      context.CancelFunc
+	running     bool
+	status      Status
+	pushes      int
+	overlayJSON []byte // latest masked League snapshot ({live,snapshot}) for the localhost overlay
+	forza       *forzaState
+	onStatus    func(Status)
+	onSeenGame  func(appID int, name string) // records a Steam game for the settings list
 
 	// Discord Rich Presence (best-effort; nil when Discord isn't running).
 	dc           *discord.Client
@@ -401,6 +402,10 @@ func (o *Orchestrator) tick() {
 		effDelay = cfg.DelaySec // local fallback when the site delay is 0
 	}
 
+	// Reset the local overlay each tick; a League branch below re-populates it
+	// (the OBS overlay is League-only, so other titles read as not-live).
+	o.clearOverlay()
+
 	// Forza wins while telemetry is fresh (you're driving).
 	if fs, at := o.forza.get(); fs != nil && time.Since(at) < 10*time.Second {
 		fs.UpdatedAt = time.Now().UnixMilli()
@@ -418,6 +423,7 @@ func (o *Orchestrator) tick() {
 		// current L!VE privacy settings, so toggling takes effect immediately.
 		st := Status{Game: "league", InGame: true, Detail: leagueDetail(snap.Me.ChampName, snap.Clock), Pushes: o.pushes, Delay: effDelay}
 		o.push(cfg, effDelay, snap, &st)
+		o.cacheOverlay(snap)
 		o.presence(orGlow(appLoL), leagueActivity(snap, data.GameData.GameTime, uname))
 		o.set(st)
 		return
@@ -434,6 +440,7 @@ func (o *Orchestrator) tick() {
 		snap := snapshot.FromLobby(lob, ddragon.Version(), time.Now().UnixMilli())
 		st := Status{Game: "league", InGame: false, Detail: lob.Label, Pushes: o.pushes, Delay: effDelay}
 		o.push(cfg, effDelay, snap, &st)
+		o.cacheOverlay(snap)
 		o.presence(orGlow(appLoL), leagueLobbyActivity(snap.Lobby, uname))
 		o.set(st)
 		return
@@ -515,6 +522,46 @@ func (o *Orchestrator) set(s Status) {
 	o.status = s
 	o.mu.Unlock()
 	o.emit(s)
+}
+
+var overlayOffline = []byte(`{"live":false,"snapshot":null}`)
+
+// cacheOverlay stores the current League snapshot (masked per the owner's L!VE
+// privacy settings) for the local overlay server. Masks a COPY so the raw
+// snapshot still goes to glow.moe (which masks at read time; keeping the raw
+// push lets un-hiding work). No stream-snipe delay buffer: parity with the server today.
+func (o *Orchestrator) cacheOverlay(snap snapshot.Snapshot) {
+	snap.Blue = append([]snapshot.Player(nil), snap.Blue...)
+	snap.Red = append([]snapshot.Player(nil), snap.Red...)
+	o.mu.Lock()
+	hideMy, hideEnemy := o.settings.HideMyName, o.settings.HideEnemyNames
+	o.mu.Unlock()
+	snap.Mask(hideMy, hideEnemy)
+	b, err := json.Marshal(map[string]any{"live": snap.Live, "snapshot": snap})
+	if err != nil {
+		return
+	}
+	o.mu.Lock()
+	o.overlayJSON = b
+	o.mu.Unlock()
+}
+
+// clearOverlay marks the local overlay as not-live (between games / other titles).
+func (o *Orchestrator) clearOverlay() {
+	o.mu.Lock()
+	o.overlayJSON = overlayOffline
+	o.mu.Unlock()
+}
+
+// OverlayJSON returns the latest masked League snapshot for the localhost overlay
+// server ({live,snapshot} shape, matching /api/live/read).
+func (o *Orchestrator) OverlayJSON() []byte {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.overlayJSON == nil {
+		return overlayOffline
+	}
+	return o.overlayJSON
 }
 
 func (o *Orchestrator) emit(s Status) {

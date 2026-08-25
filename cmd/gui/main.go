@@ -50,6 +50,14 @@ func main() {
 	url := "http://" + ln.Addr().String()
 	writeAddrFile(url)
 
+	// Also expose /live.json on a FIXED loopback port so the OBS browser-source
+	// URL (glow.moe/<user>/league/overlay?src=local) stays stable across launches -
+	// no port to re-copy. Best-effort: if 47100 is busy, the overlay still works
+	// via the dynamic port with an explicit ?port=. Same handler; loopback-only.
+	if oln, err := net.Listen("tcp", "127.0.0.1:47100"); err == nil {
+		go func() { _ = http.Serve(oln, srv.Handler()) }()
+	}
+
 	const winW, winH = 340, 440 // small desktop-widget size
 
 	w := webview.New(false)
