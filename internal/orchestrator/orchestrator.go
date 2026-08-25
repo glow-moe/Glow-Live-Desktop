@@ -34,6 +34,21 @@ type liveSettings struct {
 	HideEnemyNames bool `json:"hideEnemyNames"`
 	HideMyName     bool `json:"hideMyName"`
 	DelaySec       int  `json:"delaySec"`
+	// The OBS overlay's look (accent + which blocks show + render scale). The
+	// self-contained /overlay page reads these from /live.json so changing them in
+	// the dashboard themes the overlay on the next refresh - no URL to re-copy.
+	OverlayAccent string      `json:"overlayAccent"`
+	OverlayScale  float64     `json:"overlayScale"`
+	OverlayShow   overlayShow `json:"overlayShow"`
+}
+
+// overlayShow mirrors OverlayShow on the site: which blocks the in-game card
+// shows and whether it's the full card or the compact rank + KDA strip.
+type overlayShow struct {
+	Stats  bool   `json:"stats"`
+	Spells bool   `json:"spells"`
+	Runes  bool   `json:"runes"`
+	Mode   string `json:"mode"`
 }
 
 func fetchSettings(endpoint, token string) (liveSettings, bool) {
@@ -535,15 +550,63 @@ func (o *Orchestrator) cacheOverlay(snap snapshot.Snapshot) {
 	snap.Red = append([]snapshot.Player(nil), snap.Red...)
 	o.mu.Lock()
 	hideMy, hideEnemy := o.settings.HideMyName, o.settings.HideEnemyNames
+	look := normalizeLook(o.settings)
 	o.mu.Unlock()
 	snap.Mask(hideMy, hideEnemy)
-	b, err := json.Marshal(map[string]any{"live": snap.Live, "snapshot": snap})
+	b, err := json.Marshal(map[string]any{"live": snap.Live, "snapshot": snap, "look": look})
 	if err != nil {
 		return
 	}
 	o.mu.Lock()
 	o.overlayJSON = b
 	o.mu.Unlock()
+}
+
+// normalizeLook builds the overlay's visual config (accent + scale + which blocks
+// show) for /live.json, mirroring normalizeLiveSettings on the site. Before the
+// first successful settings fetch the struct is zero-valued, which would hide
+// everything - so an unset (non-hex) accent falls back to the full default card.
+func normalizeLook(s liveSettings) map[string]any {
+	if !hexColor(s.OverlayAccent) {
+		return map[string]any{
+			"accent": "#f5c211",
+			"scale":  1.0,
+			"show":   map[string]any{"stats": true, "spells": true, "runes": true, "mode": "full"},
+		}
+	}
+	scale := s.OverlayScale
+	if scale < 0.5 || scale > 2 {
+		scale = 1
+	}
+	mode := "full"
+	if s.OverlayShow.Mode == "minimal" {
+		mode = "minimal"
+	}
+	return map[string]any{
+		"accent": s.OverlayAccent,
+		"scale":  scale,
+		"show": map[string]any{
+			"stats":  s.OverlayShow.Stats,
+			"spells": s.OverlayShow.Spells,
+			"runes":  s.OverlayShow.Runes,
+			"mode":   mode,
+		},
+	}
+}
+
+// hexColor reports whether s is a #rrggbb colour (the shape the site always
+// stores overlayAccent in), used to tell a fetched settings struct from a
+// zero-valued one.
+func hexColor(s string) bool {
+	if len(s) != 7 || s[0] != '#' {
+		return false
+	}
+	for _, c := range s[1:] {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 // clearOverlay marks the local overlay as not-live (between games / other titles).

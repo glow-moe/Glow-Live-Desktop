@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>glow L!VE overlay</title>
+<style>
+  /* Cosmetic fonts to match the glow.moe card; they degrade to a rounded system
+     stack if the machine is offline, so the overlay never blocks on the network. */
+  @import url('https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=M+PLUS+Rounded+1c:wght@400;700;800&family=Oxanium:wght@700;800&display=swap');
+
+  html, body {
+    margin: 0;
+    background: transparent !important; /* OBS browser source: fully transparent */
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* The card renders at the page's top-left corner and IS the whole source, so
+     OBS "Fit to Screen" can't stretch it - the streamer drags/resizes the source
+     onto their minimap. */
+  #root { position: absolute; top: 0; left: 0; }
+  img { -webkit-user-drag: none; user-select: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+"use strict";
+(function () {
+  // ---- ddragon URL builders (ported 1:1 from src/lib/league/ddragon.ts) -------
+  // Snapshot-derived keys are UNTRUSTED (they land inside url() in inline styles),
+  // so every helper whitelists its input the same way the site does.
+  var DDRAGON_VERSION = "14.13.1";
+  var SAFE_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
+  var SAFE_PATCH = /^[0-9]+(\.[0-9]+)*$/;
+  var IMG_KEY_FIX = { Fiddlesticks: "FiddleSticks" };
+  function safeKey(k) { return typeof k === "string" && SAFE_KEY.test(k) ? k : ""; }
+  function imgKey(k) { return IMG_KEY_FIX[k] || safeKey(k); }
+  function safePatch(v) { return typeof v === "string" && SAFE_PATCH.test(v) ? v : DDRAGON_VERSION; }
+  function safeNum(n) { return Math.max(0, Math.trunc(Number(n) || 0)); }
+  function cdn(v) { return "https://ddragon.leagueoflegends.com/cdn/" + safePatch(v) + "/img/"; }
+  function champIconUrl(k, v) { return cdn(v) + "champion/" + imgKey(k) + ".png"; }
+  function champTileUrl(k, skin) { return "https://ddragon.leagueoflegends.com/cdn/img/champion/tiles/" + imgKey(k) + "_" + safeNum(skin) + ".jpg"; }
+  function champSplashUrl(k, skin) { return "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/" + imgKey(k) + "_" + safeNum(skin) + ".jpg"; }
+  function champPortraitUrl(k, skin, v) { return safeNum(skin) > 0 ? champTileUrl(k, skin) : champIconUrl(k, v); }
+  function spellIconUrl(k, v) { return cdn(v) + "spell/" + safeKey(k) + ".png"; }
+  // Rank crests are bundled in the app (web/ranks), so the overlay works offline
+  // and never touches glow.moe.
+  function emblemUrl(tier) { return "/ranks/emblem-" + String(tier || "").toLowerCase().replace(/[^a-z]/g, "") + ".png"; }
+
+  // ---- small safety helpers ---------------------------------------------------
+  // Full URLs coming from the collector (rune icons, profile icons) - only allow
+  // clean https URLs into url(), so a poisoned value can't break out of the attr.
+  function safeUrl(u) { return typeof u === "string" && /^https:\/\/[^\s"')]+$/.test(u) ? u : ""; }
+  function safeColor(c) { return typeof c === "string" && /^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{1,20})$/.test(c) ? c : "#F3EFE6"; }
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function capWord(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s; }
+  function hexToRgb(hex) {
+    var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || "");
+    return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 245, g: 194, b: 17 };
+  }
+
+  var MOCHIY = "'Mochiy Pop One', system-ui, sans-serif";
+  var ROUND = "'M PLUS Rounded 1c', system-ui, sans-serif";
+  var OXANIUM = "'Oxanium', system-ui, sans-serif";
+  var DEFAULT_ACCENT = "#f5c211";
+
+  // The card's look. Mirrors normalizeLiveSettings on the site; the collector
+  // sends it in /live.json under "look", but default sanely if it's missing.
+  function normalizeLook(l) {
+    l = l || {};
+    var accent = /^#[0-9a-f]{6}$/i.test(l.accent) ? l.accent : DEFAULT_ACCENT;
+    var scale = Number(l.scale);
+    if (!(scale >= 0.5 && scale <= 2)) scale = 1;
+    var s = l.show || {};
+    return {
+      accent: accent,
+      scale: scale,
+      show: {
+        stats: s.stats !== false,
+        spells: s.spells !== false,
+        runes: s.runes !== false,
+        mode: s.mode === "minimal" ? "minimal" : "full",
+      },
+    };
+  }
+
+  // Headline rank from a client profile's ranked queues (Solo/Duo preferred),
+  // mirroring the site's loadIdle().
+  function pickRank(ranks) {
+    var r = (ranks || []).filter(function (x) { return x && x.tier; });
+    var solo =
+      r.filter(function (x) { return /solo/i.test(x.queue); })[0] ||
+      r.filter(function (x) { return /flex/i.test(x.queue); })[0] ||
+      r[0];
+    return solo ? { tier: solo.tier, division: solo.division || "", lp: solo.lp || 0 } : null;
+  }
+
+  // Last-known rank, remembered from champ-select / lobby so the in-game card can
+  // still show it during a match (the live snapshot carries no rank).
+  var lastRank = null;
+
+  // ---- renderers (ported from LeagueOverlay) ----------------------------------
+  function rankChip(rank, acc, ovA) {
+    if (!rank) return "";
+    return (
+      '<div style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:9px;padding:6px 12px 6px 7px;border-radius:999px;background:rgba(7,4,12,0.72);border:1px solid ' + ovA(0.55) + ';box-shadow:0 4px 16px -6px #000, 0 0 20px -8px ' + acc + '">' +
+        '<img src="' + emblemUrl(rank.tier) + '" alt="" style="width:40px;height:40px;object-fit:contain;filter:drop-shadow(0 0 8px ' + ovA(0.45) + ')" />' +
+        '<div style="line-height:1.1">' +
+          '<div style="font-family:' + MOCHIY + ';font-size:16px;color:' + acc + ';text-shadow:0 1px 2px #000">' + esc(capWord(rank.tier)) + (rank.division ? " " + esc(rank.division) : "") + '</div>' +
+          '<div style="font-family:' + OXANIUM + ';font-size:11px;font-weight:700;color:#e8dcc0">' + esc(rank.lp) + ' LP</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function glowMark(top, right, size, acc, ovA) {
+    return '<span style="position:absolute;top:' + top + 'px;right:' + right + 'px;font-family:' + MOCHIY + ';font-size:' + size + 'px;color:' + acc + ';text-shadow:0 1px 3px #000, 0 0 16px ' + ovA(0.55) + '">glow<span style="color:#F3EFE6">.moe</span></span>';
+  }
+
+  function skinBanner(me, patch, acc) {
+    return (
+      '<div style="position:absolute;inset:0;background:url(&quot;' + champSplashUrl(me.champKey, me.skin) + '&quot;) center 20%/cover"></div>' +
+      '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(13,8,23,0.15),rgba(7,4,12,0.96) 90%)"></div>'
+    );
+  }
+
+  function champPortrait(me, patch, acc) {
+    return '<div style="width:60px;height:60px;border-radius:14px;background:#0d0817 url(&quot;' + champPortraitUrl(me.champKey, me.skin, patch) + '&quot;) center/cover;border:2px solid ' + acc + ';box-shadow:0 0 18px -4px ' + acc + ';flex:0 0 auto"></div>';
+  }
+
+  function shell(inner, scale, acc, ovA, width) {
+    return (
+      '<div style="transform:scale(' + scale + ');transform-origin:top left;width:' + width + 'px;box-sizing:border-box;border-radius:22px;overflow:hidden;background:radial-gradient(120% 90% at 15% 0%,#1e1330 0%,#07040c 60%);border:1px solid ' + ovA(0.42) + ';box-shadow:0 24px 70px -20px #000, 0 0 40px -22px ' + acc + ';font-family:' + ROUND + ';color:#F3EFE6">' +
+        inner +
+      '</div>'
+    );
+  }
+
+  function renderInGame(snap, look) {
+    var me = snap.me;
+    var patch = snap.patch;
+    var acc = look.accent;
+    var rgb = hexToRgb(acc);
+    var ovA = function (a) { return "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + "," + a + ")"; };
+    var show = look.show;
+
+    var myKda = "0/0/0", myCs = 0;
+    var all = (snap.blue || []).concat(snap.red || []);
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].isMe) { myKda = all[i].kda || myKda; myCs = all[i].cs || 0; break; }
+    }
+    var rank = lastRank;
+
+    if (show.mode === "minimal") {
+      var mBanner =
+        '<div style="position:relative;height:138px">' +
+          skinBanner(me, patch, acc) +
+          glowMark(11, 13, 15, acc, ovA) +
+          rankChip(rank, acc, ovA) +
+          '<div style="position:absolute;left:14px;right:14px;bottom:12px;display:flex;align-items:flex-end;gap:12px">' +
+            champPortrait(me, patch, acc) +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="display:flex;align-items:baseline;gap:8px">' +
+                '<span style="font-family:' + MOCHIY + ';font-size:21px;line-height:1.05">' + esc(me.champName) + '</span>' +
+                '<span style="font-size:11px;color:#a99f8c">Lv ' + esc(me.level) + '</span>' +
+              '</div>' +
+              '<div style="margin-top:5px;font-family:' + OXANIUM + ';font-weight:800;font-size:18px">' + esc(myKda) + '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      return shell(mBanner, look.scale, acc, ovA, 384);
+    }
+
+    // Full card: skin banner + identity, then stats / spells+runes.
+    var banner =
+      '<div style="position:relative;height:138px">' +
+        skinBanner(me, patch, acc) +
+        glowMark(11, 13, 15, acc, ovA) +
+        rankChip(rank, acc, ovA) +
+        '<div style="position:absolute;left:14px;right:14px;bottom:12px;display:flex;align-items:flex-end;gap:12px">' +
+          champPortrait(me, patch, acc) +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="display:flex;align-items:baseline;gap:8px">' +
+              '<span style="font-family:' + MOCHIY + ';font-size:21px;line-height:1.05">' + esc(me.champName) + '</span>' +
+              '<span style="font-size:11px;color:#a99f8c">Lv ' + esc(me.level) + '</span>' +
+            '</div>' +
+            '<div style="margin-top:5px;display:flex;align-items:center;gap:12px;font-size:14px">' +
+              '<span style="font-family:' + OXANIUM + ';font-weight:800;font-size:16px">' + esc(myKda) + '</span>' +
+              '<span style="color:#a99f8c">' + esc(myCs) + ' CS</span>' +
+              '<span style="color:' + acc + ';font-weight:700">' + esc(Number(me.gold || 0).toLocaleString("en-US")) + ' g</span>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    var body = "";
+    var stats = me.stats || [];
+    if (show.stats && stats.length > 0) {
+      var cells = "";
+      for (var j = 0; j < stats.length; j++) {
+        var s = stats[j];
+        cells +=
+          '<div style="text-align:center;padding:7px 3px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid ' + ovA(0.14) + '">' +
+            '<div style="font-size:15px;font-weight:800;color:' + safeColor(s.color) + ';line-height:1">' + esc(s.value) + '</div>' +
+            '<div style="font-size:7.5px;letter-spacing:.05em;text-transform:uppercase;color:#a99f8c;margin-top:3px">' + esc(s.label) + '</div>' +
+          '</div>';
+      }
+      body += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">' + cells + '</div>';
+    }
+
+    var runes = me.runes || {};
+    var perks = runes.perks || [];
+    var spellKeys = me.spellKeys || [];
+    if (show.spells || show.runes) {
+      var row = "";
+      if (show.spells && spellKeys.length > 0) {
+        var sp = "";
+        for (var k = 0; k < spellKeys.length; k++) {
+          sp += '<span style="width:34px;height:34px;border-radius:9px;background:#0d0817 url(&quot;' + spellIconUrl(spellKeys[k], patch) + '&quot;) center/cover;border:1px solid ' + ovA(0.30) + '"></span>';
+        }
+        row += '<div style="display:flex;gap:6px;flex:0 0 auto">' + sp + '</div>';
+      }
+      if (show.runes && (safeUrl(runes.keystoneIcon) || perks.length > 0)) {
+        var ks = safeUrl(runes.keystoneIcon)
+          ? '<span style="width:30px;height:30px;border-radius:50%;flex:0 0 auto;background:#0d0817 url(&quot;' + safeUrl(runes.keystoneIcon) + '&quot;) center/78% no-repeat;border:1px solid ' + ovA(0.50) + ';box-shadow:0 0 10px -3px ' + acc + '"></span>'
+          : "";
+        var pd = "";
+        for (var p = 1; p < perks.length; p++) {
+          var ic = safeUrl(perks[p].icon);
+          pd += '<span title="' + esc(perks[p].name) + '" style="width:22px;height:22px;border-radius:50%;flex:0 0 auto;background:' + (ic ? '#0d0817 url(&quot;' + ic + '&quot;) center/74% no-repeat' : '#0d0817') + ';border:1px solid ' + ovA(0.24) + '"></span>';
+        }
+        row +=
+          '<div style="flex:1;display:flex;align-items:center;gap:6px;padding:6px 9px;border-radius:12px;background:rgba(255,255,255,0.035);border:1px solid ' + ovA(0.16) + '">' +
+            ks + '<div style="display:flex;gap:5px;flex-wrap:wrap">' + pd + '</div>' +
+          '</div>';
+      }
+      if (row) body += '<div style="display:flex;align-items:center;gap:10px">' + row + '</div>';
+    }
+
+    var inner = banner + (body ? '<div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">' + body + '</div>' : "");
+    return shell(inner, look.scale, acc, ovA, 384);
+  }
+
+  function renderIdle(lobby, look) {
+    var acc = look.accent;
+    var rgb = hexToRgb(acc);
+    var ovA = function (a) { return "rgba(" + rgb.r + "," + rgb.g + "," + rgb.b + "," + a + ")"; };
+    var c = lobby.client || {};
+    var profile = {
+      name: c.gameName || lobby.summoner || "",
+      iconUrl: safeUrl(c.iconUrl) || safeUrl(lobby.iconUrl) || "",
+      level: c.level || lobby.level || 0,
+    };
+    var rank = pickRank(c.ranks) || lastRank;
+    if (!profile.name && !rank) return "";
+    var ranked = Boolean(rank && rank.tier);
+
+    var profBlock = profile.name
+      ? '<div style="display:flex;align-items:center;gap:12px">' +
+          '<div style="width:46px;height:46px;border-radius:12px;flex:0 0 auto;background:' + (profile.iconUrl ? '#0d0817 url(&quot;' + profile.iconUrl + '&quot;) center/cover' : '#0d0817') + ';border:2px solid ' + acc + ';box-shadow:0 0 16px -4px ' + acc + '"></div>' +
+          '<div style="min-width:0">' +
+            '<div style="font-family:' + MOCHIY + ';font-size:17px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px">' + esc(profile.name) + '</div>' +
+            '<div style="font-size:11px;color:#a99f8c;margin-top:3px">Level ' + esc(profile.level) + '</div>' +
+          '</div>' +
+        '</div>'
+      : "";
+
+    var rankBlock = ranked
+      ? '<img src="' + emblemUrl(rank.tier) + '" alt="" style="width:52px;height:52px;object-fit:contain;flex:0 0 auto;filter:drop-shadow(0 0 8px ' + ovA(0.45) + ')" />' +
+        '<div style="line-height:1.15">' +
+          '<div style="font-family:' + MOCHIY + ';font-size:20px;color:' + acc + ';text-shadow:0 1px 2px #000">' + esc(capWord(rank.tier)) + (rank.division ? " " + esc(rank.division) : "") + '</div>' +
+          '<div style="font-family:' + OXANIUM + ';font-size:13px;font-weight:700;color:#e8dcc0">' + esc(rank.lp) + ' LP</div>' +
+        '</div>'
+      : '<div style="font-family:' + MOCHIY + ';font-size:16px;color:#a99f8c">Unranked</div>';
+
+    return (
+      '<div style="position:relative;transform:scale(' + look.scale + ');transform-origin:top left;width:320px;box-sizing:border-box;padding:16px;border-radius:22px;background:radial-gradient(120% 90% at 15% 0%,#1e1330 0%,#07040c 60%);border:1px solid ' + ovA(0.42) + ';box-shadow:0 24px 70px -20px #000, 0 0 40px -22px ' + acc + ';font-family:' + ROUND + ';color:#F3EFE6">' +
+        glowMark(13, 15, 14, acc, ovA) +
+        profBlock +
+        '<div style="margin:' + (profile.name ? "13px 0" : "0 0 13px") + ';height:1px;background:' + ovA(0.16) + '"></div>' +
+        '<div style="display:flex;align-items:center;gap:12px">' + rankBlock + '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderAll(d) {
+    var look = normalizeLook(d && d.look);
+    var snap = d && d.snapshot;
+    // Remember rank whenever the client profile is visible (lobby / champ select).
+    if (snap && snap.lobby && snap.lobby.client) {
+      var r = pickRank(snap.lobby.client.ranks);
+      if (r) lastRank = r;
+    }
+    if (snap && (d.live || snap.live) && snap.me && safeKey(snap.me.champKey)) {
+      return renderInGame(snap, look);
+    }
+    if (snap && snap.lobby) {
+      return renderIdle(snap.lobby, look);
+    }
+    return "";
+  }
+
+  // ---- poll loop --------------------------------------------------------------
+  var root = document.getElementById("root");
+  var last = null;
+  function tick() {
+    fetch("/live.json", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var html = renderAll(d);
+        if (html !== last) { root.innerHTML = html; last = html; }
+      })
+      .catch(function () { /* app not running / transient - keep last frame */ });
+  }
+  tick();
+  setInterval(tick, 2000);
+})();
+</script>
+</body>
+</html>
