@@ -143,10 +143,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/minimize", s.hMinimize)
 	mux.HandleFunc("/api/show", s.hShow)
 	mux.HandleFunc("/api/open-download", s.hOpenDownload)
-	// Local OBS overlay data: the glow.moe overlay page (?src=local) reads the
-	// current masked League snapshot from here instead of polling glow.moe, so the
-	// ~2s live poll never touches our server.
+	// Local OBS overlay data: the overlay page (below, or the glow.moe page with
+	// ?src=local) reads the current masked League snapshot from here instead of
+	// polling glow.moe, so the ~2s live poll never touches our server.
 	mux.HandleFunc("/live.json", s.hLive)
+	// Self-contained OBS overlay page. Point an OBS Browser Source at
+	// http://127.0.0.1:47100/overlay: it renders the League card entirely from
+	// /live.json on this loopback server, so nothing touches glow.moe (works
+	// offline). Rank crests + fonts are bundled; ddragon art is Riot's CDN.
+	mux.HandleFunc("/overlay", s.hOverlay)
 	return mux
 }
 
@@ -172,6 +177,21 @@ func (s *Server) hLive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = w.Write(s.orch.OverlayJSON())
+}
+
+// hOverlay serves the self-contained OBS overlay page (web/overlay.html): a
+// transparent card that polls /live.json on this same localhost server and
+// renders the League snapshot entirely offline (no glow.moe). Served from an
+// explicit route so the OBS URL is a clean /overlay with no trailing slash.
+func (s *Server) hOverlay(w http.ResponseWriter, _ *http.Request) {
+	b, err := webFS.ReadFile("web/overlay.html")
+	if err != nil {
+		http.Error(w, "overlay not found", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(b)
 }
 
 func openURL(url string) {
