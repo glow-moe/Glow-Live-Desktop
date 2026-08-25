@@ -143,6 +143,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/minimize", s.hMinimize)
 	mux.HandleFunc("/api/show", s.hShow)
 	mux.HandleFunc("/api/open-download", s.hOpenDownload)
+	// Local OBS overlay data: the glow.moe overlay page (?src=local) reads the
+	// current masked League snapshot from here instead of polling glow.moe, so the
+	// ~2s live poll never touches our server.
+	mux.HandleFunc("/live.json", s.hLive)
 	return mux
 }
 
@@ -154,6 +158,20 @@ func (s *Server) hOpenSettings(w http.ResponseWriter, _ *http.Request) {
 	s.mu.Unlock()
 	openURL(base + "/dashboard/live")
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+// hLive serves the current masked League snapshot ({live,snapshot}) for a
+// localhost OBS overlay. CORS-open so the glow.moe overlay page (?src=local) can
+// read it cross-origin; never cached so OBS always gets the latest frame.
+func (s *Server) hLive(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	_, _ = w.Write(s.orch.OverlayJSON())
 }
 
 func openURL(url string) {
