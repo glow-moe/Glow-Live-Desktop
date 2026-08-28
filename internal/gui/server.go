@@ -20,6 +20,7 @@ import (
 	"github.com/glow-moe/glow-collector/internal/config"
 	"github.com/glow-moe/glow-collector/internal/orchestrator"
 	"github.com/glow-moe/glow-collector/internal/pair"
+	"github.com/glow-moe/glow-collector/internal/poster"
 	"github.com/glow-moe/glow-collector/internal/update"
 )
 
@@ -91,6 +92,9 @@ func (s *Server) refreshIdentity() {
 
 // NewServer wires the server to the saved config.
 func NewServer(cfg config.Config, version string) *Server {
+	// Report this build to the server on every push so it can turn away versions
+	// that are too old (forced update).
+	poster.SetVersion(version)
 	s := &Server{cfg: cfg, version: version, orch: orchestrator.New(cfg)}
 	s.orch.OnSeenGame(s.recordSeenGame)
 	go s.watchUpdates()

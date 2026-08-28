@@ -7,6 +7,7 @@ package orchestrator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -528,7 +529,11 @@ func (o *Orchestrator) push(cfg config.Config, delaySec int, snap any, st *Statu
 		return
 	}
 	if err := poster.Post(cfg.Endpoint, cfg.Token, delaySec, snap); err != nil {
-		st.Err = err.Error()
+		if errors.Is(err, poster.ErrOutdated) {
+			st.Err = "Update required: this version is no longer supported. Get the latest from glow.moe."
+		} else {
+			st.Err = err.Error()
+		}
 		return
 	}
 	o.pushes++
