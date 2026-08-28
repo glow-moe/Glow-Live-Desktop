@@ -12,3 +12,6 @@
 
 # Local dev-build counter (scripts/build.sh bumps it)
 DEV
+
+# Local release/build tooling (signing, appid injection) - keep off the public repo.
+scripts/
