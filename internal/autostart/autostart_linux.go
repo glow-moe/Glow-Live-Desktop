@@ -50,7 +50,7 @@ func Set(on bool) error {
 Type=Application
 Name=glow L!VE
 Comment=Live game status for your glow.moe profile
-Exec="%s"
+Exec="%s" --hidden
 Icon=%s
 Terminal=false
 X-GNOME-Autostart-enabled=true

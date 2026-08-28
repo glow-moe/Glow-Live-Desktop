@@ -15,6 +15,7 @@ import (
 
 	webview "github.com/webview/webview_go"
 
+	"github.com/glow-moe/glow-collector/internal/autostart"
 	"github.com/glow-moe/glow-collector/internal/config"
 	"github.com/glow-moe/glow-collector/internal/gui"
 	"github.com/glow-moe/glow-collector/internal/single"
@@ -39,6 +40,19 @@ func main() {
 	}
 
 	cfg, _ := config.Load()
+	// Keep the OS autostart entry in sync with the setting: writes it on first
+	// run (AutoStart defaults on now, so the app launches with the computer),
+	// removes it if the user turns it off. Best-effort.
+	_ = autostart.Set(cfg.AutoStart)
+	// A boot launch carries --hidden (see internal/autostart) so it starts in the
+	// tray; a manual double-click has no flag and shows the window.
+	startHidden := cfg.StartHidden
+	for _, a := range os.Args[1:] {
+		if a == "--hidden" {
+			startHidden = true
+		}
+	}
+
 	srv := gui.NewServer(cfg, version)
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -70,7 +84,7 @@ func main() {
 	w.Dispatch(func() {
 		moveBottomRight(w.Window(), winW, winH)
 		enableCloseToTray(w.Window()) // close button hides to tray
-		if cfg.StartHidden {
+		if startHidden {
 			hideToTray(w.Window())
 		}
 	})

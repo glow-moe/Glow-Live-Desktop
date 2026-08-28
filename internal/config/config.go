@@ -64,6 +64,7 @@ func Default() Config {
 		AnimePresence: true,
 		SteamPresence: true,
 		HideOnGame:    true,
+		AutoStart:     true, // launch with the computer, straight into the tray
 	}
 }
 

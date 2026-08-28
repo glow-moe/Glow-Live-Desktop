@@ -48,8 +48,10 @@ func Set(on bool) error {
 	if err != nil {
 		return err
 	}
-	// The path goes in quoted, so spaces in the install dir survive.
-	u := utf16.Encode([]rune("\"" + exe + "\""))
+	// The path goes in quoted, so spaces in the install dir survive. The
+	// --hidden flag makes the boot launch start straight into the tray (a
+	// manual double-click has no flag, so it shows the window).
+	u := utf16.Encode([]rune("\"" + exe + "\" --hidden"))
 	u = append(u, 0)
 	if C.glow_run_set((*C.wchar_t)(unsafe.Pointer(&u[0]))) == 0 {
 		return errors.New("autostart: could not write the Run value")
