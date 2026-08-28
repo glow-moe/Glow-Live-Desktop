@@ -247,6 +247,10 @@ type Orchestrator struct {
 
 // New builds an orchestrator from the saved config.
 func New(cfg config.Config) *Orchestrator {
+	// Keep the Steam->Discord app-id table fresh from glow.moe (weekly), so the
+	// "Playing <game>" headline covers newly released games without an app
+	// update. glow.moe is reachable even where discord.com is blocked.
+	go steam.RefreshLoop(pair.BaseFrom(cfg.Endpoint))
 	return &Orchestrator{cfg: cfg, forzaGame: "fh6", forzaPort: 5300, forza: &forzaState{}}
 }
 
