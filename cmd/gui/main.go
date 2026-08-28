@@ -32,6 +32,14 @@ var trayTerminate func()
 func main() {
 	runtime.LockOSThread() // the GUI must own the main OS thread
 
+	// A post-update relaunch (see internal/update.Relaunch) races the old copy's
+	// shutdown; give it a moment to release the single-instance lock first.
+	for _, a := range os.Args[1:] {
+		if a == "--relaunch" {
+			time.Sleep(1500 * time.Millisecond)
+		}
+	}
+
 	// One copy per user. A second launch is treated as "bring it back": the
 	// running copy is asked to show its window, and this one leaves.
 	if !single.Acquire() {

@@ -132,6 +132,29 @@ func (s *Server) hOpenDownload(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, map[string]any{"ok": true})
 }
 
+// hUpdateApply downloads the newest release, verifies it, swaps this binary and
+// relaunches. On any failure it reports back so the UI can fall back to the
+// manual download link.
+func (s *Server) hUpdateApply(w http.ResponseWriter, _ *http.Request) {
+	s.mu.Lock()
+	tag := s.updateVer
+	s.mu.Unlock()
+	if tag == "" {
+		writeJSON(w, map[string]any{"ok": false, "error": "no update available"})
+		return
+	}
+	if err := update.Apply(tag); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+	// Let the response flush, then relaunch into the freshly-swapped binary.
+	go func() {
+		time.Sleep(400 * time.Millisecond)
+		update.Relaunch()
+	}()
+}
+
 // Handler returns the mux serving the UI + API.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -147,6 +170,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/minimize", s.hMinimize)
 	mux.HandleFunc("/api/show", s.hShow)
 	mux.HandleFunc("/api/open-download", s.hOpenDownload)
+	mux.HandleFunc("/api/update-apply", s.hUpdateApply)
 	// Local OBS overlay data: the overlay page (below, or the glow.moe page with
 	// ?src=local) reads the current masked League snapshot from here instead of
 	// polling glow.moe, so the ~2s live poll never touches our server.

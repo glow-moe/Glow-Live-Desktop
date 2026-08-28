@@ -121,7 +121,7 @@
     <!-- ── Update banner (shown only when a newer release is out) ── -->
     <div class="update hide" id="update-banner">
       <span id="update-text">A newer version is out.</span>
-      <a href="#" id="update-link">Download →</a>
+      <a href="#" id="update-link">Update now →</a>
     </div>
 
     <!-- ── Not linked ── -->
@@ -240,11 +240,24 @@
         api("open-settings");
       };
 
-      // ── Update banner: the download link opens the releases page in the
-      //    browser (the webview itself shouldn't navigate there). ──
-      $("update-link").onclick = (e) => {
+      // ── Update banner: "Update now" self-updates in place and restarts. If
+      //    that can't happen (offline, no write access), it falls back to the
+      //    manual download page. ──
+      $("update-link").onclick = async (e) => {
         e.preventDefault();
-        api("open-download");
+        const link = $("update-link");
+        if (link.dataset.mode === "download") { api("open-download"); return; }
+        $("update-text").textContent = "Updating…";
+        link.classList.add("hide");
+        const r = await api("update-apply", {});
+        if (r && r.ok) {
+          $("update-text").textContent = "Installed, restarting…";
+        } else {
+          $("update-text").textContent = "Couldn't auto-update.";
+          link.textContent = "Download →";
+          link.dataset.mode = "download";
+          link.classList.remove("hide");
+        }
       };
 
       // ── Settings panel open/close. A single view flag drives visibility so the

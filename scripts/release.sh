@@ -28,12 +28,18 @@ cp "dist/glow-live-v$VER-windows-x64.exe" /tmp/glow-live-v$VER-windows-x64.exe
 cp "dist/glow-live-v$VER-linux-x64"       "dist/glow-live-linux-x64"
 cp "dist/glow-live-v$VER-windows-x64.exe" "dist/glow-live-windows-x64.exe"
 
+# Checksums so the in-app auto-updater can verify a download before swapping the
+# running binary (it fetches SHA256SUMS from the release and matches its asset).
+( cd dist && sha256sum \
+    "glow-live-v$VER-linux-x64" "glow-live-v$VER-windows-x64.exe" \
+    "glow-live-linux-x64" "glow-live-windows-x64.exe" > SHA256SUMS )
+
 git tag "v$VER"
 git push origin "v$VER"
 
 gh release create "v$VER" \
   "dist/glow-live-v$VER-linux-x64" "dist/glow-live-v$VER-windows-x64.exe" \
-  "dist/glow-live-linux-x64" "dist/glow-live-windows-x64.exe" \
+  "dist/glow-live-linux-x64" "dist/glow-live-windows-x64.exe" "dist/SHA256SUMS" \
   --title "glow L!VE v$VER" --notes "$(cat UNRELEASED.md)"
 
 # Start the next dev cycle from a clean slate.
