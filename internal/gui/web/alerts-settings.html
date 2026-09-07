@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Glow L!VE - Hype alerts</title>
+<style>
+  :root {
+    --bg: #f6f4ff; --card: #fff; --ink: #2a2440; --muted: #7a7396; --line: #ece7fb;
+    --accent: #b98bff; --accent2: #ff8fc7; --ok: #34c98a; --soft: #f2eeff; --dash: #ddd4f7;
+    --round: ui-rounded, "SF Pro Rounded", "Segoe UI Rounded", "Hiragino Maru Gothic ProN", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { color: var(--accent2); }
+  button { font: inherit; cursor: pointer; }
+
+  .page { min-height: 100vh; padding: 40px 24px 0; display: flex; gap: 32px; justify-content: center; align-items: flex-start; }
+  .rail { width: 212px; flex: none; position: sticky; top: 40px; }
+  .rail-lbl { font-size: 10.5px; font-weight: 800; letter-spacing: .12em; color: var(--muted); text-transform: uppercase; padding: 0 12px 10px; }
+  .rail-list { display: flex; flex-direction: column; gap: 6px; }
+  .nav { display: flex; align-items: center; gap: 10px; text-align: left; border-radius: 12px; padding: 10px 12px; width: 100%;
+    background: transparent; border: 1px solid transparent; }
+  .nav.active { background: #fff; border-color: #e0d6fb; box-shadow: 0 3px 10px rgba(42,36,64,.07); }
+  .tag { width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff;
+    font-size: 12px; font-weight: 800; font-family: var(--round); background: linear-gradient(120deg, var(--accent), var(--accent2)); flex: none; }
+  .nav .nm { display: block; font-family: var(--round); font-size: 13.5px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav .sm { display: block; font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .nav > span:last-child { flex: 1; min-width: 0; }
+  .more { border: 1.5px dashed var(--dash); border-radius: 12px; padding: 10px 12px; font-size: 11.5px; color: var(--muted); line-height: 1.4; text-wrap: pretty; }
+
+  .main { max-width: 780px; width: 100%; }
+  h1 { font-family: var(--round); font-size: 34px; font-weight: 800; letter-spacing: -.01em; margin: 0 0 8px; }
+  .lead { margin: 0 0 24px; color: var(--muted); font-size: 15px; line-height: 1.5; max-width: 620px; text-wrap: pretty; }
+
+  .obs { background: linear-gradient(135deg, #241a3f, #3a2668); border-radius: 16px; padding: 20px 22px; box-shadow: 0 8px 24px rgba(58,38,104,.18); }
+  .obs .lbl { font-family: var(--round); font-size: 11px; font-weight: 800; letter-spacing: .14em; color: #c9b8ff; text-transform: uppercase; }
+  .obs .row { display: flex; gap: 10px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  .obs code { flex: 1; min-width: 260px; background: rgba(255,255,255,.09); border: 1px solid rgba(201,184,255,.22); border-radius: 10px; padding: 11px 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; color: #f1ecff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .grad { border: none; border-radius: 10px; color: #fff; font-family: var(--round); font-weight: 700;
+    background: linear-gradient(120deg, var(--accent), var(--accent2)); box-shadow: 0 3px 10px rgba(185,139,255,.35); }
+  .grad:hover { filter: brightness(1.05); }
+  .obs .copy { padding: 11px 20px; font-size: 13.5px; }
+  .obs .hint { margin-top: 12px; font-size: 12.5px; line-height: 1.55; color: #a99cd4; text-wrap: pretty; }
+
+  .group { margin-top: 32px; }
+  .ghead { display: flex; align-items: center; gap: 12px; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; box-shadow: 0 2px 8px rgba(42,36,64,.04); }
+  .ghead .tag { width: 28px; height: 28px; border-radius: 9px; font-size: 13px; }
+  .ghead .gname { font-family: var(--round); font-size: 16.5px; font-weight: 800; }
+  .ghead .sum { font-size: 12.5px; color: var(--muted); margin-left: auto; }
+  .allon { background: none; border: none; font-size: 12.5px; font-weight: 700; color: var(--accent); font-family: var(--round); padding: 4px 6px; }
+  .allon:hover { color: var(--accent2); }
+  .chev { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; width: 28px; height: 28px; color: var(--muted); font-size: 11px;
+    display: flex; align-items: center; justify-content: center; flex: none; }
+  .moments { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+  .group.closed .moments { display: none; }
+
+  .mcard { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; box-shadow: 0 4px 14px rgba(42,36,64,.05); transition: opacity .2s; }
+  .mcard.off { opacity: .5; }
+  .mcard.off .body { pointer-events: none; }
+  .mtop { display: flex; align-items: center; gap: 11px; }
+  .mtop .emoji { font-size: 19px; }
+  .mtop .mname { font-family: var(--round); font-size: 15.5px; font-weight: 800; }
+  .pill { margin-left: auto; width: 46px; height: 26px; border-radius: 99px; border: none; padding: 3px; display: flex; align-items: center; flex: none;
+    justify-content: flex-start; background: #d9d2ef; transition: background .18s; }
+  .pill.on { justify-content: flex-end; background: linear-gradient(120deg, var(--accent), var(--accent2)); }
+  .pill span { width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(42,36,64,.28); display: block; }
+
+  .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 16px; }
+  .flabel { font-size: 10.5px; font-weight: 800; letter-spacing: .12em; color: var(--muted); text-transform: uppercase; margin-bottom: 7px; }
+  .drop { border: 1.5px dashed var(--dash); border-radius: 14px; background: #fcfbff; padding: 12px; display: flex; gap: 12px; cursor: pointer; transition: border-color .15s, background .15s; }
+  .drop:hover, .drop.over { border-color: var(--accent); background: #f8f4ff; }
+  .thumb { width: 46px; height: 46px; border-radius: 11px; background: var(--soft); display: flex; align-items: center; justify-content: center; flex: none; overflow: hidden; font-size: 20px;
+    background-size: cover; background-position: center; }
+  .drop .meta { flex: 1; min-width: 0; }
+  .drop .ttl { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .drop .hint { font-size: 11.5px; color: var(--muted); line-height: 1.45; margin-top: 2px; text-wrap: pretty; }
+  .wave { height: 11px; margin-top: 7px; border-radius: 3px; background: repeating-linear-gradient(90deg, #cfc2f4 0 2px, transparent 2px 5px);
+    mask-image: linear-gradient(90deg, #000 0 62%, transparent 100%); -webkit-mask-image: linear-gradient(90deg, #000 0 62%, transparent 100%); }
+  .drop .acts { display: flex; gap: 12px; margin-top: 9px; align-items: center; }
+  .up { background: var(--soft); border: 1px solid #e4dcfb; border-radius: 8px; padding: 5px 12px; font-size: 12px; font-weight: 700; color: #6d5b9e; }
+  .up:hover { background: #ebe3ff; }
+  .rm { background: none; border: none; padding: 0; font-size: 12px; color: var(--muted); }
+  .rm:hover { color: #ef4472; }
+
+  .volrow { display: flex; align-items: center; gap: 14px; margin-top: 16px; padding-top: 14px; border-top: 1px solid #f2eefc; }
+  .volrow .flabel { margin: 0; }
+  input[type=range] { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 99px; background: #ece7fb; outline: none; flex: 1; max-width: 280px; margin: 0; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: linear-gradient(120deg, var(--accent), var(--accent2)); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(42,36,64,.28); cursor: pointer; }
+  input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%;
+    background: linear-gradient(120deg, var(--accent), var(--accent2)); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(42,36,64,.28); cursor: pointer; }
+  input[type=range]::-moz-range-track { height: 6px; border-radius: 99px; background: #ece7fb; }
+  .muted { font-size: 11px; font-weight: 700; color: var(--muted); background: var(--soft); border-radius: 99px; padding: 3px 10px; }
+  .test { margin-left: auto; padding: 9px 20px; font-size: 13px; font-weight: 800; flex: none; }
+
+  .bar { position: sticky; bottom: 0; margin-top: 28px; background: var(--bg); border-top: 1px solid var(--line); box-shadow: 0 -8px 18px rgba(246,244,255,.95);
+    padding: 16px 4px; display: flex; align-items: center; gap: 12px; }
+  .bar .note { font-size: 12.5px; color: var(--muted); }
+  .saved { font-size: 12px; font-weight: 700; color: var(--ok); background: #e8faf2; border-radius: 99px; padding: 4px 11px; opacity: 0; transition: opacity .2s; }
+  .saved.show { opacity: 1; }
+  .save { margin-left: auto; border: none; border-radius: 10px; padding: 10px 24px; font-size: 13.5px; font-weight: 800; color: #fff; font-family: var(--round);
+    background: linear-gradient(135deg, #241a3f, #3a2668); }
+  .save:hover { filter: brightness(1.15); }
+
+  #burst { position: fixed; inset: 0; background: rgba(20,12,40,.28); display: none; align-items: center; justify-content: center; pointer-events: none; z-index: 80; }
+  #burst.show { display: flex; }
+  .pop { animation: burstPop .34s cubic-bezier(.2,.9,.3,1.1) both; text-align: center; }
+  .pop img { max-width: 62vw; max-height: 56vh; border-radius: 20px; box-shadow: 0 20px 60px rgba(20,12,40,.42); }
+  .banner { background: rgba(255,255,255,.96); border-radius: 22px; padding: 34px 56px; box-shadow: 0 20px 60px rgba(20,12,40,.4); }
+  .banner div { font-family: var(--round); font-weight: 900; text-transform: uppercase; letter-spacing: .16em; line-height: 1.05; }
+  @keyframes burstPop { 0% { transform: scale(.86); opacity: 0 } 55% { transform: scale(1.03); opacity: 1 } 100% { transform: scale(1); opacity: 1 } }
+  @media (prefers-reduced-motion: reduce) { .pop { animation: none !important } }
+
+  @media (max-width: 900px) {
+    .page { flex-direction: column; align-items: stretch; gap: 20px; padding: 24px 16px 0; }
+    .rail { width: auto; position: static; }
+    .rail-list { flex-direction: row; flex-wrap: wrap; }
+    .nav { width: auto; }
+    .more { flex: 1 1 100%; }
+    h1 { font-size: 28px; }
+    .ghead { flex-wrap: wrap; }
+    .ghead .sum { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <aside class="rail">
+    <div class="rail-lbl">Games</div>
+    <div class="rail-list" id="rail"></div>
+  </aside>
+
+  <div class="main">
+    <h1>Hype alerts</h1>
+    <p class="lead">Pick a GIF and a sound for each big moment. Add the overlay to OBS and it fires when it happens in game.</p>
+
+    <div class="obs">
+      <div class="lbl">OBS browser source URL</div>
+      <div class="row">
+        <code id="obsurl">-</code>
+        <button class="grad copy" id="copy">Copy</button>
+      </div>
+      <div class="hint">Add this once. It fires alerts for every game below. Size it to your canvas (for example 1920x1080) with a transparent background.</div>
+    </div>
+
+    <div id="groups"></div>
+
+    <div class="bar">
+      <span class="note">Changes save as you make them.</span>
+      <span class="saved" id="saved">Saved</span>
+      <button class="save" id="save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="burst"></div>
+
+<script>
+(function () {
+  // One entry per game the collector can detect. Keys are the config/overlay
+  // event ids (alerts.go alertKinds); more games slot in as sibling groups.
+  var GAMES = [
+    { id: "lol", name: "League of Legends", tag: "L", moments: [
+      { key: "firstblood", name: "First Blood", emoji: "🩸", color: "#ff3b5c", peak: false },
+      { key: "double",     name: "Double Kill", emoji: "⚔️",     color: "#ff9a3d", peak: false },
+      { key: "triple",     name: "Triple Kill", emoji: "🔥", color: "#ffc23d", peak: false },
+      { key: "quadra",     name: "Quadra Kill", emoji: "💥", color: "#c084fc", peak: false },
+      { key: "penta",      name: "Pentakill",   emoji: "👑", color: "#ffd23d", peak: true }
+    ] }
+  ];
+  var cfg = { events: {} };
+  var selected = GAMES[0].id;
+  var collapsed = {};
+  // Fixed loopback port (the OBS overlay listener), whatever port this page was opened on.
+  var OBS_URL = "http://127.0.0.1:47100/alerts";
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function ev(key) {
+    if (!cfg.events) cfg.events = {};
+    if (!cfg.events[key]) cfg.events[key] = { on: true, gif: "", sound: "", volume: 0.9 };
+    return cfg.events[key];
+  }
+  function vol(e) { return typeof e.volume === "number" ? e.volume : 0.9; }
+  function onCount(g) { return g.moments.filter(function (m) { return ev(m.key).on; }).length; }
+  function summary(g) { return onCount(g) + " of " + g.moments.length + " on"; }
+
+  $("obsurl").textContent = OBS_URL;
+  $("copy").onclick = function () {
+    try { navigator.clipboard && navigator.clipboard.writeText(OBS_URL); } catch (x) {}
+    var b = this; b.textContent = "Copied";
+    clearTimeout(b._t); b._t = setTimeout(function () { b.textContent = "Copy"; }, 1800);
+  };
+
+  function field(m, kind) {
+    var e = ev(m.key), isImg = kind === "gif";
+    var src = isImg ? e.gif : e.sound;
+    var nm = isImg ? e.gifName : e.soundName;
+    var title = src ? (nm || (isImg ? "Custom image" : "Custom sound")) : (isImg ? "Default banner" : "Default chime");
+    var hint = src
+      ? (isImg ? "Shows on stream when this moment happens." : "Plays on stream when this moment happens.")
+      : (isImg ? "A built-in banner shows if you don't add one." : "A built-in chime plays if you don't add one.");
+    var thumb = (isImg && src)
+      ? '<div class="thumb" style="background-image:url(&quot;' + esc(src) + '?t=' + Date.now() + '&quot;)"></div>'
+      : '<div class="thumb">' + (isImg ? "🖼️" : (src ? "🔊" : "🎵")) + '</div>';
+    return '<div>' +
+      '<div class="flabel">' + (isImg ? "Image / GIF" : "Sound") + '</div>' +
+      '<div class="drop" data-drop="' + kind + '" data-k="' + m.key + '">' +
+        thumb +
+        '<div class="meta">' +
+          '<div class="ttl">' + esc(title) + '</div>' +
+          '<div class="hint">' + hint + '</div>' +
+          (!isImg && src ? '<div class="wave"></div>' : '') +
+          '<div class="acts">' +
+            '<button class="up" data-pick="' + kind + '" data-k="' + m.key + '">' + (src ? "Replace" : "Upload") + '</button>' +
+            (src ? '<button class="rm" data-clear="' + kind + '" data-k="' + m.key + '">Remove</button>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function moment(m) {
+    var e = ev(m.key), v = vol(e);
+    return '<div class="mcard' + (e.on ? "" : " off") + '">' +
+      '<div class="mtop">' +
+        '<span class="emoji">' + m.emoji + '</span>' +
+        '<span class="mname">' + esc(m.name) + '</span>' +
+        '<button class="pill' + (e.on ? " on" : "") + '" data-on="' + m.key + '" title="' + (e.on ? "On" : "Off") + '"><span></span></button>' +
+      '</div>' +
+      '<div class="body">' +
+        '<div class="fields">' + field(m, "gif") + field(m, "sound") + '</div>' +
+        '<div class="volrow">' +
+          '<span class="flabel">Volume</span>' +
+          '<input type="range" min="0" max="1" step="0.01" value="' + v + '" data-vol="' + m.key + '">' +
+          (v === 0 ? '<span class="muted">Muted</span>' : '') +
+          '<button class="grad test" data-test="' + m.key + '">Test</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function render() {
+    $("rail").innerHTML = GAMES.map(function (g) {
+      return '<button class="nav' + (g.id === selected ? " active" : "") + '" data-sel="' + g.id + '">' +
+        '<span class="tag">' + esc(g.tag) + '</span>' +
+        '<span><span class="nm">' + esc(g.name) + '</span><span class="sm">' + summary(g) + '</span></span>' +
+      '</button>';
+    }).join("") + '<div class="more">More games show up here as the app adds them.</div>';
+
+    $("groups").innerHTML = GAMES.filter(function (g) { return g.id === selected; }).map(function (g) {
+      var open = !collapsed[g.id];
+      return '<div class="group' + (open ? "" : " closed") + '">' +
+        '<div class="ghead">' +
+          '<div class="tag">' + esc(g.tag) + '</div>' +
+          '<div class="gname">' + esc(g.name) + '</div>' +
+          '<div class="sum">' + summary(g) + '</div>' +
+          (onCount(g) < g.moments.length ? '<button class="allon" data-allon="' + g.id + '">Turn all on</button>' : '') +
+          '<button class="chev" data-fold="' + g.id + '" title="' + (open ? "Collapse" : "Expand") + '">' + (open ? "▲" : "▼") + '</button>' +
+        '</div>' +
+        '<div class="moments">' + g.moments.map(moment).join("") + '</div>' +
+      '</div>';
+    }).join("");
+    wire();
+  }
+
+  function each(sel, fn) { document.querySelectorAll(sel).forEach(fn); }
+  function wire() {
+    each("[data-sel]", function (el) { el.onclick = function () { selected = this.dataset.sel; render(); }; });
+    each("[data-fold]", function (el) { el.onclick = function () { collapsed[this.dataset.fold] = !collapsed[this.dataset.fold]; render(); }; });
+    each("[data-allon]", function (el) {
+      el.onclick = function () {
+        var g = GAMES.filter(function (x) { return x.id === el.dataset.allon; })[0];
+        g.moments.forEach(function (m) { ev(m.key).on = true; });
+        render(); autoSave();
+      };
+    });
+    each("[data-on]", function (el) { el.onclick = function () { var e = ev(this.dataset.on); e.on = !e.on; render(); autoSave(); }; });
+    each("[data-vol]", function (el) {
+      el.oninput = function () {
+        ev(this.dataset.vol).volume = parseFloat(this.value);
+        var row = this.parentNode, tag = row.querySelector(".muted");
+        if (parseFloat(this.value) === 0 && !tag) { tag = document.createElement("span"); tag.className = "muted"; tag.textContent = "Muted"; row.insertBefore(tag, this.nextSibling); }
+        if (parseFloat(this.value) > 0 && tag) tag.remove();
+      };
+      el.onchange = autoSave;
+    });
+    each("[data-clear]", function (el) {
+      el.onclick = function (e) {
+        e.stopPropagation();
+        var x = ev(this.dataset.k), kind = this.dataset.clear;
+        x[kind] = ""; x[kind + "Name"] = "";
+        render(); autoSave();
+      };
+    });
+    each("[data-pick]", function (el) { el.onclick = function (e) { e.stopPropagation(); pick(this.dataset.k, this.dataset.pick); }; });
+    each("[data-drop]", function (el) {
+      el.onclick = function () { pick(this.dataset.k, this.dataset.drop); };
+      el.ondragover = function (e) { e.preventDefault(); this.classList.add("over"); };
+      el.ondragleave = function () { this.classList.remove("over"); };
+      el.ondrop = function (e) {
+        e.preventDefault(); this.classList.remove("over");
+        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) upload(this.dataset.k, this.dataset.drop, f);
+      };
+    });
+    each("[data-test]", function (el) { el.onclick = function () { preview(this.dataset.test); }; });
+  }
+
+  function pick(key, kind) {
+    var input = document.createElement("input");
+    input.type = "file";
+    input.accept = kind === "gif" ? "image/*,.gif,.apng,.webp" : "audio/*,.mp3,.ogg,.wav,.m4a";
+    input.onchange = function () { upload(key, kind, input.files && input.files[0]); };
+    input.click();
+  }
+
+  function upload(key, kind, file) {
+    if (!file) return;
+    var fd = new FormData(); fd.append("file", file);
+    fetch("/api/alerts/upload?event=" + key + "&type=" + kind, { method: "POST", body: fd })
+      .then(function (r) { if (!r.ok) throw 0; return r.json(); })
+      .then(function (j) { var e = ev(key); e[kind] = j.url; e[kind + "Name"] = file.name; render(); autoSave(); })
+      .catch(function () { alert("Upload failed - try a smaller file (max 32 MB)."); });
+  }
+
+  var saveT = null;
+  function autoSave() { clearTimeout(saveT); saveT = setTimeout(save, 500); }
+  function save() {
+    fetch("/api/alerts/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cfg) })
+      .then(function (r) {
+        if (!r.ok) return;
+        var s = $("saved"); s.classList.add("show");
+        clearTimeout(s._t); s._t = setTimeout(function () { s.classList.remove("show"); }, 2600);
+      }).catch(function () {});
+  }
+  $("save").onclick = save;
+
+  // Local preview (no OBS needed): the gif/banner pops here and the sound plays.
+  function preview(key) {
+    var e = ev(key), m = null;
+    GAMES.forEach(function (g) { g.moments.forEach(function (x) { if (x.key === key) m = x; }); });
+    if (!m) return;
+    var box = $("burst"); box.innerHTML = "";
+    var pop = document.createElement("div"); pop.className = "pop";
+    if (e.gif) { var img = document.createElement("img"); img.src = e.gif + "?t=" + Date.now(); img.alt = ""; pop.appendChild(img); }
+    else {
+      var b = document.createElement("div"); b.className = "banner";
+      var w = document.createElement("div"); w.textContent = m.name; w.style.color = m.color; w.style.fontSize = (m.peak ? 58 : 40) + "px";
+      b.appendChild(w); pop.appendChild(b);
+    }
+    box.appendChild(pop); box.classList.add("show");
+    clearTimeout(preview._t); preview._t = setTimeout(function () { box.classList.remove("show"); }, 2000);
+    var v = vol(e);
+    if (v > 0) {
+      if (e.sound) { try { var a = new Audio(e.sound); a.volume = v; a.play().catch(function () {}); } catch (x) {} }
+      else chime(key, v);
+    }
+  }
+  function chime(kind, v) {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      var ctx = chime._c || (chime._c = new AC()); if (ctx.state === "suspended") ctx.resume();
+      var seq = kind === "penta" ? [523,659,784,1047,1319,1568] : kind === "quadra" ? [523,659,784,1047]
+        : kind === "firstblood" ? [392,262] : [523,659,784];
+      var peak = 0.22 * Math.max(0, Math.min(1, v)) / 0.9, t0 = ctx.currentTime;
+      for (var i = 0; i < seq.length; i++) {
+        var o = ctx.createOscillator(), g = ctx.createGain(); o.type = "triangle"; o.frequency.value = seq[i];
+        var s = t0 + i * 0.1; g.gain.setValueAtTime(0.0001, s);
+        g.gain.exponentialRampToValueAtTime(peak, s + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, s + 0.32);
+        o.connect(g); g.connect(ctx.destination); o.start(s); o.stop(s + 0.36);
+      }
+    } catch (e) {}
+  }
+
+  fetch("/api/alerts/config", { cache: "no-store" })
+    .then(function (r) { return r.json(); })
+    .then(function (c) { if (c && typeof c === "object") cfg = c; if (!cfg.events) cfg.events = {}; render(); })
+    .catch(function () { render(); });
+})();
+</script>
+</body>
+</html>

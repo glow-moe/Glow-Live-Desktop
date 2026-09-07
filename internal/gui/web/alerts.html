@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Glow L!VE - Hype Alerts</title>
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+  * { box-sizing: border-box; }
+
+  /* One-shot hype burst. Either a configured gif/image, or the built-in banner. */
+  .hype { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; z-index: 999; }
+  .hype-flash { position: absolute; inset: -25%; opacity: 0; animation: hypeFlash 2.4s ease-out forwards; }
+  .hype-gif { max-width: 78vw; max-height: 78vh; object-fit: contain; opacity: 0; filter: drop-shadow(0 12px 40px rgba(0,0,0,.5)); animation: hypePop 2.6s cubic-bezier(.2,1.3,.3,1) forwards; }
+  .hype-text { font-family: 'Oxanium','Segoe UI',sans-serif; font-weight: 800; letter-spacing: 3px; opacity: 0; animation: hypeText 2.4s cubic-bezier(.2,1.3,.3,1) forwards; }
+  .hype-sub { margin-top: 8px; font-family: 'Segoe UI',sans-serif; font-weight: 800; font-size: 18px; letter-spacing: 6px; color: #fff; opacity: 0; text-shadow: 0 2px 14px rgba(0,0,0,.6); animation: hypeText 2.4s ease-out .15s forwards; }
+  @keyframes hypeFlash { 0% { opacity: 0; transform: scale(.5); } 20% { opacity: 1; } 100% { opacity: 0; transform: scale(1.5); } }
+  @keyframes hypeText { 0% { opacity: 0; transform: scale(.4); } 10% { opacity: 1; transform: scale(1.06); } 18% { transform: scale(1); } 80% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.12) translateY(-10px); } }
+  @keyframes hypePop { 0% { opacity: 0; transform: scale(.55); } 8% { opacity: 1; transform: scale(1.05); } 16% { transform: scale(1); } 82% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.06) translateY(-8px); } }
+  @media (prefers-reduced-motion: reduce) { .hype-flash, .hype-text, .hype-sub, .hype-gif { animation-duration: .001ms !important; } }
+</style>
+</head>
+<body>
+<script>
+(function () {
+  // The built-in look for each event (used when no custom gif is set).
+  var HYPE = {
+    firstblood: { text: "FIRST BLOOD", color: "#ff3b5c", sub: "✦ ✦ ✦", size: 56 },
+    double:     { text: "DOUBLE KILL", color: "#ff9a3d", sub: "✦ ✦", size: 50 },
+    triple:     { text: "TRIPLE KILL", color: "#ffc23d", sub: "✦ ✦ ✦", size: 54 },
+    quadra:     { text: "QUADRA KILL", color: "#c084fc", sub: "✦ ✦ ✦ ✦", size: 60 },
+    penta:      { text: "PENTAKILL",   color: "#ffd23d", sub: "★ ✦ ★ ✦ ★", size: 74 }
+  };
+
+  // Local config (per-event gif + sound), refreshed so settings changes show up
+  // without re-adding the OBS source.
+  var CFG = { events: {} };
+  function loadCfg() {
+    fetch("/api/alerts/config", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (c) { if (c && typeof c === "object") CFG = c; })
+      .catch(function () {});
+  }
+  loadCfg();
+  setInterval(loadCfg, 8000);
+
+  function eventCfg(kind) {
+    var ev = CFG && CFG.events ? CFG.events[kind] : null;
+    return ev || null;
+  }
+
+  function fire(kind) {
+    var ev = eventCfg(kind);
+    // Unconfigured event = on by default so it works out of the box; an event
+    // the user explicitly turned off stays silent.
+    var enabled = ev ? !!ev.on : true;
+    if (!enabled) return;
+    var gif = ev && ev.gif ? ev.gif : "";
+    var sound = ev && ev.sound ? ev.sound : "";
+    // Honor an explicit volume (including 0 = muted); default only when unset.
+    var vol = ev && typeof ev.volume === "number" ? ev.volume : 0.9;
+
+    var el = document.createElement("div");
+    el.className = "hype";
+    if (gif) {
+      var img = document.createElement("img");
+      img.className = "hype-gif";
+      img.src = gif;
+      img.alt = "";
+      el.appendChild(img);
+    } else {
+      var c = HYPE[kind] || HYPE.double;
+      el.innerHTML =
+        '<div class="hype-flash" style="background:radial-gradient(circle,' + c.color + '59,transparent 68%)"></div>' +
+        '<div class="hype-text" style="color:' + c.color + ';font-size:' + c.size + 'px;text-shadow:0 0 34px ' + c.color + ',0 3px 10px rgba(0,0,0,.55)">' + c.text + '</div>' +
+        '<div class="hype-sub">' + c.sub + '</div>';
+    }
+    document.body.appendChild(el);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 2800);
+
+    if (vol > 0) {
+      if (sound) { playFile(sound, vol); }
+      else { playChime(kind, vol); }
+    }
+  }
+
+  function playFile(url, vol) {
+    try {
+      var a = new Audio(url);
+      a.volume = Math.max(0, Math.min(1, vol));
+      a.play().catch(function () {});
+    } catch (e) {}
+  }
+
+  // Copyright-safe fallback: a short synthesized arpeggio, no announcer audio.
+  function playChime(kind, vol) {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+      var ctx = playChime._c || (playChime._c = new AC());
+      if (ctx.state === "suspended") { ctx.resume(); }
+      var seq = kind === "penta" ? [523, 659, 784, 1047, 1319, 1568]
+        : kind === "quadra" ? [523, 659, 784, 1047]
+        : kind === "firstblood" ? [392, 262]
+        : [523, 659, 784];
+      var peak = 0.22 * Math.max(0, Math.min(1, vol)) / 0.9;
+      var t0 = ctx.currentTime;
+      for (var i = 0; i < seq.length; i++) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "triangle"; o.frequency.value = seq[i];
+        var s = t0 + i * 0.1;
+        g.gain.setValueAtTime(0.0001, s);
+        g.gain.exponentialRampToValueAtTime(peak, s + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, s + 0.32);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(s); o.stop(s + 0.36);
+      }
+    } catch (e) {}
+  }
+
+  // ---- watch /live.json for the collector's newest hype moment ---------------
+  // The collector sets snapshot.hype = {id, kind}. Dedup by id, baseline on load
+  // (no mid-game replay), reset when a watched game ends so the next fires fresh.
+  var lastHypeId = null;
+  var sawLive = false;
+  function checkHype(d) {
+    var snap = d && d.snapshot;
+    var isLive = !!(snap && (d.live || snap.live) && snap.me);
+    if (sawLive && !isLive) { lastHypeId = 0; }
+    if (isLive) { sawLive = true; }
+    var hype = snap && snap.hype;
+    if (hype && typeof hype.id === "number") {
+      if (lastHypeId === null) { lastHypeId = hype.id; }
+      else if (hype.id > lastHypeId) { lastHypeId = hype.id; fire(hype.kind); }
+    } else if (lastHypeId === null && isLive) {
+      lastHypeId = 0;
+    }
+  }
+
+  function tick() {
+    fetch("/live.json", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { checkHype(d); })
+      .catch(function () {});
+  }
+  tick();
+  setInterval(tick, 2000);
+
+  // Let the settings page trigger a preview here too (same origin): ?test=penta
+  var qp = new URLSearchParams(location.search);
+  if (qp.get("test")) { setTimeout(function () { fire(qp.get("test")); }, 300); }
+})();
+</script>
+</body>
+</html>

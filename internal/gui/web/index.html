@@ -207,6 +207,9 @@
       <div id="games-list"></div>
       <div class="muted hide" id="games-empty">Play a Steam game and it shows up here.</div>
 
+      <div class="sechead">OBS overlay</div>
+      <button class="btn ghost" id="alerts-link" style="margin-top:6px">Hype alerts: gif + sound for penta, first blood… ↗</button>
+
       <div class="sechead">On the site</div>
       <a href="#" id="settings-link" class="foot" style="display:block; margin-top:2px; text-align:left">
         Stream delay &amp; name masking - set on glow.moe → L!VE ↗
@@ -238,6 +241,11 @@
       $("settings-link").onclick = (e) => {
         e.preventDefault();
         api("open-settings");
+      };
+
+      $("alerts-link").onclick = (e) => {
+        e.preventDefault();
+        api("open-alerts"); // opens /alerts/settings in the real browser
       };
 
       // ── Update banner: "Update now" self-updates in place and restarts. If
