@@ -458,11 +458,12 @@ func mapPlayer(p live.Player, isMe bool) Player {
 	if name == "" {
 		name = p.SummonerName
 	}
+	ck := champKey(p.RawChampionName, p.ChampionName)
 	return Player{
 		Summoner:  name,
 		Champ:     fixChampName(p.ChampionName),
-		ChampKey:  champKey(p.RawChampionName, p.ChampionName),
-		Skin:      p.SkinID,
+		ChampKey:  ck,
+		Skin:      ddragon.ParentSkin(ck, p.SkinID),
 		Kda:       fmt.Sprintf("%d/%d/%d", p.Scores.Kills, p.Scores.Deaths, p.Scores.Assists),
 		Cs:        p.Scores.CreepScore,
 		Vision:    int(math.Round(p.Scores.WardScore)),
@@ -483,7 +484,7 @@ func mapMe(d *live.AllGameData, champKeyVal string) Me {
 	var me Me
 	me.ChampName = champName(champKeyVal, d)
 	me.ChampKey = champKeyVal
-	me.Skin = selfSkin(d)
+	me.Skin = ddragon.ParentSkin(champKeyVal, selfSkin(d))
 	me.SkinName = selfSkinName(d)
 	me.SkinVideoUrl = ddragon.SkinVideoURL(champKeyVal, me.Skin)
 	me.RiotName = name

@@ -168,15 +168,16 @@ var (
 	champIDByKey map[string]int
 )
 
-// SkinVideoURL returns the animated-splash video (webm) for a skin, or "" when
-// the skin isn't animated (only Ultimate/legendary skins have one). Sourced from
-// Community Dragon's per-champion data; cached per champion.
-func SkinVideoURL(champKey string, skin int) string {
-	if champKey == "" {
-		return ""
-	}
-	skinVidMu.Lock()
-	defer skinVidMu.Unlock()
+// Per-champion skin data from Community Dragon, loaded once per champion:
+// chroma → parent skin, the real skin numbers, and animated-splash videos.
+var (
+	skinParents = map[int]map[int]int{} // champ id -> chroma num -> parent skin num
+	skinNums    = map[int][]int{}       // champ id -> known skin nums
+	skinFailAt  = map[int]time.Time{}   // last failed load, to avoid hammering offline
+)
+
+// champIDLocked resolves a ddragon key to the numeric champion id (skinVidMu held).
+func champIDLocked(champKey string) int {
 	if champIDByKey == nil {
 		champMu.Lock()
 		if champByID == nil {
@@ -189,19 +190,78 @@ func SkinVideoURL(champKey string, skin int) string {
 			champIDByKey[k] = id
 		}
 	}
-	id := champIDByKey[champKey]
-	if id == 0 {
-		return ""
-	}
+	return champIDByKey[champKey]
+}
+
+// ensureSkinDataLocked loads a champion's skin data once (skinVidMu held). A
+// failed load is retried after a couple of minutes, not every tick.
+func ensureSkinDataLocked(id int) {
 	if skinVideos == nil {
 		skinVideos = map[int]map[int]string{}
 	}
-	m, ok := skinVideos[id]
-	if !ok {
-		m = loadSkinVideos(id)
-		skinVideos[id] = m
+	if _, ok := skinVideos[id]; ok {
+		return
 	}
-	return m[skin]
+	if time.Since(skinFailAt[id]) < 2*time.Minute {
+		return
+	}
+	videos, parents, nums, ok := loadSkinData(id)
+	if !ok {
+		skinFailAt[id] = time.Now()
+		return
+	}
+	skinVideos[id], skinParents[id], skinNums[id] = videos, parents, nums
+}
+
+// ParentSkin maps a chroma's skin number to the skin it belongs to. Ddragon only
+// has tiles/splashes for real skins, so the chroma id the live client reports
+// would 404 everywhere the art is used (Discord, the overlay, the site). Unknown
+// ids fall back to the closest lower known skin; offline, the id passes through.
+func ParentSkin(champKey string, skin int) int {
+	if skin <= 0 || champKey == "" {
+		return skin
+	}
+	skinVidMu.Lock()
+	defer skinVidMu.Unlock()
+	id := champIDLocked(champKey)
+	if id == 0 {
+		return skin
+	}
+	ensureSkinDataLocked(id)
+	if p, ok := skinParents[id][skin]; ok {
+		return p
+	}
+	nums := skinNums[id]
+	if len(nums) == 0 {
+		return skin
+	}
+	best := 0
+	for _, n := range nums {
+		if n == skin {
+			return skin
+		}
+		if n < skin && n > best {
+			best = n
+		}
+	}
+	return best
+}
+
+// SkinVideoURL returns the animated-splash video (webm) for a skin, or "" when
+// the skin isn't animated (only Ultimate/legendary skins have one). Sourced from
+// Community Dragon's per-champion data; cached per champion.
+func SkinVideoURL(champKey string, skin int) string {
+	if champKey == "" {
+		return ""
+	}
+	skinVidMu.Lock()
+	defer skinVidMu.Unlock()
+	id := champIDLocked(champKey)
+	if id == 0 {
+		return ""
+	}
+	ensureSkinDataLocked(id)
+	return skinVideos[id][skin]
 }
 
 // SkinID returns the numeric skin id (championId*1000 + skin), or 0 on miss.
@@ -230,32 +290,40 @@ func SkinID(champKey string, skin int) int {
 	return id*1000 + skin
 }
 
-func loadSkinVideos(champID int) map[int]string {
-	out := map[int]string{}
+func loadSkinData(champID int) (videos map[int]string, parents map[int]int, nums []int, ok bool) {
+	videos, parents = map[int]string{}, map[int]int{}
 	const base = "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default"
 	resp, err := httpClient.Get(fmt.Sprintf("%s/v1/champions/%d.json", base, champID))
 	if err != nil {
-		return out
+		return videos, parents, nil, false
 	}
 	defer resp.Body.Close()
 	var doc struct {
 		Skins []struct {
 			ID              int    `json:"id"`
 			SplashVideoPath string `json:"splashVideoPath"`
+			Chromas         []struct {
+				ID int `json:"id"`
+			} `json:"chromas"`
 		} `json:"skins"`
 	}
-	if json.NewDecoder(resp.Body).Decode(&doc) != nil {
-		return out
+	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&doc) != nil {
+		return videos, parents, nil, false
 	}
 	for _, sk := range doc.Skins {
+		num := sk.ID % 1000
+		nums = append(nums, num)
+		for _, ch := range sk.Chromas {
+			parents[ch.ID%1000] = num
+		}
 		if sk.SplashVideoPath == "" {
 			continue
 		}
 		// "/lol-game-data/assets/ASSETS/..." → the lowercased CDragon asset URL.
 		rel := strings.ToLower(strings.TrimPrefix(sk.SplashVideoPath, "/lol-game-data/assets/"))
-		out[sk.ID%1000] = base + "/" + rel
+		videos[num] = base + "/" + rel
 	}
-	return out
+	return videos, parents, nums, true
 }
 
 var httpClient = &http.Client{Timeout: 6 * time.Second}
