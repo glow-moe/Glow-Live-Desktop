@@ -311,9 +311,6 @@
   var last = null;
   var lastShownAt = 0; // when a non-empty frame was last drawn
 
-  // Hype moments (first blood / multikill / penta) live on the SEPARATE /alerts
-  // overlay, configured at /alerts/settings - this match card stays clean.
-
   function tick() {
     fetch("/live.json", { cache: "no-store" })
       .then(function (r) { return r.json(); })

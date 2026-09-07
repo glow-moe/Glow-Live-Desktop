@@ -180,42 +180,7 @@ func (s *Server) Handler() http.Handler {
 	// /live.json on this loopback server, so nothing touches glow.moe (works
 	// offline). Rank crests + fonts are bundled; ddragon art is Riot's CDN.
 	mux.HandleFunc("/overlay", s.hOverlay)
-	// Hype alerts (first blood / multikill / penta), configured LOCALLY:
-	//  - /alerts           -> the OBS Browser Source overlay (separate from the
-	//                         match card at /overlay; add both, or just this).
-	//  - /alerts/settings  -> the local config page (pick a gif + sound per event).
-	//  - /api/alerts/config, /api/alerts/upload, /alerts/asset/* -> its data.
-	mux.HandleFunc("/alerts", s.hAlertsOverlay)
-	mux.HandleFunc("/alerts/settings", s.hAlertsSettings)
-	mux.HandleFunc("/alerts/asset/", s.hAlertsAsset)
-	mux.HandleFunc("/api/alerts/config", s.hAlertsConfig)
-	mux.HandleFunc("/api/alerts/upload", s.hAlertsUpload)
-	mux.HandleFunc("/api/open-alerts", s.hOpenAlerts)
 	return mux
-}
-
-// hAlertsOverlay serves the hype-alert OBS overlay (web/alerts.html).
-func (s *Server) hAlertsOverlay(w http.ResponseWriter, _ *http.Request) {
-	b, err := webFS.ReadFile("web/alerts.html")
-	if err != nil {
-		http.Error(w, "alerts overlay not found", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write(b)
-}
-
-// hAlertsSettings serves the local hype-alert config page (web/alerts-settings.html).
-func (s *Server) hAlertsSettings(w http.ResponseWriter, _ *http.Request) {
-	b, err := webFS.ReadFile("web/alerts-settings.html")
-	if err != nil {
-		http.Error(w, "alerts settings not found", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	_, _ = w.Write(b)
 }
 
 // hOpenSettings opens the site's L!VE settings (glow.moe/dashboard/live) in the
@@ -225,14 +190,6 @@ func (s *Server) hOpenSettings(w http.ResponseWriter, _ *http.Request) {
 	base := pair.BaseFrom(s.cfg.Endpoint)
 	s.mu.Unlock()
 	openURL(base + "/dashboard/live")
-	writeJSON(w, map[string]any{"ok": true})
-}
-
-// hOpenAlerts opens the local hype-alert setup page in the user's real browser.
-// It lives on the fixed loopback port so the OBS URL it shows stays stable; the
-// tiny widget webview can't host a config page, hence a real browser tab.
-func (s *Server) hOpenAlerts(w http.ResponseWriter, _ *http.Request) {
-	openURL("http://127.0.0.1:47100/alerts/settings")
 	writeJSON(w, map[string]any{"ok": true})
 }
 

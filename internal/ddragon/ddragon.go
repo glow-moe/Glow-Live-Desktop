@@ -17,17 +17,17 @@ const fallbackVersion = "14.13.1"
 
 // SummonerSpellKeys maps live-client display names to ddragon /spell/ file keys.
 var SummonerSpellKeys = map[string]string{
-	"Flash":    "SummonerFlash",
-	"Ignite":   "SummonerDot",
-	"Teleport": "SummonerTeleport",
-	"Smite":    "SummonerSmite",
-	"Heal":     "SummonerHeal",
-	"Exhaust":  "SummonerExhaust",
-	"Barrier":  "SummonerBarrier",
-	"Cleanse":  "SummonerBoost",
-	"Ghost":    "SummonerHaste",
-	"Clarity":  "SummonerMana",
-	"Mark":     "SummonerSnowball",
+	"Flash":        "SummonerFlash",
+	"Ignite":       "SummonerDot",
+	"Teleport":     "SummonerTeleport",
+	"Smite":        "SummonerSmite",
+	"Heal":         "SummonerHeal",
+	"Exhaust":      "SummonerExhaust",
+	"Barrier":      "SummonerBarrier",
+	"Cleanse":      "SummonerBoost",
+	"Ghost":        "SummonerHaste",
+	"Clarity":      "SummonerMana",
+	"Mark":         "SummonerSnowball",
 	"To the King!": "SummonerPoroRecall",
 	"Poro Toss":    "SummonerPoroThrow",
 }
@@ -35,18 +35,18 @@ var SummonerSpellKeys = map[string]string{
 // summonerSpellByID maps numeric summoner-spell ids (from the client) to ddragon
 // keys.
 var summonerSpellByID = map[int]string{
-	1:  "SummonerBoost",     // Cleanse
-	3:  "SummonerExhaust",   // Exhaust
-	4:  "SummonerFlash",     // Flash
-	6:  "SummonerHaste",     // Ghost
-	7:  "SummonerHeal",      // Heal
-	11: "SummonerSmite",     // Smite
-	12: "SummonerTeleport",  // Teleport
-	13: "SummonerMana",      // Clarity
-	14: "SummonerDot",       // Ignite
-	21: "SummonerBarrier",   // Barrier
-	32: "SummonerSnowball",  // Mark (ARAM)
-	39: "SummonerSnowball",  // Mark upgrade
+	1:  "SummonerBoost",    // Cleanse
+	3:  "SummonerExhaust",  // Exhaust
+	4:  "SummonerFlash",    // Flash
+	6:  "SummonerHaste",    // Ghost
+	7:  "SummonerHeal",     // Heal
+	11: "SummonerSmite",    // Smite
+	12: "SummonerTeleport", // Teleport
+	13: "SummonerMana",     // Clarity
+	14: "SummonerDot",      // Ignite
+	21: "SummonerBarrier",  // Barrier
+	32: "SummonerSnowball", // Mark (ARAM)
+	39: "SummonerSnowball", // Mark upgrade
 }
 
 // SpellKeyByID returns the ddragon key for a numeric summoner-spell id (falls
@@ -380,10 +380,14 @@ var (
 type champData struct {
 	Data map[string]struct {
 		Passive struct {
-			Image struct{ Full string `json:"full"` } `json:"image"`
+			Image struct {
+				Full string `json:"full"`
+			} `json:"image"`
 		} `json:"passive"`
 		Spells []struct {
-			Image struct{ Full string `json:"full"` } `json:"image"`
+			Image struct {
+				Full string `json:"full"`
+			} `json:"image"`
 		} `json:"spells"`
 	} `json:"data"`
 }

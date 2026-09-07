@@ -5,4 +5,5 @@ a line here as you build; run `bash scripts/release-dev.sh` and it becomes the
 dev release notes. At release time this whole list becomes the release notes and
 gets cleared.
 
-- Hype alerts: a new OBS overlay fires when you draw First Blood or land a multikill up to a Pentakill. Set your own gif and sound per event from the local setup page (glow L!VE → Hype alerts) - everything stays on your PC. Add http://127.0.0.1:47100/alerts as a Browser Source.
+- OBS overlay: the card now sits at the bottom-right of the browser source (where the minimap is), stays on screen between polls instead of blinking off, and rides out short client hiccups.
+- League: chroma skins now resolve to their parent skin's art, so Discord, the overlay and your live page show the right splash instead of a blank.

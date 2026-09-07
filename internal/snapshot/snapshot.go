@@ -80,22 +80,22 @@ type FeedEvent struct {
 }
 
 type Me struct {
-	ChampName    string  `json:"champName"`
-	ChampKey     string  `json:"champKey"`
-	Skin         int     `json:"skin"`
-	SkinName     string  `json:"skinName"`
-	SkinVideoUrl string  `json:"skinVideoUrl,omitempty"`
-	RiotName  string     `json:"riotName"`
-	RiotTag   string     `json:"riotTag"`
-	Level     int        `json:"level"`
-	Gold      int        `json:"gold"`
-	Hp        Bar        `json:"hp"`
-	Mp        Bar        `json:"mp"`
-	Stats     []StatChip `json:"stats"`
-	Abilities []Ability  `json:"abilities"`
-	SpellKeys []string   `json:"spellKeys"`
-	Runes     Runes      `json:"runes"`
-	Items     []int      `json:"items"`
+	ChampName    string     `json:"champName"`
+	ChampKey     string     `json:"champKey"`
+	Skin         int        `json:"skin"`
+	SkinName     string     `json:"skinName"`
+	SkinVideoUrl string     `json:"skinVideoUrl,omitempty"`
+	RiotName     string     `json:"riotName"`
+	RiotTag      string     `json:"riotTag"`
+	Level        int        `json:"level"`
+	Gold         int        `json:"gold"`
+	Hp           Bar        `json:"hp"`
+	Mp           Bar        `json:"mp"`
+	Stats        []StatChip `json:"stats"`
+	Abilities    []Ability  `json:"abilities"`
+	SpellKeys    []string   `json:"spellKeys"`
+	Runes        Runes      `json:"runes"`
+	Items        []int      `json:"items"`
 }
 
 // LobbyMember is a person in a party lobby.
@@ -197,34 +197,26 @@ type ClientMatch struct {
 
 // ClientProfile is the resolved "In the client" card (ids → urls/keys).
 type ClientProfile struct {
-	GameName        string            `json:"gameName"`
-	TagLine         string            `json:"tagLine"`
-	Level           int               `json:"level"`
-	IconURL         string            `json:"iconUrl"`
-	XpSince         int               `json:"xpSince,omitempty"`
-	XpTo            int               `json:"xpTo,omitempty"`
-	BannerChampKey   string           `json:"bannerChampKey,omitempty"`
-	BackgroundSplash string           `json:"backgroundSplash,omitempty"`
-	Availability    string            `json:"availability,omitempty"`
-	StatusMessage   string            `json:"statusMessage,omitempty"`
-	Title           string            `json:"title,omitempty"`
-	HonorLevel      int               `json:"honorLevel,omitempty"`
-	Ranks           []ClientRank      `json:"ranks,omitempty"`
-	ChallengeScore  int               `json:"challengeScore,omitempty"`
-	OverallLevel    string            `json:"overallLevel,omitempty"`
-	ChallengeTokens []ClientChallenge         `json:"challengeTokens,omitempty"`
-	Challenges      []ClientChallengeProgress `json:"challenges,omitempty"`
-	MasteryScore    int                       `json:"masteryScore,omitempty"`
-	Mastery         []ClientMastery   `json:"mastery,omitempty"`
-	Matches         []ClientMatch     `json:"matches,omitempty"`
-}
-
-// HypeEvent is a "big moment" for the LOCAL player - a First Blood or a
-// multikill (double..penta). The OBS overlay fires a one-shot sound + on-screen
-// burst when it sees a new ID, so it plays exactly once per event.
-type HypeEvent struct {
-	ID   int    `json:"id"`
-	Kind string `json:"kind"` // firstblood | double | triple | quadra | penta
+	GameName         string                    `json:"gameName"`
+	TagLine          string                    `json:"tagLine"`
+	Level            int                       `json:"level"`
+	IconURL          string                    `json:"iconUrl"`
+	XpSince          int                       `json:"xpSince,omitempty"`
+	XpTo             int                       `json:"xpTo,omitempty"`
+	BannerChampKey   string                    `json:"bannerChampKey,omitempty"`
+	BackgroundSplash string                    `json:"backgroundSplash,omitempty"`
+	Availability     string                    `json:"availability,omitempty"`
+	StatusMessage    string                    `json:"statusMessage,omitempty"`
+	Title            string                    `json:"title,omitempty"`
+	HonorLevel       int                       `json:"honorLevel,omitempty"`
+	Ranks            []ClientRank              `json:"ranks,omitempty"`
+	ChallengeScore   int                       `json:"challengeScore,omitempty"`
+	OverallLevel     string                    `json:"overallLevel,omitempty"`
+	ChallengeTokens  []ClientChallenge         `json:"challengeTokens,omitempty"`
+	Challenges       []ClientChallengeProgress `json:"challenges,omitempty"`
+	MasteryScore     int                       `json:"masteryScore,omitempty"`
+	Mastery          []ClientMastery           `json:"mastery,omitempty"`
+	Matches          []ClientMatch             `json:"matches,omitempty"`
 }
 
 type Snapshot struct {
@@ -239,9 +231,6 @@ type Snapshot struct {
 	Blue      []Player    `json:"blue"`
 	Red       []Player    `json:"red"`
 	Feed      []FeedEvent `json:"feed"`
-	// Hype = the streamer's most recent First Blood / multikill this game (highest
-	// EventID). The overlay dedups by ID; null when they've had none yet.
-	Hype *HypeEvent `json:"hype,omitempty"`
 	// Lobby is set instead of the match fields when out of game.
 	Lobby *Lobby `json:"lobby,omitempty"`
 }
@@ -457,7 +446,6 @@ func Build(d *live.AllGameData, patch string, now int64) Snapshot {
 		Blue:      blue,
 		Red:       red,
 		Feed:      mapFeed(d, selfFeedName, selfTeam, teamOf),
-		Hype:      detectHype(d, selfFeedName),
 	}
 }
 
@@ -645,47 +633,6 @@ func shardLabel(r live.Rune) string {
 		return "Rune"
 	}
 	return key
-}
-
-// detectHype scans the event feed for the LOCAL player's big moments - a First
-// Blood they drew, or a multikill they landed (double..penta) - and returns the
-// newest (highest EventID) so the overlay can fire a one-shot celebration. Names
-// match the same way the feed does (the API uses the game name, e.g. "Guts").
-func detectHype(d *live.AllGameData, selfName string) *HypeEvent {
-	if selfName == "" {
-		return nil
-	}
-	var best *HypeEvent
-	for i := range d.Events.Events {
-		e := d.Events.Events[i]
-		kind := ""
-		switch e.EventName {
-		case "FirstBlood":
-			if e.Recipient == selfName {
-				kind = "firstblood"
-			}
-		case "Multikill":
-			if e.KillerName == selfName {
-				switch {
-				case e.KillStreak >= 5:
-					kind = "penta"
-				case e.KillStreak == 4:
-					kind = "quadra"
-				case e.KillStreak == 3:
-					kind = "triple"
-				case e.KillStreak == 2:
-					kind = "double"
-				}
-			}
-		}
-		if kind == "" {
-			continue
-		}
-		if best == nil || e.EventID > best.ID {
-			best = &HypeEvent{ID: e.EventID, Kind: kind}
-		}
-	}
-	return best
 }
 
 func mapFeed(d *live.AllGameData, selfName, selfTeam string, teamOf map[string]string) []FeedEvent {
