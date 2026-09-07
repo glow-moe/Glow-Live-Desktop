@@ -94,6 +94,21 @@
         width: 30px; height: 30px; flex: 0 0 auto; border-radius: 999px; cursor: pointer;
         font-size: 15px; font-weight: 800; color: #a24fc0; background: #f6e4f7; border: 1px solid #eccbee;
       }
+      /* Hype alerts feature card (main panel) */
+      .hype {
+        display: flex; align-items: center; gap: 10px; margin-top: 12px; padding: 11px 12px;
+        border-radius: 14px; background: linear-gradient(100deg, #fff0f8, #f1e8ff); border: 1px solid #f0c9ea;
+      }
+      .hype-ic {
+        width: 36px; height: 36px; flex: 0 0 auto; border-radius: 11px; display: grid; place-items: center;
+        font-size: 18px; background: #fff; border: 1px solid #f3d9ef; box-shadow: 0 4px 10px -6px rgba(155, 92, 255, 0.5);
+      }
+      .hype-t { font-weight: 800; font-size: 13px; color: #4a2c5a; }
+      .hype-s { font-size: 11px; color: #9a7fa8; line-height: 1.35; margin-top: 1px; }
+      .hype-btn {
+        flex: 0 0 auto; padding: 8px 13px; border: none; border-radius: 999px; cursor: pointer;
+        font-size: 12px; font-weight: 800; color: #fff; background: linear-gradient(100deg, #ff66b3, #9b5cff);
+      }
       .sechead {
         margin: 16px 0 8px; font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: #b78ac9;
       }
@@ -161,6 +176,15 @@
         <span class="chip" id="chip-anime">Anime</span>
       </div>
 
+      <div class="hype">
+        <div class="hype-ic">👑</div>
+        <div style="flex:1; min-width:0">
+          <div class="hype-t">Hype alerts</div>
+          <div class="hype-s">Penta, first blood: your gif + sound on stream</div>
+        </div>
+        <button class="hype-btn open-alerts">Set up ↗</button>
+      </div>
+
       <div class="split">
         <button class="btn ghost" id="btn-toggle">Stop</button>
         <button class="btn ghost" id="btn-settings" style="flex:0 0 auto; width:auto; padding:11px 16px">⚙</button>
@@ -207,8 +231,11 @@
       <div id="games-list"></div>
       <div class="muted hide" id="games-empty">Play a Steam game and it shows up here.</div>
 
-      <div class="sechead">OBS overlay</div>
-      <button class="btn ghost" id="alerts-link" style="margin-top:6px">Hype alerts: gif + sound for penta, first blood… ↗</button>
+      <div class="sechead">Hype alerts</div>
+      <div class="muted" style="margin-bottom:2px">
+        An OBS overlay that fires your own gif + sound on first blood and multikills up to a penta. Everything stays on this PC.
+      </div>
+      <button class="btn ghost open-alerts" style="margin-top:8px">Open hype alerts setup ↗</button>
 
       <div class="sechead">On the site</div>
       <a href="#" id="settings-link" class="foot" style="display:block; margin-top:2px; text-align:left">
@@ -243,10 +270,12 @@
         api("open-settings");
       };
 
-      $("alerts-link").onclick = (e) => {
-        e.preventDefault();
-        api("open-alerts"); // opens /alerts/settings in the real browser
-      };
+      document.querySelectorAll(".open-alerts").forEach((b) => {
+        b.onclick = (e) => {
+          e.preventDefault();
+          api("open-alerts"); // opens /alerts/settings in the real browser
+        };
+      });
 
       // ── Update banner: "Update now" self-updates in place and restarts. If
       //    that can't happen (offline, no write access), it falls back to the
