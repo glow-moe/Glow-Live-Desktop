@@ -307,7 +307,7 @@ func mapClient(c *lcu.ClientProfile) *ClientProfile {
 	// Selected profile background: skin id → champion + skin index → splash art.
 	if c.BannerSkinID > 0 {
 		if key := ddragon.ChampKeyByID(c.BannerSkinID / 1000); key != "" {
-			out.BackgroundSplash = ddragon.SplashURL(key, c.BannerSkinID%1000)
+			out.BackgroundSplash = ddragon.SplashURL(key, ddragon.ParentSkin(key, c.BannerSkinID%1000))
 		}
 	}
 	for _, r := range c.Ranks {
