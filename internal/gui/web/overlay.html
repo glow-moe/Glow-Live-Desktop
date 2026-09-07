@@ -308,6 +308,7 @@
   // ---- poll loop --------------------------------------------------------------
   var root = document.getElementById("root");
   var last = null;
+  var lastShownAt = 0; // when a non-empty frame was last drawn
 
   // Hype moments (first blood / multikill / penta) live on the SEPARATE /alerts
   // overlay, configured at /alerts/settings - this match card stays clean.
@@ -317,6 +318,10 @@
       .then(function (r) { return r.json(); })
       .then(function (d) {
         var html = renderAll(d);
+        // An empty frame right after a real one is almost always the app mid-read
+        // (or restarting): hold the last card briefly instead of blinking it away.
+        if (html === "" && last && Date.now() - lastShownAt < 6000) return;
+        if (html !== "") lastShownAt = Date.now();
         if (html !== last) { root.innerHTML = html; last = html; }
       })
       .catch(function () { /* app not running / transient - keep last frame */ });

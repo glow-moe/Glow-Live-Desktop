@@ -244,6 +244,10 @@ type Orchestrator struct {
 	// L!VE preferences read from the site (refreshed periodically).
 	settings   liveSettings
 	settingsAt time.Time
+	// Last successful out-of-game (client) read, so a transient LCU hiccup keeps
+	// the overlay + status instead of blanking them for a tick.
+	lobbyAt    time.Time
+	lobbyLabel string
 }
 
 // New builds an orchestrator from the saved config.
@@ -422,9 +426,16 @@ func (o *Orchestrator) tick() {
 		effDelay = cfg.DelaySec // local fallback when the site delay is 0
 	}
 
-	// Reset the local overlay each tick; a League branch below re-populates it
-	// (the OBS overlay is League-only, so other titles read as not-live).
-	o.clearOverlay()
+	// The local overlay is League-only: if no League branch below populates it
+	// this tick, mark it not-live at the END of the tick. Clearing up front left a
+	// gap between the reset and the (slow, ~8 LCU calls) re-populate in which OBS
+	// could poll an empty feed and drop the card for a beat.
+	leagueOverlay := false
+	defer func() {
+		if !leagueOverlay {
+			o.clearOverlay()
+		}
+	}()
 
 	// Forza wins while telemetry is fresh (you're driving).
 	if fs, at := o.forza.get(); fs != nil && time.Since(at) < 10*time.Second {
@@ -444,6 +455,7 @@ func (o *Orchestrator) tick() {
 		st := Status{Game: "league", InGame: true, Detail: leagueDetail(snap.Me.ChampName, snap.Clock), Pushes: o.pushes, Delay: effDelay}
 		o.push(cfg, effDelay, snap, &st)
 		o.cacheOverlay(snap)
+		leagueOverlay = true
 		o.presence(orGlow(appLoL), leagueActivity(snap, data.GameData.GameTime, uname))
 		o.set(st)
 		return
@@ -456,14 +468,31 @@ func (o *Orchestrator) tick() {
 	// out-of-game card AND mirror the state to Discord (under the LoL app, so it
 	// still reads "Playing League of Legends"); the in-game HUD takes over once a
 	// match loads.
-	if lob, err := lcu.Fetch(cfg.LeaguePath); err == nil && lob != nil {
+	lob, lerr := lcu.Fetch(cfg.LeaguePath)
+	if lerr == nil && lob != nil {
 		snap := snapshot.FromLobby(lob, ddragon.Version(), time.Now().UnixMilli())
 		st := Status{Game: "league", InGame: false, Detail: lob.Label, Pushes: o.pushes, Delay: effDelay}
 		o.push(cfg, effDelay, snap, &st)
 		o.cacheOverlay(snap)
+		leagueOverlay = true
+		o.mu.Lock()
+		o.lobbyAt, o.lobbyLabel = time.Now(), lob.Label
+		o.mu.Unlock()
 		o.presence(orGlow(appLoL), leagueLobbyActivity(snap.Lobby, uname))
 		o.set(st)
 		return
+	}
+	// The client is up but busy (a timed-out call, not "no client"): keep the
+	// last card + status for a few ticks rather than flashing to "waiting".
+	if lerr != nil && !errors.Is(lerr, lcu.ErrNoClient) {
+		o.mu.Lock()
+		recent, label := time.Since(o.lobbyAt) < 15*time.Second, o.lobbyLabel
+		o.mu.Unlock()
+		if recent {
+			leagueOverlay = true
+			o.set(Status{Game: "league", InGame: false, Detail: label, Pushes: o.pushes, Delay: effDelay})
+			return
+		}
 	}
 
 	// Steam: any other game launched through Steam. Sits below League and Forza
