@@ -40,7 +40,8 @@
   function safePatch(v) { return typeof v === "string" && SAFE_PATCH.test(v) ? v : DDRAGON_VERSION; }
   function safeNum(n) { return Math.max(0, Math.trunc(Number(n) || 0)); }
   function cdn(v) { return "https://ddragon.leagueoflegends.com/cdn/" + safePatch(v) + "/img/"; }
-  function champIconUrl(k, v) { return cdn(v) + "champion/" + imgKey(k) + ".png"; }
+  // Versioned icon = data key as-is (Riot serves "Fiddlesticks.png"); only tiles/splashes keep "FiddleSticks".
+  function champIconUrl(k, v) { return cdn(v) + "champion/" + safeKey(k) + ".png"; }
   function champTileUrl(k, skin) { return "https://ddragon.leagueoflegends.com/cdn/img/champion/tiles/" + imgKey(k) + "_" + safeNum(skin) + ".jpg"; }
   function champSplashUrl(k, skin) { return "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/" + imgKey(k) + "_" + safeNum(skin) + ".jpg"; }
   function champPortraitUrl(k, skin, v) { return safeNum(skin) > 0 ? champTileUrl(k, skin) : champIconUrl(k, v); }
