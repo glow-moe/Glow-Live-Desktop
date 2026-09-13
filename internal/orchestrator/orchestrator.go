@@ -188,6 +188,15 @@ type Status struct {
 	AppID    int    `json:"appId"`    // Steam appid of the current game (0 if none)
 	GameName string `json:"gameName"` // Steam game name, for the settings list
 	Hidden   bool   `json:"hidden"`   // the user turned this game off in the app
+	// Tray + status line: when the last push landed (unix ms, 0 = never this
+	// session) and whether the server turned this build away (426), which only
+	// a successful push after an update clears.
+	LastPushAt int64 `json:"lastPushAt"`
+	Outdated   bool  `json:"outdated"`
+	// Which game readers this build has. League is Windows-only: the Riot
+	// client APIs don't work under Wine, so the Linux build never looks for it
+	// and the UI hides the chip.
+	League bool `json:"league"`
 }
 
 type forzaState struct {
@@ -240,6 +249,8 @@ type Orchestrator struct {
 	startMs      int64
 	lastPresence time.Time
 	presenceOn   bool
+	lastPushAt   time.Time
+	outdated     bool
 
 	// L!VE preferences read from the site (refreshed periodically).
 	settings   liveSettings
@@ -447,8 +458,8 @@ func (o *Orchestrator) tick() {
 		return
 	}
 
-	// League: in a live game.
-	if data, err := live.Fetch(); err == nil {
+	// League: in a live game. (Windows only; see leagueSupported.)
+	if data, err := live.Fetch(); leagueSupported && err == nil {
 		snap := snapshot.Build(data, ddragon.Version(), time.Now().UnixMilli())
 		// Names are pushed raw; glow.moe masks them at read time per the user's
 		// current L!VE privacy settings, so toggling takes effect immediately.
@@ -468,7 +479,11 @@ func (o *Orchestrator) tick() {
 	// out-of-game card AND mirror the state to Discord (under the LoL app, so it
 	// still reads "Playing League of Legends"); the in-game HUD takes over once a
 	// match loads.
-	lob, lerr := lcu.Fetch(cfg.LeaguePath)
+	var lob *lcu.Lobby
+	var lerr error
+	if leagueSupported {
+		lob, lerr = lcu.Fetch(cfg.LeaguePath)
+	}
 	if lerr == nil && lob != nil {
 		snap := snapshot.FromLobby(lob, ddragon.Version(), time.Now().UnixMilli())
 		st := Status{Game: "league", InGame: false, Detail: lob.Label, Pushes: o.pushes, Delay: effDelay}
@@ -560,6 +575,9 @@ func (o *Orchestrator) push(cfg config.Config, delaySec int, snap any, st *Statu
 	if err := poster.Post(cfg.Endpoint, cfg.Token, delaySec, snap); err != nil {
 		if errors.Is(err, poster.ErrOutdated) {
 			st.Err = "Update required: this version is no longer supported. Get the latest from glow.moe."
+			o.mu.Lock()
+			o.outdated = true
+			o.mu.Unlock()
 		} else {
 			st.Err = err.Error()
 		}
@@ -568,13 +586,33 @@ func (o *Orchestrator) push(cfg config.Config, delaySec int, snap any, st *Statu
 	o.pushes++
 	st.Pushes = o.pushes
 	st.Pushing = true
+	o.mu.Lock()
+	o.lastPushAt = time.Now()
+	o.outdated = false
+	o.mu.Unlock()
 }
 
 func (o *Orchestrator) set(s Status) {
 	o.mu.Lock()
+	if !o.lastPushAt.IsZero() {
+		s.LastPushAt = o.lastPushAt.UnixMilli()
+	}
+	s.Outdated = o.outdated
+	s.League = leagueSupported
 	o.status = s
 	o.mu.Unlock()
 	o.emit(s)
+}
+
+// LeagueSupported reports whether this build reads League of Legends at all
+// (Windows only).
+func LeagueSupported() bool { return leagueSupported }
+
+// Username returns the linked profile name ("" before pairing).
+func (o *Orchestrator) Username() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.username
 }
 
 var overlayOffline = []byte(`{"live":false,"snapshot":null}`)
@@ -923,6 +961,9 @@ func (o *Orchestrator) steamSnapshot(id uint32) (steam.Snap, bool) {
 	if localOK && localID == 0 && prevLocal != 0 && snap.AppID == prevLocal {
 		o.mu.Lock()
 		o.steamSnap, o.steamSnapAt = steam.Snap{}, time.Time{}
+		// The session ends with the game: relaunching the same title later
+		// starts a new count instead of continuing from the old launch.
+		o.steamGameID, o.steamGameAt = 0, time.Time{}
 		o.mu.Unlock()
 		return steam.Snap{}, false
 	}
@@ -946,8 +987,9 @@ func (o *Orchestrator) steamSnapshot(id uint32) (steam.Snap, bool) {
 	if live {
 		o.steamSnap, o.steamSnapAt = s, time.Now()
 	} else if !fresh {
-		// Confirmed idle (not a blip): forget the game.
+		// Confirmed idle (not a blip): forget the game and its session start.
 		o.steamSnap, o.steamSnapAt = steam.Snap{}, time.Time{}
+		o.steamGameID, o.steamGameAt = 0, time.Time{}
 	}
 	snap, fresh = o.steamSnap, live || fresh
 	o.mu.Unlock()

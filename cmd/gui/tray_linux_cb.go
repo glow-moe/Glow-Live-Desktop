@@ -23,3 +23,10 @@ func glowTrayQuit() {
 		trayTerminate()
 	}
 }
+
+// glowTrayProfile is the tray menu's "Open my profile" item.
+//
+//export glowTrayProfile
+func glowTrayProfile() {
+	openProfile()
+}

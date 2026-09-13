@@ -100,6 +100,8 @@ func main() {
 	// this (from an HTTP handler goroutine); marshal it onto the GUI thread.
 	srv.SetHideToTray(func() { w.Dispatch(func() { hideToTray(w.Window()) }) })
 	srv.SetShowWindow(func() { w.Dispatch(func() { showWindow(w.Window()) }) })
+	// Tray status line / tooltip / alert icon, refreshed on the GUI thread.
+	watchTray(srv, w.Dispatch)
 	w.Run()
 }
 

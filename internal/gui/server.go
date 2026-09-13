@@ -50,6 +50,30 @@ func (s *Server) SetShowWindow(fn func()) {
 	s.showWindow = fn
 }
 
+// TrayInfo is what the tray menu and tooltip need each refresh.
+type TrayInfo struct {
+	Running    bool
+	Linked     bool
+	Username   string
+	ProfileURL string
+	Status     orchestrator.Status
+}
+
+// TrayInfo returns the current state for the tray (menu status line, tooltip,
+// alert icon, "open my profile").
+func (s *Server) TrayInfo() TrayInfo {
+	s.mu.Lock()
+	linked := s.cfg.Token != ""
+	name := s.username
+	base := pair.BaseFrom(s.cfg.Endpoint)
+	s.mu.Unlock()
+	url := ""
+	if name != "" {
+		url = base + "/" + name
+	}
+	return TrayInfo{Running: s.orch.Running(), Linked: linked, Username: name, ProfileURL: url, Status: s.orch.Status()}
+}
+
 // SetHideToTray registers the callback that parks the window in the system tray
 // (wired by main to the native window). Called once the collector starts pushing
 // so the widget auto-tucks away instead of sitting open on screen.
@@ -293,6 +317,7 @@ func (s *Server) hStatus(w http.ResponseWriter, _ *http.Request) {
 		"linking":  s.linking,
 		"running":  s.orch.Running(),
 		"status":   s.orch.Status(),
+		"league":   orchestrator.LeagueSupported(),
 		"update":   map[string]any{"version": s.updateVer, "url": update.ReleasesPage},
 	}
 	s.mu.Unlock()

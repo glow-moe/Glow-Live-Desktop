@@ -17,10 +17,21 @@ package main
 typedef void* (*glow_ai_new_t)(const char*, const char*, int, const char*);
 typedef void  (*glow_ai_status_t)(void*, int);
 typedef void  (*glow_ai_menu_t)(void*, GtkMenu*);
+typedef void  (*glow_ai_icon_t)(void*, const char*, const char*);
 
 // Implemented on the Go side (tray_linux_cb.go).
 extern void glowTrayOpen();
 extern void glowTrayQuit();
+extern void glowTrayProfile();
+static void glow_on_profile(GtkMenuItem *item, gpointer data) { glowTrayProfile(); }
+
+// Kept for glow_tray_update: the indicator, its icon setter and the two items
+// that change (status line, profile).
+static void *g_ind = NULL;
+static glow_ai_icon_t g_ai_icon = NULL;
+static GtkWidget *g_status_item = NULL;
+static GtkWidget *g_profile_item = NULL;
+static int g_alert = -1;
 
 static void glow_on_open(GtkMenuItem *item, gpointer data) { glowTrayOpen(); }
 static void glow_on_quit(GtkMenuItem *item, gpointer data) { glowTrayQuit(); }
@@ -34,14 +45,23 @@ static int glow_tray_init(const char *icon_dir) {
     glow_ai_new_t    ai_new    = (glow_ai_new_t)dlsym(lib, "app_indicator_new_with_path");
     glow_ai_status_t ai_status = (glow_ai_status_t)dlsym(lib, "app_indicator_set_status");
     glow_ai_menu_t   ai_menu   = (glow_ai_menu_t)dlsym(lib, "app_indicator_set_menu");
+    g_ai_icon = (glow_ai_icon_t)dlsym(lib, "app_indicator_set_icon_full");
     if (!ai_new || !ai_status || !ai_menu) return 0;
 
     GtkWidget *menu = gtk_menu_new();
+    g_status_item = gtk_menu_item_new_with_label("glow L!VE");
+    gtk_widget_set_sensitive(g_status_item, FALSE);
     GtkWidget *open = gtk_menu_item_new_with_label("Open glow L!VE");
+    g_profile_item = gtk_menu_item_new_with_label("Open my profile");
+    gtk_widget_set_sensitive(g_profile_item, FALSE);
     GtkWidget *quit = gtk_menu_item_new_with_label("Quit");
     g_signal_connect(open, "activate", G_CALLBACK(glow_on_open), NULL);
+    g_signal_connect(g_profile_item, "activate", G_CALLBACK(glow_on_profile), NULL);
     g_signal_connect(quit, "activate", G_CALLBACK(glow_on_quit), NULL);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), g_status_item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), open);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), g_profile_item);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit);
     gtk_widget_show_all(menu);
@@ -51,7 +71,20 @@ static int glow_tray_init(const char *icon_dir) {
     if (!ind) return 0;
     ai_status(ind, 1);
     ai_menu(ind, GTK_MENU(menu));
+    g_ind = ind;
     return 1;
+}
+
+// glow_tray_update sets the status line, the profile item and swaps the icon
+// between glow-live and glow-live-alert (both PNGs live in icon_dir). Runs on
+// the GTK thread.
+static void glow_tray_update(const char *line, int alert, int hasProfile) {
+    if (g_status_item) gtk_menu_item_set_label(GTK_MENU_ITEM(g_status_item), line);
+    if (g_profile_item) gtk_widget_set_sensitive(g_profile_item, hasProfile ? TRUE : FALSE);
+    if (g_ind && g_ai_icon && alert != g_alert) {
+        g_ai_icon(g_ind, alert ? "glow-live-alert" : "glow-live", "glow L!VE");
+        g_alert = alert;
+    }
 }
 
 static void glow_hide_window(void *win) {
@@ -152,5 +185,28 @@ func iconDir() (string, error) {
 			return "", err
 		}
 	}
+	// The alert variant (red dot) is drawn from the base icon at runtime, so a
+	// new base icon in a later build never leaves a stale alert file behind.
+	if png, err := alertIconPNG(trayIconPNG); err == nil {
+		_ = os.WriteFile(filepath.Join(dir, "glow-live-alert.png"), png, 0o644)
+	}
 	return dir, nil
+}
+
+// trayUpdate pushes the status line, profile availability and alert state to
+// the indicator. Runs on the GTK thread (see watchTray).
+func trayUpdate(line string, alert bool, hasProfile bool) {
+	if !trayUp {
+		return
+	}
+	cl := C.CString(line)
+	defer C.free(unsafe.Pointer(cl))
+	a, p := 0, 0
+	if alert {
+		a = 1
+	}
+	if hasProfile {
+		p = 1
+	}
+	C.glow_tray_update(cl, C.int(a), C.int(p))
 }

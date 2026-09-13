@@ -127,8 +127,8 @@
     <!-- ── Not linked ── -->
     <div class="card" id="panel-link">
       <div class="muted">
-        Link this PC to your <b>glow.moe</b> profile. Your live match (League) and
-        driving telemetry (Forza) then show on your page - only while this runs.
+        Link this PC to your <b>glow.moe</b> profile. <span id="link-copy">Your live match (League) and
+        driving telemetry (Forza)</span> then show on your page - only while this runs.
       </div>
       <button class="btn" id="btn-browser">Link with browser</button>
       <div class="foot" style="margin-top:12px">
@@ -385,6 +385,11 @@
 
         running = s.running;
         $("btn-toggle").textContent = running ? "Stop" : "Start";
+        // Linux builds don't read League: drop the chip and the mention.
+        if (s.league === false) {
+          $("chip-lol").style.display = "none";
+          $("link-copy").textContent = "Your Steam games and driving telemetry (Forza)";
+        }
 
         const st = s.status || {};
         const dot = $("dot");

@@ -1,3 +1,5 @@
+//go:build windows
+
 package valorant
 
 // Agent resolution via Riot's authenticated GLZ API. The local presence blob

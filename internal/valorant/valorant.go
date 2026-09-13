@@ -1,3 +1,5 @@
+//go:build windows
+
 // Package valorant reads VALORANT's local presence to report the player's
 // current state (in menus / agent select / in a match), the map, mode, rank and
 // live score - enough to drive Discord Rich Presence. It reuses the Riot Client

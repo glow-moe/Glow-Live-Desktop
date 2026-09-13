@@ -3,14 +3,24 @@
 package main
 
 /*
-#cgo LDFLAGS: -lshell32 -luser32
+#cgo LDFLAGS: -lshell32 -luser32 -lgdi32
 #include <windows.h>
 #include <shellapi.h>
 #include <string.h>
 
 #define GLOW_TRAY_MSG (WM_APP + 1)
-#define GLOW_ID_OPEN  0xF001
-#define GLOW_ID_QUIT  0xF002
+#define GLOW_ID_OPEN    0xF001
+#define GLOW_ID_QUIT    0xF002
+#define GLOW_ID_PROFILE 0xF003
+#define GLOW_ID_STATUS  0xF004
+
+extern void glowTrayProfile();
+
+// Tray status line (menu + tooltip) and whether the alert icon is showing.
+static wchar_t g_status[128] = L"glow L!VE";
+static int g_alert = 0;
+static int g_hasProfile = 0;
+static HWND g_trayHwnd = NULL;
 
 // Original webview window procedure, so unhandled messages still reach it.
 static WNDPROC g_orig = NULL;
@@ -23,6 +33,8 @@ static int g_pinX = 0, g_pinY = 0, g_pinned = 0;
 
 // glow_app_icon loads (once) the .exe's embedded icon so the titlebar, taskbar
 // and tray all show the glow mark instead of the generic Windows icon.
+static HICON g_alertIcon = NULL;
+
 static HICON glow_app_icon(void) {
     if (!g_icon) {
         HINSTANCE hInst = GetModuleHandleW(NULL);
@@ -30,6 +42,60 @@ static HICON glow_app_icon(void) {
             0, 0, LR_DEFAULTSIZE | LR_SHARED);
     }
     return g_icon;
+}
+
+// glow_alert_icon draws a red dot over the app icon (bottom-right quarter) so
+// the tray shows at a glance that glow.moe is not receiving anything.
+static HICON glow_alert_icon(void) {
+    if (g_alertIcon) return g_alertIcon;
+    HICON base = glow_app_icon();
+    if (!base) return NULL;
+    int sz = GetSystemMetrics(SM_CXSMICON);
+    if (sz < 16) sz = 16;
+    HDC screen = GetDC(NULL);
+    HDC dc = CreateCompatibleDC(screen);
+    BITMAPINFO bi;
+    memset(&bi, 0, sizeof(bi));
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = sz;
+    bi.bmiHeader.biHeight = -sz;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    void *bits = NULL;
+    HBITMAP color = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
+    HBITMAP old = (HBITMAP)SelectObject(dc, color);
+    DrawIconEx(dc, 0, 0, base, sz, sz, 0, NULL, DI_NORMAL);
+    // Red dot with a thin white rim, drawn straight into the 32-bit surface so
+    // the alpha channel stays intact (GDI pens would zero it).
+    unsigned int *px = (unsigned int *)bits;
+    double cx = sz * 0.74, cy = sz * 0.74, r = sz * 0.24;
+    for (int y = 0; y < sz; y++) {
+        for (int x = 0; x < sz; x++) {
+            double dx = x + 0.5 - cx, dy = y + 0.5 - cy;
+            double d = dx * dx + dy * dy;
+            if (d <= r * r) px[y * sz + x] = 0xFFFF3B5C;            // red
+            else if (d <= (r + 1.2) * (r + 1.2)) px[y * sz + x] = 0xFFFFFFFF; // rim
+        }
+    }
+    SelectObject(dc, old);
+    HBITMAP mask = CreateBitmap(sz, sz, 1, 1, NULL);
+    ICONINFO ii;
+    memset(&ii, 0, sizeof(ii));
+    ii.fIcon = TRUE;
+    ii.hbmColor = color;
+    ii.hbmMask = mask;
+    g_alertIcon = CreateIconIndirect(&ii);
+    DeleteObject(mask);
+    DeleteObject(color);
+    DeleteDC(dc);
+    ReleaseDC(NULL, screen);
+    return g_alertIcon;
+}
+
+static HICON glow_tray_icon(void) {
+    HICON ic = g_alert ? glow_alert_icon() : NULL;
+    if (!ic) ic = glow_app_icon();
+    return ic;
 }
 
 static void glow_fill(NOTIFYICONDATAW *nid, HWND hwnd) {
@@ -45,9 +111,10 @@ static void glow_add_tray(HWND hwnd, int balloon) {
     glow_fill(&nid, hwnd);
     nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     nid.uCallbackMessage = GLOW_TRAY_MSG;
-    nid.hIcon = glow_app_icon();
+    nid.hIcon = glow_tray_icon();
     if (!nid.hIcon) nid.hIcon = LoadIconW(NULL, (LPCWSTR)IDI_APPLICATION);
-    lstrcpynW(nid.szTip, L"glow L!VE", 128);
+    lstrcpynW(nid.szTip, g_status, 128);
+    g_trayHwnd = hwnd;
     Shell_NotifyIconW(NIM_ADD, &nid);
     if (balloon) {
         nid.uFlags = NIF_INFO;
@@ -104,7 +171,10 @@ static LRESULT CALLBACK glow_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
             POINT pt;
             GetCursorPos(&pt);
             HMENU menu = CreatePopupMenu();
+            AppendMenuW(menu, MF_STRING | MF_GRAYED, GLOW_ID_STATUS, g_status);
+            AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
             AppendMenuW(menu, MF_STRING, GLOW_ID_OPEN, L"Open glow L!VE");
+            AppendMenuW(menu, MF_STRING | (g_hasProfile ? 0 : MF_GRAYED), GLOW_ID_PROFILE, L"Open my profile");
             AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
             AppendMenuW(menu, MF_STRING, GLOW_ID_QUIT, L"Quit");
             // Required so the menu dismisses on click-away.
@@ -120,6 +190,10 @@ static LRESULT CALLBACK glow_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
             glow_restore(hwnd);
             return 0;
         }
+        if (LOWORD(wp) == GLOW_ID_PROFILE) {
+            glowTrayProfile();
+            return 0;
+        }
         if (LOWORD(wp) == GLOW_ID_QUIT) {
             glow_del_tray(hwnd);
             DestroyWindow(hwnd); // real close: skips WM_CLOSE, ends the loop
@@ -131,6 +205,21 @@ static LRESULT CALLBACK glow_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
         break;
     }
     return CallWindowProcW(g_orig, hwnd, msg, wp, lp);
+}
+
+// glow_tray_update sets the status line (menu + tooltip), the profile item's
+// availability and the alert icon. Called on the GUI thread.
+static void glow_tray_update(const wchar_t *line, int alert, int hasProfile) {
+    lstrcpynW(g_status, line, 128);
+    g_alert = alert;
+    g_hasProfile = hasProfile;
+    if (!g_trayHwnd) return;
+    NOTIFYICONDATAW nid;
+    glow_fill(&nid, g_trayHwnd);
+    nid.uFlags = NIF_ICON | NIF_TIP;
+    nid.hIcon = glow_tray_icon();
+    lstrcpynW(nid.szTip, g_status, 128);
+    Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
 
 // glow_enable_tray subclasses the webview window so closing hides to the tray,
@@ -168,7 +257,10 @@ static void glow_pin_bottom_right(void *win, int w, int h) {
 }
 */
 import "C"
-import "unsafe"
+import (
+	"syscall"
+	"unsafe"
+)
 
 // enableCloseToTray makes the window's close button hide to the system tray
 // (with a one-time "still running" balloon) instead of quitting. Right-click
@@ -196,4 +288,21 @@ func showWindow(win unsafe.Pointer) {
 	if win != nil {
 		C.glow_restore((C.HWND)(win))
 	}
+}
+
+// trayUpdate pushes the status line, tooltip and alert state to the tray.
+// Runs on the GUI thread (see watchTray).
+func trayUpdate(line string, alert bool, hasProfile bool) {
+	w, err := syscall.UTF16PtrFromString("glow L!VE · " + line)
+	if err != nil {
+		return
+	}
+	a, p := 0, 0
+	if alert {
+		a = 1
+	}
+	if hasProfile {
+		p = 1
+	}
+	C.glow_tray_update((*C.wchar_t)(unsafe.Pointer(w)), C.int(a), C.int(p))
 }
