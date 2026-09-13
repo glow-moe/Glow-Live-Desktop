@@ -199,6 +199,12 @@ type Status struct {
 	League bool `json:"league"`
 }
 
+// delayed is a snapshot waiting out the stream-snipe delay.
+type delayed struct {
+	at   time.Time
+	snap any
+}
+
 type forzaState struct {
 	mu   sync.Mutex
 	snap *forza.Snapshot
@@ -251,6 +257,10 @@ type Orchestrator struct {
 	presenceOn   bool
 	lastPushAt   time.Time
 	outdated     bool
+	// Stream-snipe delay: snapshots wait here and go out delaySec later, so the
+	// public live page runs behind the stream. The local OBS overlay is not
+	// delayed (it is part of the stream itself).
+	delayQ []delayed
 
 	// L!VE preferences read from the site (refreshed periodically).
 	settings   liveSettings
@@ -548,6 +558,9 @@ func (o *Orchestrator) tick() {
 		}
 	}
 
+	// No game this tick: keep sending the delayed tail of the last one.
+	o.drainDelayed(cfg, effDelay)
+
 	// Anime: no game running, so mirror what you're watching (detected + pushed
 	// by the browser extension, read back from glow.moe) to Discord. We only set
 	// the local Rich Presence here; the extension owns detection and the push.
@@ -572,6 +585,59 @@ func (o *Orchestrator) push(cfg config.Config, delaySec int, snap any, st *Statu
 		st.Err = "not linked"
 		return
 	}
+	// With a delay set, queue this tick's snapshot and send the one that has
+	// now aged past the delay (the newest such, older ones are dropped).
+	if delaySec > 0 {
+		now := time.Now()
+		o.mu.Lock()
+		o.delayQ = append(o.delayQ, delayed{at: now, snap: snap})
+		due := -1
+		for i, d := range o.delayQ {
+			if now.Sub(d.at) >= time.Duration(delaySec)*time.Second {
+				due = i
+			}
+		}
+		if due < 0 {
+			// Cap the queue so a huge delay with a fast tick cannot grow unbounded.
+			if len(o.delayQ) > 2000 {
+				o.delayQ = o.delayQ[len(o.delayQ)-2000:]
+			}
+			o.mu.Unlock()
+			return
+		}
+		snap = o.delayQ[due].snap
+		o.delayQ = o.delayQ[due+1:]
+		o.mu.Unlock()
+	}
+	o.post(cfg, delaySec, snap, st)
+}
+
+// drainDelayed sends whatever is still waiting once the game has ended, so the
+// public page sees the last delaySec of the match instead of cutting off early.
+func (o *Orchestrator) drainDelayed(cfg config.Config, delaySec int) {
+	if cfg.Token == "" || delaySec <= 0 {
+		return
+	}
+	now := time.Now()
+	o.mu.Lock()
+	due := -1
+	for i, d := range o.delayQ {
+		if now.Sub(d.at) >= time.Duration(delaySec)*time.Second {
+			due = i
+		}
+	}
+	if due < 0 {
+		o.mu.Unlock()
+		return
+	}
+	snap := o.delayQ[due].snap
+	o.delayQ = o.delayQ[due+1:]
+	o.mu.Unlock()
+	var st Status
+	o.post(cfg, delaySec, snap, &st)
+}
+
+func (o *Orchestrator) post(cfg config.Config, delaySec int, snap any, st *Status) {
 	if err := poster.Post(cfg.Endpoint, cfg.Token, delaySec, snap); err != nil {
 		if errors.Is(err, poster.ErrOutdated) {
 			st.Err = "Update required: this version is no longer supported. Get the latest from glow.moe."
