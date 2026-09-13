@@ -56,6 +56,7 @@ type TrayInfo struct {
 	Linked     bool
 	Username   string
 	ProfileURL string
+	UpdateVer  string // newer release tag when this build is behind, else ""
 	Status     orchestrator.Status
 }
 
@@ -66,12 +67,13 @@ func (s *Server) TrayInfo() TrayInfo {
 	linked := s.cfg.Token != ""
 	name := s.username
 	base := pair.BaseFrom(s.cfg.Endpoint)
+	upd := s.updateVer
 	s.mu.Unlock()
 	url := ""
 	if name != "" {
 		url = base + "/" + name
 	}
-	return TrayInfo{Running: s.orch.Running(), Linked: linked, Username: name, ProfileURL: url, Status: s.orch.Status()}
+	return TrayInfo{Running: s.orch.Running(), Linked: linked, Username: name, ProfileURL: url, UpdateVer: upd, Status: s.orch.Status()}
 }
 
 // SetHideToTray registers the callback that parks the window in the system tray

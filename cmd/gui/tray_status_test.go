@@ -18,7 +18,8 @@ func TestTrayLine(t *testing.T) {
 		alert bool
 	}{
 		{"unlinked", gui.TrayInfo{}, "Not linked", false},
-		{"outdated", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{Outdated: true}}, "Update required", true},
+		{"outdated", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{Outdated: true}}, "Update required · open the app", true},
+		{"update available", gui.TrayInfo{Linked: true, Running: true, UpdateVer: "v26.6"}, "Update available (v26.6) · open the app", false},
 		{"stopped", gui.TrayInfo{Linked: true}, "Stopped", false},
 		{"error", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{Err: "boom"}}, "Problem: boom", true},
 		{"live fresh", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{InGame: true, LastPushAt: ms(2 * time.Second)}}, "Live · pushed just now", false},

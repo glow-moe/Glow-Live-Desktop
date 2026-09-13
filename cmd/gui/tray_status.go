@@ -26,11 +26,14 @@ func trayLine(info gui.TrayInfo, now time.Time) (line string, alert bool) {
 	case !info.Linked:
 		return "Not linked", false
 	case st.Outdated:
-		return "Update required", true
+		return "Update required · open the app", true
 	case !info.Running:
 		return "Stopped", false
 	case st.Err != "":
 		return "Problem: " + trim(st.Err, 60), true
+	case info.UpdateVer != "":
+		// A newer release is out but this one still works: nudge, no alert.
+		return "Update available (" + info.UpdateVer + ") · open the app", false
 	}
 	if st.LastPushAt > 0 {
 		ago := now.Sub(time.UnixMilli(st.LastPushAt))
