@@ -83,6 +83,15 @@ editing `icon.rc` or bumping `VERSION`, regenerate it with mingw-w64 windres:
 x86_64-w64-mingw32-windres -O coff -o cmd/gui/rsrc_windows_amd64.syso cmd/gui/icon.rc
 ```
 
+### Steam game table
+
+`internal/steam/steam-apps.bin.gz` is the offline fallback for the Steam appid →
+Discord application id table. glow.moe rebuilds the same table weekly from
+Discord's detectable-games list and the app pulls it on start and once a week,
+so the embedded copy only matters on a first launch without internet. Refresh it
+with `curl -fsS https://glow.moe/api/steam-map -o internal/steam/steam-apps.bin.gz`
+(the release script does this automatically).
+
 ## License
 
 Mozilla Public License 2.0. See [LICENSE](LICENSE).
