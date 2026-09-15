@@ -1,16 +1,15 @@
-# Cuts a release: builds the Linux and Windows binaries the same way the README
-# does, signs the Windows one with Azure Trusted Signing when the Azure secrets
-# are present (otherwise the release is left as a draft so an unsigned build is
-# never what people download), writes SHA256SUMS for the in-app updater and
-# publishes everything to GitHub Releases.
+# Builds the Linux and Windows binaries for a tag the same way the README does
+# and stores them as a workflow artifact. It does NOT create the release: the
+# maintainer's release script downloads the artifact, signs the Windows binary
+# with Azure Trusted Signing, writes SHA256SUMS for the in-app updater and
+# publishes the GitHub release from the maintainer's own account.
 #
 # Trigger: push a tag (v26.6) or run it by hand with the tag as input. The tag
 # must match the VERSION file.
 #
 # Secrets: APP_GLOW, APP_LOL, APP_FH6, APP_FH5 (Discord application ids, kept
-# out of the tree). Optional for signing: AZURE_TENANT_ID, AZURE_CLIENT_ID,
-# AZURE_CLIENT_SECRET, SIGN_ENDPOINT, SIGN_ACCOUNT, SIGN_PROFILE.
-name: release
+# out of the tree).
+name: build
 
 on:
   push:
@@ -22,14 +21,13 @@ on:
         required: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-24.04
     env:
       P: github.com/glow-moe/glow-collector/internal/orchestrator
-      HAVE_AZURE: ${{ secrets.AZURE_CLIENT_ID != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -83,68 +81,12 @@ jobs:
               -X $P.appForzaH6=$APP_FH6 -X $P.appForzaH5=$APP_FH5" \
             -o dist/glow-live-windows-x64.exe ./cmd/gui
 
-      # Azure Trusted Signing through jsign, the same tool the old release
-      # script used. Skipped (and the release stays a draft) without the secrets.
-      - name: Azure login
-        if: env.HAVE_AZURE == 'true'
-        uses: azure/login@v2
+      - name: Checksums of the unsigned builds (for the log)
+        run: cd dist && sha256sum glow-live-linux-x64 glow-live-windows-x64.exe
+
+      - uses: actions/upload-artifact@v4
         with:
-          creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}","subscriptionId":""}'
-          allow-no-subscriptions: true
-
-      - name: Sign Windows binary
-        if: env.HAVE_AZURE == 'true'
-        env:
-          SIGN_ENDPOINT: ${{ secrets.SIGN_ENDPOINT }}
-          SIGN_ACCOUNT: ${{ secrets.SIGN_ACCOUNT }}
-          SIGN_PROFILE: ${{ secrets.SIGN_PROFILE }}
-        run: |
-          sudo apt-get install -y --no-install-recommends default-jre-headless
-          curl -fsSL -o jsign.jar https://github.com/ebourg/jsign/releases/download/7.1/jsign-7.1.jar
-          TOKEN="$(az account get-access-token --resource https://codesigning.azure.net --query accessToken -o tsv)"
-          java -jar jsign.jar --storetype TRUSTEDSIGNING --keystore "${SIGN_ENDPOINT%/}" \
-            --storepass "$TOKEN" --alias "$SIGN_ACCOUNT/$SIGN_PROFILE" \
-            --tsaurl http://timestamp.acs.microsoft.com --tsmode RFC3161 --name "glow L!VE" \
-            --url https://glow.moe dist/glow-live-windows-x64.exe
-
-      - name: Versioned copies + SHA256SUMS
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          cd dist
-          cp glow-live-linux-x64 "glow-live-$TAG-linux-x64"
-          cp glow-live-windows-x64.exe "glow-live-$TAG-windows-x64.exe"
-          sha256sum glow-live-linux-x64 glow-live-windows-x64.exe "glow-live-$TAG-linux-x64" "glow-live-$TAG-windows-x64.exe" > SHA256SUMS
-          cat SHA256SUMS
-
-      - name: Release notes from UNRELEASED.md
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          {
-            echo "## glow L!VE $TAG"
-            echo
-            grep -E '^- ' UNRELEASED.md || echo "- Maintenance release."
-            echo
-            echo "| Download | |"
-            echo "|---|---|"
-            echo "| Windows | [glow-live-windows-x64.exe](https://github.com/${{ github.repository }}/releases/download/$TAG/glow-live-windows-x64.exe) |"
-            echo "| Linux | [glow-live-linux-x64](https://github.com/${{ github.repository }}/releases/download/$TAG/glow-live-linux-x64) |"
-            echo
-            echo '```'
-            cat dist/SHA256SUMS
-            echo '```'
-            if [ "$HAVE_AZURE" != "true" ]; then
-              echo
-              echo "_Windows binary is not yet signed; this release is a draft until it is._"
-            fi
-          } > notes.md
-          cat notes.md
-
-      - name: Publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          DRAFT=""; [ "$HAVE_AZURE" = "true" ] || DRAFT="--draft"
-          gh release create "$TAG" dist/* --title "glow L!VE $TAG" --notes-file notes.md $DRAFT
+          name: binaries-${{ steps.tag.outputs.tag }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
