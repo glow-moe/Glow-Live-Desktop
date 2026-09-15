@@ -102,9 +102,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends default-jre-headless
           curl -fsSL -o jsign.jar https://github.com/ebourg/jsign/releases/download/7.1/jsign-7.1.jar
           TOKEN="$(az account get-access-token --resource https://codesigning.azure.net --query accessToken -o tsv)"
-          java -jar jsign.jar --storetype TRUSTEDSIGNING --keystore "$SIGN_ENDPOINT" \
+          java -jar jsign.jar --storetype TRUSTEDSIGNING --keystore "${SIGN_ENDPOINT%/}" \
             --storepass "$TOKEN" --alias "$SIGN_ACCOUNT/$SIGN_PROFILE" \
-            --tsaurl http://timestamp.acs.microsoft.com --name "glow L!VE" \
+            --tsaurl http://timestamp.acs.microsoft.com --tsmode RFC3161 --name "glow L!VE" \
             --url https://glow.moe dist/glow-live-windows-x64.exe
 
       - name: Versioned copies + SHA256SUMS
