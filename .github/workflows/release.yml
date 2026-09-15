@@ -1,0 +1,150 @@
+# Cuts a release: builds the Linux and Windows binaries the same way the README
+# does, signs the Windows one with Azure Trusted Signing when the Azure secrets
+# are present (otherwise the release is left as a draft so an unsigned build is
+# never what people download), writes SHA256SUMS for the in-app updater and
+# publishes everything to GitHub Releases.
+#
+# Trigger: push a tag (v26.6) or run it by hand with the tag as input. The tag
+# must match the VERSION file.
+#
+# Secrets: APP_GLOW, APP_LOL, APP_FH6, APP_FH5 (Discord application ids, kept
+# out of the tree). Optional for signing: AZURE_TENANT_ID, AZURE_CLIENT_ID,
+# AZURE_CLIENT_SECRET, SIGN_ENDPOINT, SIGN_ACCOUNT, SIGN_PROFILE.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v26.6 (must match VERSION)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    env:
+      P: github.com/glow-moe/glow-collector/internal/orchestrator
+      HAVE_AZURE: ${{ secrets.AZURE_CLIENT_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VER="$(cat VERSION | tr -d '[:space:]')"
+          if [ "$TAG" != "v$VER" ]; then
+            echo "tag $TAG does not match VERSION $VER" >&2; exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+
+      - name: Build Linux
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          APP_GLOW: ${{ secrets.APP_GLOW }}
+          APP_LOL: ${{ secrets.APP_LOL }}
+          APP_FH6: ${{ secrets.APP_FH6 }}
+          APP_FH5: ${{ secrets.APP_FH5 }}
+        run: |
+          mkdir -p dist
+          PKG_CONFIG_PATH="$PWD/.pkgconfig-shim:$PKG_CONFIG_PATH" CGO_ENABLED=1 \
+            go build -trimpath -ldflags "-s -w -X main.version=$TAG \
+              -X $P.appGlow=$APP_GLOW -X $P.appLoL=$APP_LOL \
+              -X $P.appForzaH6=$APP_FH6 -X $P.appForzaH5=$APP_FH5" \
+            -o dist/glow-live-linux-x64 ./cmd/gui
+
+      - name: Build Windows (cross)
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          APP_GLOW: ${{ secrets.APP_GLOW }}
+          APP_LOL: ${{ secrets.APP_LOL }}
+          APP_FH6: ${{ secrets.APP_FH6 }}
+          APP_FH5: ${{ secrets.APP_FH5 }}
+        run: |
+          CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
+            CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
+            CGO_CXXFLAGS="-I$PWD/.winshim" CGO_CPPFLAGS="-I$PWD/.winshim" \
+            go build -trimpath -ldflags "-s -w -H windowsgui -X main.version=$TAG \
+              -X $P.appGlow=$APP_GLOW -X $P.appLoL=$APP_LOL \
+              -X $P.appForzaH6=$APP_FH6 -X $P.appForzaH5=$APP_FH5" \
+            -o dist/glow-live-windows-x64.exe ./cmd/gui
+
+      # Azure Trusted Signing through jsign, the same tool the old release
+      # script used. Skipped (and the release stays a draft) without the secrets.
+      - name: Azure login
+        if: env.HAVE_AZURE == 'true'
+        uses: azure/login@v2
+        with:
+          creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}","subscriptionId":""}'
+          allow-no-subscriptions: true
+
+      - name: Sign Windows binary
+        if: env.HAVE_AZURE == 'true'
+        env:
+          SIGN_ENDPOINT: ${{ secrets.SIGN_ENDPOINT }}
+          SIGN_ACCOUNT: ${{ secrets.SIGN_ACCOUNT }}
+          SIGN_PROFILE: ${{ secrets.SIGN_PROFILE }}
+        run: |
+          sudo apt-get install -y --no-install-recommends default-jre-headless
+          curl -fsSL -o jsign.jar https://github.com/ebourg/jsign/releases/download/7.1/jsign-7.1.jar
+          TOKEN="$(az account get-access-token --resource https://codesigning.azure.net --query accessToken -o tsv)"
+          java -jar jsign.jar --storetype TRUSTEDSIGNING --keystore "$SIGN_ENDPOINT" \
+            --storepass "$TOKEN" --alias "$SIGN_ACCOUNT/$SIGN_PROFILE" \
+            --tsaurl http://timestamp.acs.microsoft.com --name "glow L!VE" \
+            --url https://glow.moe dist/glow-live-windows-x64.exe
+
+      - name: Versioned copies + SHA256SUMS
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          cd dist
+          cp glow-live-linux-x64 "glow-live-$TAG-linux-x64"
+          cp glow-live-windows-x64.exe "glow-live-$TAG-windows-x64.exe"
+          sha256sum glow-live-linux-x64 glow-live-windows-x64.exe "glow-live-$TAG-linux-x64" "glow-live-$TAG-windows-x64.exe" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Release notes from UNRELEASED.md
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          {
+            echo "## glow L!VE $TAG"
+            echo
+            grep -E '^- ' UNRELEASED.md || echo "- Maintenance release."
+            echo
+            echo "| Download | |"
+            echo "|---|---|"
+            echo "| Windows | [glow-live-windows-x64.exe](https://github.com/${{ github.repository }}/releases/download/$TAG/glow-live-windows-x64.exe) |"
+            echo "| Linux | [glow-live-linux-x64](https://github.com/${{ github.repository }}/releases/download/$TAG/glow-live-linux-x64) |"
+            echo
+            echo '```'
+            cat dist/SHA256SUMS
+            echo '```'
+            if [ "$HAVE_AZURE" != "true" ]; then
+              echo
+              echo "_Windows binary is not yet signed; this release is a draft until it is._"
+            fi
+          } > notes.md
+          cat notes.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          DRAFT=""; [ "$HAVE_AZURE" = "true" ] || DRAFT="--draft"
+          gh release create "$TAG" dist/* --title "glow L!VE $TAG" --notes-file notes.md --latest $DRAFT
