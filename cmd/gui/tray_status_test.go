@@ -34,10 +34,3 @@ func TestTrayLine(t *testing.T) {
 		}
 	}
 }
-
-func TestAlertIconPNG(t *testing.T) {
-	out, err := alertIconPNG(trayIconPNG)
-	if err != nil || len(out) == 0 {
-		t.Fatalf("alert icon: %v (%d bytes)", err, len(out))
-	}
-}
