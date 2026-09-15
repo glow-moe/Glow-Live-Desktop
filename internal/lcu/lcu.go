@@ -120,19 +120,19 @@ type MatchInfo struct {
 // ClientProfile is everything shown on the "In the client" screen. All sections
 // are best-effort - a failing LCU call just leaves that slice empty/zero.
 type ClientProfile struct {
-	GameName      string
-	TagLine       string
-	Level         int
-	IconID        int
-	XpSince       int
-	XpTo          int
-	BannerChampID int
-	BannerSkinID  int
-	Availability  string
-	StatusMessage string
-	Title         string
-	HonorLevel    int
-	Ranks         []Rank
+	GameName        string
+	TagLine         string
+	Level           int
+	IconID          int
+	XpSince         int
+	XpTo            int
+	BannerChampID   int
+	BannerSkinID    int
+	Availability    string
+	StatusMessage   string
+	Title           string
+	HonorLevel      int
+	Ranks           []Rank
 	ChallengeScore  int
 	OverallLevel    string
 	ChallengeTokens []ChallengeToken
@@ -563,11 +563,11 @@ func fetchLobby(c *conn, lob *Lobby, puuid string, sumID int64) {
 	var lb struct {
 		PartyID    string `json:"partyId"`
 		GameConfig struct {
-			QueueID       int    `json:"queueId"`
-			MapID         int    `json:"mapId"`
-			GameMode      string `json:"gameMode"`
-			MaxLobbySize  int    `json:"maxLobbySize"`
-			IsRanked      bool   `json:"isRanked"`
+			QueueID      int    `json:"queueId"`
+			MapID        int    `json:"mapId"`
+			GameMode     string `json:"gameMode"`
+			MaxLobbySize int    `json:"maxLobbySize"`
+			IsRanked     bool   `json:"isRanked"`
 		} `json:"gameConfig"`
 		Members []struct {
 			GameName      string `json:"summonerName"`
@@ -686,13 +686,13 @@ func fetchChampSelect(c *conn, lob *Lobby) {
 	saveRaw("lcu-champselect.json", raw)
 	var s struct {
 		Timer struct {
-			Phase             string `json:"phase"`
-			AdjustedTimeLeft  int    `json:"adjustedTimeLeftInPhase"`
+			Phase            string `json:"phase"`
+			AdjustedTimeLeft int    `json:"adjustedTimeLeftInPhase"`
 		} `json:"timer"`
-		LocalCellID int      `json:"localPlayerCellId"`
-		MyTeam      []cell   `json:"myTeam"`
-		TheirTeam   []cell   `json:"theirTeam"`
-		Actions     [][]act  `json:"actions"`
+		LocalCellID int     `json:"localPlayerCellId"`
+		MyTeam      []cell  `json:"myTeam"`
+		TheirTeam   []cell  `json:"theirTeam"`
+		Actions     [][]act `json:"actions"`
 		Bans        struct {
 			MyTeamBans    []int `json:"myTeamBans"`
 			TheirTeamBans []int `json:"theirTeamBans"`

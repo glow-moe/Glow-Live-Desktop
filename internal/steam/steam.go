@@ -321,7 +321,7 @@ type miniProfile struct {
 	Level     int    `json:"level"`
 	AvatarURL string `json:"avatar_url"`
 	Persona   string `json:"persona_name"`
-	InGame *struct {
+	InGame    *struct {
 		Name         string `json:"name"`
 		IsNonSteam   bool   `json:"is_non_steam"`
 		Logo         string `json:"logo"`

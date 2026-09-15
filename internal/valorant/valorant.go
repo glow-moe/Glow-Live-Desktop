@@ -45,10 +45,10 @@ type State struct {
 	AllyScore  int    `json:"allyScore"`
 	EnemyScore int    `json:"enemyScore"`
 	/** True for a real scored match (hide the score for the range / menus). */
-	Scored     bool   `json:"scored"`
-	Tier       int    `json:"tier"`
-	RankName   string `json:"rankName"`
-	PartySize  int    `json:"partySize"`
+	Scored    bool   `json:"scored"`
+	Tier      int    `json:"tier"`
+	RankName  string `json:"rankName"`
+	PartySize int    `json:"partySize"`
 	/** Selected agent (from the GLZ pregame/core-game API; presence has none). */
 	Agent     string `json:"agent"`
 	AgentUUID string `json:"agentUuid"`
@@ -182,7 +182,7 @@ func Fetch() (*State, error) {
 	}
 	raw, err := os.ReadFile(lf)
 	if err != nil {
-		// No readable lockfile ⇒ client not running (mirrors lcu's behaviour).
+		// No readable lockfile ⇒ client not running (mirrors lcu's behavior).
 		return nil, ErrNoClient
 	}
 	parts := strings.Split(strings.TrimSpace(string(raw)), ":")
@@ -343,16 +343,16 @@ type mapInfo struct{ Name, UUID string }
 // Keyed by the map *code name* (the last path segment of partyOwnerMatchMap,
 // e.g. "/Game/Maps/Duality/Duality" → "Duality" → Bind).
 var maps = map[string]mapInfo{
-	"Ascent":  {"Ascent", "7eaecc1b-4337-bbf6-6ab9-04b8f06b3319"},
-	"Duality": {"Bind", "2c9d57ec-4431-9c5e-2939-8f9ef6dd5cba"},
-	"Triad":   {"Haven", "2bee0dc9-4ffe-519b-1cbd-7fbe763a6047"},
-	"Bonsai":  {"Split", "d960549e-485c-e861-8d71-aa9d1aed12a2"},
-	"Port":    {"Icebox", "e2ad5c54-4114-a870-9641-8ea21279579a"},
-	"Foxtrot": {"Breeze", "2fb9a4fd-47b8-4e7d-a969-74b4046ebd53"},
-	"Canyon":  {"Fracture", "b529448b-4d60-346e-e89e-00a4c527a405"},
-	"Pitt":    {"Pearl", "fd267378-4d1d-484f-ff52-77821ed10dc2"},
-	"Jam":     {"Lotus", "2fe4ed3a-450a-948b-6d6b-e89a78e680a9"},
-	"Juliett": {"Sunset", "92584fbe-486a-b1b2-9faa-39b0f486b498"},
+	"Ascent":   {"Ascent", "7eaecc1b-4337-bbf6-6ab9-04b8f06b3319"},
+	"Duality":  {"Bind", "2c9d57ec-4431-9c5e-2939-8f9ef6dd5cba"},
+	"Triad":    {"Haven", "2bee0dc9-4ffe-519b-1cbd-7fbe763a6047"},
+	"Bonsai":   {"Split", "d960549e-485c-e861-8d71-aa9d1aed12a2"},
+	"Port":     {"Icebox", "e2ad5c54-4114-a870-9641-8ea21279579a"},
+	"Foxtrot":  {"Breeze", "2fb9a4fd-47b8-4e7d-a969-74b4046ebd53"},
+	"Canyon":   {"Fracture", "b529448b-4d60-346e-e89e-00a4c527a405"},
+	"Pitt":     {"Pearl", "fd267378-4d1d-484f-ff52-77821ed10dc2"},
+	"Jam":      {"Lotus", "2fe4ed3a-450a-948b-6d6b-e89a78e680a9"},
+	"Juliett":  {"Sunset", "92584fbe-486a-b1b2-9faa-39b0f486b498"},
 	"Infinity": {"Abyss", "224b0a95-48b9-f703-1bd8-67aca101a61f"},
 	"Range":    {"The Range", "ee613ee9-28b7-4beb-9666-08db13bb2244"},
 	"RangeV2":  {"The Range", "ee613ee9-28b7-4beb-9666-08db13bb2244"},

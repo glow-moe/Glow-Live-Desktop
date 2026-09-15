@@ -82,7 +82,7 @@ type Snapshot struct {
 	Tires []Tire `json:"tires"`
 
 	// Ordinal is kept for a car-name lookup (not in the site type; used for RPC).
-	Ordinal int `json:"-"`
+	Ordinal int     `json:"-"`
 	PowerW  float64 `json:"-"`
 }
 

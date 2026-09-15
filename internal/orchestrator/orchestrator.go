@@ -741,7 +741,7 @@ func normalizeLook(s liveSettings) map[string]any {
 	}
 }
 
-// hexColor reports whether s is a #rrggbb colour (the shape the site always
+// hexColor reports whether s is a #rrggbb color (the shape the site always
 // stores overlayAccent in), used to tell a fetched settings struct from a
 // zero-valued one.
 func hexColor(s string) bool {

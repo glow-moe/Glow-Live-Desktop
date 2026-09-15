@@ -127,17 +127,17 @@ type SummonerSpell struct {
 }
 
 type Event struct {
-	EventID     int      `json:"EventID"`
-	EventName   string   `json:"EventName"`
-	EventTime   float64  `json:"EventTime"`
-	KillerName  string   `json:"KillerName"`
-	VictimName  string   `json:"VictimName"`
-	Assisters   []string `json:"Assisters"`
-	Recipient   string   `json:"Recipient"`
-	DragonType  string   `json:"DragonType"`
-	TurretKilled string  `json:"TurretKilled"`
-	KillStreak  int      `json:"KillStreak"`
-	Stolen      string   `json:"Stolen"`
+	EventID      int      `json:"EventID"`
+	EventName    string   `json:"EventName"`
+	EventTime    float64  `json:"EventTime"`
+	KillerName   string   `json:"KillerName"`
+	VictimName   string   `json:"VictimName"`
+	Assisters    []string `json:"Assisters"`
+	Recipient    string   `json:"Recipient"`
+	DragonType   string   `json:"DragonType"`
+	TurretKilled string   `json:"TurretKilled"`
+	KillStreak   int      `json:"KillStreak"`
+	Stolen       string   `json:"Stolen"`
 }
 
 type GameData struct {
