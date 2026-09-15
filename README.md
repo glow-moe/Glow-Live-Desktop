@@ -73,6 +73,16 @@ CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
   -o glow-collector.exe ./cmd/gui
 ```
 
+### Windows resources
+
+`cmd/gui/icon.rc` holds the icon and the version resource (publisher, product,
+version). Go links the compiled `rsrc_windows_amd64.syso` automatically. After
+editing `icon.rc` or bumping `VERSION`, regenerate it with mingw-w64 windres:
+
+```sh
+x86_64-w64-mingw32-windres -O coff -o cmd/gui/rsrc_windows_amd64.syso cmd/gui/icon.rc
+```
+
 ## License
 
 Mozilla Public License 2.0. See [LICENSE](LICENSE).

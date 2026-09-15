@@ -379,8 +379,13 @@ func (o *Orchestrator) Stop() {
 
 // forzaListen binds Data Out (UDP) and feeds parsed packets to the shared state.
 // Best-effort: silently skips Forza if the port is taken.
+//
+// Loopback only: the dashboard tells players to point Data Out at 127.0.0.1
+// (game and app on the same PC), and a listener on 0.0.0.0 is exactly what
+// makes Windows Defender Firewall pop its "blocked some features" alert on
+// first launch. Binding 127.0.0.1 keeps that setup working with no prompt.
 func (o *Orchestrator) forzaListen(ctx context.Context) {
-	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: o.forzaPort})
+	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: o.forzaPort})
 	if err != nil {
 		return
 	}

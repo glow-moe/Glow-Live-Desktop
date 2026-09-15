@@ -11,4 +11,6 @@ gets cleared.
 - Steam: the session timer restarts when you relaunch a game instead of counting from the first launch of the day.
 - Steam: the built-in game table refreshed (19,342 games) so new releases get their own "Playing …" headline offline too.
 - Linux: League of Legends is no longer looked for (it does not work under Wine); the chip and the mention are gone from the Linux build. Windows is unchanged.
+- Windows: no more firewall alert on first launch. The Forza telemetry listener now binds to 127.0.0.1 (the address the dashboard tells you to use in Data Out) instead of every interface.
+- Windows: the executable carries a version resource (glow L!VE, SplitFlux LLC, 26.6), so Windows shows the publisher and version in the firewall alert, Task Manager and file Properties instead of "Unknown".
 - Stream-snipe delay now actually works: the app holds each snapshot for the delay you set in the dashboard and sends it that many seconds later, so your public live page runs behind your stream. The OBS overlay stays real-time (it is part of your stream). Before this the setting was read but nothing delayed.
