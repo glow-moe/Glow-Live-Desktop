@@ -1,0 +1,3 @@
+# LF everywhere, whatever the checkout OS (gofmt, perl/sed tooling and the
+# Linux release scripts all assume it).
+* text=auto eol=lf
