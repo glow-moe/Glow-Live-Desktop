@@ -60,7 +60,7 @@ func SpellKeyByID(id int) string {
 
 // SpellKey returns the ddragon spell key for a summoner-spell display name.
 // Exact match first, then keyword match so upgraded/prefixed variants resolve
-// too ("Unleashed Teleport" at 14min, "Unleashed Smite", "Chilling Smite", …).
+// too ("Unleashed Teleport" at 14min, "Unleashed Smite", "Chilling Smite", and so on).
 // Falls back to "SummonerFlash" so the tile always has art.
 func SpellKey(displayName string) string {
 	d := strings.TrimSpace(displayName)

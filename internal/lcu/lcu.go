@@ -75,7 +75,7 @@ type Lobby struct {
 // Rank is one ranked queue's standing (raw ids; the snapshot/web derive colors).
 type Rank struct {
 	Queue     string // "Solo/Duo" | "Flex"
-	Tier      string // "GOLD" … "" = unranked
+	Tier      string // "GOLD" etc., "" = unranked
 	Division  string // "I".."IV" ("" for Master+ / unranked)
 	LP        int
 	Wins      int
@@ -290,7 +290,7 @@ func Fetch(leaguePath string) (*Lobby, error) {
 			XpSince:  sum.XpSince,
 			XpTo:     sum.XpTo,
 		}
-		// The heavy profile (rank/mastery/matches/challenges/… ≈ 8 LCU calls) barely
+		// The heavy profile (rank/mastery/matches/challenges, about 8 LCU calls) barely
 		// changes, so fetch it at most every 30s and reuse it in between - hammering
 		// 8 endpoints every 2s loads the LCU and invites timeouts. Identity fields
 		// (name/level/icon) stay live every tick.
@@ -419,7 +419,7 @@ func fetchClientProfile(c *conn, p *ClientProfile, puuid string) {
 		}
 	}
 
-	// Top mastery champions. Riot moved these under /{puuid}/…; keep the older
+	// Top mastery champions. Riot moved these under /{puuid}/...; keep the older
 	// local-player list as a fallback. Sort by points and take the top 3.
 	type masteryRow struct {
 		ChampionID     int `json:"championId"`

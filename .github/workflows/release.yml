@@ -147,4 +147,4 @@ jobs:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           DRAFT=""; [ "$HAVE_AZURE" = "true" ] || DRAFT="--draft"
-          gh release create "$TAG" dist/* --title "glow L!VE $TAG" --notes-file notes.md --latest $DRAFT
+          gh release create "$TAG" dist/* --title "glow L!VE $TAG" --notes-file notes.md $DRAFT

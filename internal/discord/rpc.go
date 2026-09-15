@@ -18,7 +18,7 @@ import (
 // Activity is the Rich Presence payload.
 type Activity struct {
 	// Type sets the verb: 0 Playing (default), 2 Listening, 3 Watching, 5
-	// Competing. The local IPC honours it, so anime can read "Watching …".
+	// Competing. The local IPC honors it, so anime can read "Watching <title>".
 	Type       int         `json:"type,omitempty"`
 	Details    string      `json:"details,omitempty"`
 	State      string      `json:"state,omitempty"`

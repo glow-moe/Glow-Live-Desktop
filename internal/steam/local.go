@@ -149,7 +149,7 @@ func libraryRoots() []string {
 		}
 	}
 	for _, cfg := range loginUsersPaths() {
-		base := filepath.Dir(filepath.Dir(cfg)) // …/Steam/config/loginusers.vdf → …/Steam
+		base := filepath.Dir(filepath.Dir(cfg)) // .../Steam/config/loginusers.vdf to .../Steam
 		add(base)
 		b, err := os.ReadFile(filepath.Join(base, "steamapps", "libraryfolders.vdf"))
 		if err != nil {

@@ -88,7 +88,7 @@ func (c *Config) Normalize() {
 	}
 }
 
-// Path is the on-disk config location (…/glow-collector/config.json).
+// Path is the on-disk config location (.../glow-collector/config.json).
 func Path() (string, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {

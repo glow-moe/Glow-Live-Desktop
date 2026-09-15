@@ -935,7 +935,7 @@ func leagueActivity(s snapshot.Snapshot, gameSeconds float64, username string) d
 // select / in the client). It runs under the LoL app, so Discord still reads
 // "Playing League of Legends"; the phase + queue/champ land in details/state.
 func leagueLobbyActivity(lob *snapshot.Lobby, username string) discord.Activity {
-	details := lob.Label // "In a lobby" / "In champion select" / "In the client" …
+	details := lob.Label // "In a lobby" / "In champion select" / "In the client" and so on
 	state := lob.QueueName
 	if state == "" {
 		state = lob.ModeLabel
