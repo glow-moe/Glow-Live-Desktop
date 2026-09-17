@@ -636,11 +636,16 @@ func shardLabel(r live.Rune) string {
 	return key
 }
 
+// maxFeed caps the feed carried in every snapshot. 8 only showed the last few
+// kills; 120 notable events covers a whole game so the page can show the full
+// history, at roughly 100 bytes per event.
+const maxFeed = 120
+
 func mapFeed(d *live.AllGameData, selfName, selfTeam string, teamOf map[string]string) []FeedEvent {
 	evs := d.Events.Events
 	var out []FeedEvent
 	// newest first, cap at 8
-	for i := len(evs) - 1; i >= 0 && len(out) < 8; i-- {
+	for i := len(evs) - 1; i >= 0 && len(out) < maxFeed; i-- {
 		if fe, ok := feedLine(evs[i], selfName, selfTeam, teamOf); ok {
 			out = append(out, fe)
 		}
