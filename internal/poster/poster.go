@@ -57,3 +57,7 @@ func Post(endpoint, token string, delaySec int, snap any) error {
 	}
 	return nil
 }
+
+// Version is the build label reported to the server (see SetVersion). Every
+// request the server gates on release must carry it, not just the push.
+func Version() string { return version }

@@ -59,6 +59,9 @@ func fetchSettings(endpoint, token string) (liveSettings, bool) {
 		return s, false
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	// The server's release gate applies here too: without the version the read
+	// looks like a pre-26.5 build and is answered 426 (26.6 and 26.6.1 did this).
+	req.Header.Set("X-Glow-Live-Version", poster.Version())
 	resp, err := (&http.Client{Timeout: 6 * time.Second}).Do(req)
 	if err != nil {
 		return s, false
@@ -265,6 +268,9 @@ type Orchestrator struct {
 	// L!VE preferences read from the site (refreshed periodically).
 	settings   liveSettings
 	settingsAt time.Time
+	// settingsTriedAt is the last read attempt, so a failing read (server down,
+	// 426, timeout) retries every 15s instead of on every tick.
+	settingsTriedAt time.Time
 	// Last successful out-of-game (client) read, so a transient LCU hiccup keeps
 	// the overlay + status instead of blanking them for a tick.
 	lobbyAt    time.Time
@@ -433,12 +439,15 @@ func (o *Orchestrator) tick() {
 	start := o.startMs
 	uid := o.userID
 	settings := o.settings
-	stale := time.Since(o.settingsAt) > 60*time.Second
+	stale := time.Since(o.settingsAt) > 60*time.Second && time.Since(o.settingsTriedAt) > 15*time.Second
 	o.mu.Unlock()
 
 	// Pull the site's L!VE settings (delay + name masking) periodically, so what
 	// the user sets on glow.moe → L!VE is exactly what the collector applies.
 	if cfg.Token != "" && stale {
+		o.mu.Lock()
+		o.settingsTriedAt = time.Now()
+		o.mu.Unlock()
 		if s, ok := fetchSettings(cfg.Endpoint, cfg.Token); ok {
 			o.mu.Lock()
 			o.settings = s
