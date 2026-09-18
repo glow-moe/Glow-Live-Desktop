@@ -202,14 +202,6 @@ var (
 	coverURL = map[int]string{}
 )
 
-// StoreURL is the game's store page.
-func StoreURL(appID int) string {
-	if appID <= 0 {
-		return ""
-	}
-	return fmt.Sprintf("https://store.steampowered.com/app/%d", appID)
-}
-
 // AccountID resolves the 32-bit account id of the Steam user this machine is
 // signed in as, by reading the client's own loginusers.vdf. Deliberately local:
 // it always reflects the account actually in use, which is not necessarily the

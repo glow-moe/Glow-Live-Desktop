@@ -238,7 +238,6 @@ type Orchestrator struct {
 	pushes      int
 	overlayJSON []byte // latest masked League snapshot ({live,snapshot}) for the localhost overlay
 	forza       *forzaState
-	onStatus    func(Status)
 	onSeenGame  func(appID int, name string) // records a Steam game for the settings list
 
 	// Discord Rich Presence (best-effort; nil when Discord isn't running).
@@ -285,9 +284,6 @@ func New(cfg config.Config) *Orchestrator {
 	go steam.RefreshLoop(pair.BaseFrom(cfg.Endpoint))
 	return &Orchestrator{cfg: cfg, forzaGame: "fh6", forzaPort: 5300, forza: &forzaState{}}
 }
-
-// OnStatus registers a callback fired on every status change (nil is fine).
-func (o *Orchestrator) OnStatus(fn func(Status)) { o.onStatus = fn }
 
 // OnSeenGame registers the callback that records a Steam game into the local
 // settings list (so the user can toggle it later). Fired once per new appid.
@@ -688,13 +684,6 @@ func (o *Orchestrator) set(s Status) {
 // (Windows only).
 func LeagueSupported() bool { return leagueSupported }
 
-// Username returns the linked profile name ("" before pairing).
-func (o *Orchestrator) Username() string {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	return o.username
-}
-
 var overlayOffline = []byte(`{"live":false,"snapshot":null}`)
 
 // cacheOverlay stores the current League snapshot (masked per the owner's L!VE
@@ -784,9 +773,6 @@ func (o *Orchestrator) OverlayJSON() []byte {
 }
 
 func (o *Orchestrator) emit(s Status) {
-	if o.onStatus != nil {
-		o.onStatus(s)
-	}
 }
 
 // useApp returns a Discord client connected with appID, reconnecting if the app
