@@ -5,8 +5,8 @@
 // signature; without it the alert says "Publisher: Unknown" even on a signed
 // build. Regenerate the .syso after editing (see README, "Windows resources").
 1 VERSIONINFO
-FILEVERSION     26,6,1,0
-PRODUCTVERSION  26,6,1,0
+FILEVERSION     26,6,2,0
+PRODUCTVERSION  26,6,2,0
 FILEOS          0x40004L
 FILETYPE        0x1L
 BEGIN
@@ -16,12 +16,12 @@ BEGIN
     BEGIN
       VALUE "CompanyName",      "SplitFlux LLC"
       VALUE "FileDescription",  "glow L!VE"
-      VALUE "FileVersion",      "26.6.1"
+      VALUE "FileVersion",      "26.6.2"
       VALUE "InternalName",     "glow-live"
       VALUE "LegalCopyright",   "Copyright 2026 SplitFlux LLC. MPL-2.0."
       VALUE "OriginalFilename", "glow-live-windows-x64.exe"
       VALUE "ProductName",      "glow L!VE"
-      VALUE "ProductVersion",   "26.6.1"
+      VALUE "ProductVersion",   "26.6.2"
     END
   END
   BLOCK "VarFileInfo"
