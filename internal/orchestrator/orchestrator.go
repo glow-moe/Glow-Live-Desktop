@@ -356,6 +356,15 @@ func splitcraftSkin(s splitSnap) string {
 	return splitcraftImage
 }
 
+// atLeast2 keeps Discord's two-character minimum for text fields: a single
+// character is replaced by the fallback (which may be empty = field omitted).
+func atLeast2(s, fallback string) string {
+	if len(s) == 1 {
+		return fallback
+	}
+	return s
+}
+
 // joinDots glues the non-empty parts with the middle dot the cards use.
 func joinDots(parts ...string) string {
 	kept := parts[:0:0]
@@ -392,10 +401,12 @@ func splitcraftActivity(s splitSnap, username string) discord.Activity {
 	assets := &discord.Assets{LargeImage: skin, LargeText: server, SmallImage: glowIcon, SmallText: "glow.moe"}
 	if skin != splitcraftImage {
 		// The big picture is the player, so the corner carries the server mark.
-		assets.LargeText = s.Name
+		assets.LargeText = atLeast2(s.Name, server)
 		assets.SmallImage, assets.SmallText = splitcraftImage, server
 	}
-	act := discord.Activity{Details: details, State: state, Assets: assets}
+	// Discord drops the whole activity when a text field is a single character
+	// (a one-letter world name, a two-letter legacy name is fine).
+	act := discord.Activity{Details: atLeast2(details, "Playing on "+server), State: atLeast2(state, ""), Assets: assets}
 	if s.SessionStartedAt > 0 {
 		start := s.SessionStartedAt
 		if start < 1_000_000_000_000 { // seconds, not milliseconds
@@ -507,10 +518,14 @@ type Orchestrator struct {
 	onSeenGame  func(appID int, name string) // records a Steam game for the settings list
 
 	// Discord Rich Presence (best-effort; nil when Discord isn't running).
-	dc       *discord.Client
-	dcApp    string // app id the current client is connected with
-	username string
-	userID   string // profile cuid, for reading own anime "now watching"
+	dc    *discord.Client
+	dcApp string // app id the current client is connected with
+	// Last failed connect and its message: a closed Discord is probed at most
+	// every 5s instead of on every tick.
+	dcFailAt  time.Time
+	dcFailErr string
+	username  string
+	userID    string // profile cuid, for reading own anime "now watching"
 	// The mirrors (anime, SplitCraft) as last read from glow.moe, and when.
 	mirrorsCache mirrors
 	mirrorsAt    time.Time
@@ -835,7 +850,9 @@ func (o *Orchestrator) tick() {
 					// status above.
 					o.clearPresence()
 				} else if err := o.presence(app, steamActivity(s, uname, hints.Icon, named)); err != nil {
-					st.Err = "Discord: " + err.Error()
+					// The push to glow.moe is the job here; Discord being closed
+					// is a note, not a problem state.
+					st.Detail = joinDots(st.Detail, err.Error())
 				}
 				o.set(st)
 				return
@@ -1100,18 +1117,43 @@ func (o *Orchestrator) useApp(appID string) (*discord.Client, error) {
 func (o *Orchestrator) presence(appID string, a discord.Activity) error {
 	o.mu.Lock()
 	throttled := time.Since(o.lastPresence) < 5*time.Second && o.dcApp == appID
+	// A connect that just failed (Discord closed) is not retried on every 1.5s
+	// tick either: the pipe probe is ten CreateFile calls.
+	failedRecently := time.Since(o.dcFailAt) < 5*time.Second
+	failErr := o.dcFailErr
 	o.mu.Unlock()
 	if throttled {
 		return nil
 	}
+	if failedRecently {
+		return errors.New(failErr)
+	}
 	dc, err := o.useApp(appID)
 	if dc == nil {
-		if err != nil {
-			return err
+		if err == nil {
+			err = fmt.Errorf("Discord not running")
 		}
-		return fmt.Errorf("Discord not running")
+		o.mu.Lock()
+		o.dcFailAt = time.Now()
+		o.dcFailErr = err.Error()
+		o.mu.Unlock()
+		return err
 	}
-	go func() { _ = dc.SetActivity(a) }()
+	go func() {
+		if err := dc.SetActivity(a); err != nil {
+			// Discord went away mid-session: drop this client so the next tick
+			// reconnects instead of writing into a dead pipe until the app
+			// id changes.
+			o.mu.Lock()
+			if o.dc == dc {
+				o.dc = nil
+				o.dcApp = ""
+				o.presenceOn = false
+			}
+			o.mu.Unlock()
+			_ = dc.Close()
+		}
+	}()
 	o.mu.Lock()
 	o.lastPresence = time.Now()
 	o.presenceOn = true

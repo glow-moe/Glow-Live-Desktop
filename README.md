@@ -52,7 +52,8 @@ P=github.com/glow-moe/glow-collector/internal/orchestrator
 PKG_CONFIG_PATH="$PWD/.pkgconfig-shim:$PKG_CONFIG_PATH" CGO_ENABLED=1 \
   go build -ldflags "-X main.version=v$(cat VERSION) \
     -X $P.appGlow=$APP_GLOW -X $P.appLoL=$APP_LOL \
-    -X $P.appForzaH6=$APP_FH6 -X $P.appForzaH5=$APP_FH5" \
+    -X $P.appForzaH6=$APP_FH6 -X $P.appForzaH5=$APP_FH5 \
+    -X $P.appSplitcraft=$APP_SPLITCRAFT" \
   -o glow-collector ./cmd/gui
 ```
 
@@ -69,7 +70,8 @@ CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
   CGO_CXXFLAGS="-I$PWD/.winshim" CGO_CPPFLAGS="-I$PWD/.winshim" \
   go build -ldflags "-H windowsgui -X main.version=v$(cat VERSION) \
     -X $P.appGlow=$APP_GLOW -X $P.appLoL=$APP_LOL \
-    -X $P.appForzaH6=$APP_FH6 -X $P.appForzaH5=$APP_FH5" \
+    -X $P.appForzaH6=$APP_FH6 -X $P.appForzaH5=$APP_FH5 \
+    -X $P.appSplitcraft=$APP_SPLITCRAFT" \
   -o glow-collector.exe ./cmd/gui
 ```
 

@@ -151,6 +151,11 @@ func TestSplitcraftActivityText(t *testing.T) {
 		t.Fatalf("odd name must not reach a URL: %q", img)
 	}
 
+	// One-character text would make Discord drop the whole activity.
+	if one := splitcraftActivity(splitSnap{World: "x", Name: "Q"}, ""); one.Details != "Playing on SplitCraft" || one.Assets.LargeText != "SplitCraft" {
+		t.Fatalf("one-char guard: details=%q largeText=%q", one.Details, one.Assets.LargeText)
+	}
+
 	s.Platform = "java" // back from the Bedrock skin case above
 	if d := splitcraftDetail(s); d != "SplitCraft · Nether · VIP+ · on Java" {
 		t.Fatalf("detail = %q", d)
