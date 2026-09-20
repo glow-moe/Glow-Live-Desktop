@@ -7,7 +7,7 @@
 # Trigger: push a tag (v26.6) or run it by hand with the tag as input. The tag
 # must match the VERSION file.
 #
-# Secrets: APP_GLOW, APP_LOL, APP_FH6, APP_FH5 (Discord application ids, kept
+# Secrets: APP_GLOW, APP_LOL, APP_FH6, APP_FH5, APP_SPLITCRAFT (Discord application ids, kept
 # out of the tree).
 name: build
 
@@ -57,12 +57,14 @@ jobs:
           APP_LOL: ${{ secrets.APP_LOL }}
           APP_FH6: ${{ secrets.APP_FH6 }}
           APP_FH5: ${{ secrets.APP_FH5 }}
+          APP_SPLITCRAFT: ${{ secrets.APP_SPLITCRAFT }}
         run: |
           mkdir -p dist
           PKG_CONFIG_PATH="$PWD/.pkgconfig-shim:$PKG_CONFIG_PATH" CGO_ENABLED=1 \
             go build -trimpath -ldflags "-s -w -X main.version=$TAG \
               -X $P.appGlow=$APP_GLOW -X $P.appLoL=$APP_LOL \
-              -X $P.appForzaH6=$APP_FH6 -X $P.appForzaH5=$APP_FH5" \
+              -X $P.appForzaH6=$APP_FH6 -X $P.appForzaH5=$APP_FH5 \
+              -X $P.appSplitcraft=$APP_SPLITCRAFT" \
             -o dist/glow-live-linux-x64 ./cmd/gui
 
       - name: Build Windows (cross)
@@ -72,13 +74,15 @@ jobs:
           APP_LOL: ${{ secrets.APP_LOL }}
           APP_FH6: ${{ secrets.APP_FH6 }}
           APP_FH5: ${{ secrets.APP_FH5 }}
+          APP_SPLITCRAFT: ${{ secrets.APP_SPLITCRAFT }}
         run: |
           CGO_ENABLED=1 GOOS=windows GOARCH=amd64 \
             CC=x86_64-w64-mingw32-gcc CXX=x86_64-w64-mingw32-g++ \
             CGO_CXXFLAGS="-I$PWD/.winshim" CGO_CPPFLAGS="-I$PWD/.winshim" \
             go build -trimpath -ldflags "-s -w -H windowsgui -X main.version=$TAG \
               -X $P.appGlow=$APP_GLOW -X $P.appLoL=$APP_LOL \
-              -X $P.appForzaH6=$APP_FH6 -X $P.appForzaH5=$APP_FH5" \
+              -X $P.appForzaH6=$APP_FH6 -X $P.appForzaH5=$APP_FH5 \
+              -X $P.appSplitcraft=$APP_SPLITCRAFT" \
             -o dist/glow-live-windows-x64.exe ./cmd/gui
 
       - name: Checksums of the unsigned builds (for the log)

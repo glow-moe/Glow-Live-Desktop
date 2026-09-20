@@ -88,6 +88,7 @@ type animeSnap struct {
 // reports to glow.moe. The plugin owns detection; we only read it back.
 type splitSnap struct {
 	Name             string `json:"name"`
+	UUID             string `json:"uuid"` // optional; newer plugins send it, it picks the skin render
 	Group            string `json:"group"`
 	World            string `json:"world"`
 	Platform         string `json:"platform"`
@@ -264,28 +265,86 @@ func splitcraftDetail(s splitSnap) string {
 	return server
 }
 
+// plainID lowercases a Minecraft uuid and drops its dashes; "" when it is not
+// a 32-hex-digit id (the value goes straight into a URL, so nothing else passes).
+func plainID(uuid string) string {
+	out := make([]byte, 0, 32)
+	for i := 0; i < len(uuid); i++ {
+		c := uuid[i]
+		switch {
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'f':
+			out = append(out, c)
+		case c >= 'A' && c <= 'F':
+			out = append(out, c+('a'-'A'))
+		case c == '-':
+		default:
+			return ""
+		}
+	}
+	if len(out) != 32 {
+		return ""
+	}
+	return string(out)
+}
+
+// isMCName reports whether n is a Java Minecraft name ([A-Za-z0-9_], 1-16).
+func isMCName(n string) bool {
+	if n == "" || len(n) > 16 {
+		return false
+	}
+	for i := 0; i < len(n); i++ {
+		c := n[i]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// splitcraftSkin is the large Rich Presence image: the player's own Minecraft
+// head (Java skins are public, by uuid or by name), the SplitCraft mark when
+// there is nothing to render (Bedrock players, or an odd name).
+func splitcraftSkin(s splitSnap) string {
+	if s.Platform == "bedrock" {
+		return splitcraftImage
+	}
+	if id := plainID(s.UUID); id != "" {
+		return "https://crafatar.com/renders/head/" + id + "?size=256&overlay"
+	}
+	if isMCName(s.Name) {
+		return "https://mc-heads.net/head/" + s.Name + "/256"
+	}
+	return splitcraftImage
+}
+
 // splitcraftActivity builds the Discord Rich Presence for a SplitCraft session.
-// Like anime it runs under the shared glow app (there is no per-server Discord
-// app), so the headline reads "glow.moe" and the server lands in the details.
+// Under the SplitCraft Discord app the headline already reads "Playing
+// SplitCraft", so the two lines carry where you are and how busy the server is;
+// without that app id (shared glow app) the first line has to name the server.
 func splitcraftActivity(s splitSnap, username string) discord.Activity {
 	server := s.Server.Name
 	if server == "" {
 		server = "SplitCraft"
 	}
-	large := server
+	online := ""
 	if s.Server.Online > 0 {
-		large = fmt.Sprintf("%s · %d online", server, s.Server.Online)
+		online = fmt.Sprintf("%d online", s.Server.Online)
 	}
-	act := discord.Activity{
-		Details: "Playing on " + server,
-		State:   splitcraftState(s),
-		Assets: &discord.Assets{
-			LargeImage: splitcraftImage,
-			LargeText:  large,
-			SmallImage: glowIcon,
-			SmallText:  "glow.moe",
-		},
+	details, state := splitcraftState(s), online
+	if appSplitcraft == "" {
+		details, state = "Playing on "+server, splitcraftState(s)
+		if state == "" {
+			state = online
+		}
 	}
+	skin := splitcraftSkin(s)
+	assets := &discord.Assets{LargeImage: skin, LargeText: server, SmallImage: glowIcon, SmallText: "glow.moe"}
+	if skin != splitcraftImage {
+		// The big picture is the player, so the corner carries the server mark.
+		assets.LargeText = s.Name
+		assets.SmallImage, assets.SmallText = splitcraftImage, server
+	}
+	act := discord.Activity{Details: details, State: state, Assets: assets}
 	if s.SessionStartedAt > 0 {
 		start := s.SessionStartedAt
 		if start < 1_000_000_000_000 { // seconds, not milliseconds
@@ -293,10 +352,10 @@ func splitcraftActivity(s splitSnap, username string) discord.Activity {
 		}
 		act.Timestamps = &discord.Timestamps{Start: start}
 	}
-	act.Buttons = []discord.Button{{Label: "Join SplitCraft", URL: "https://splitcraft.net"}}
 	if username != "" {
 		act.Buttons = append(act.Buttons, discord.Button{Label: "View my Glow profile", URL: "https://glow.moe/" + username})
 	}
+	act.Buttons = append(act.Buttons, discord.Button{Label: "Visit SplitCraft", URL: "https://splitcraft.net"})
 	return act
 }
 
@@ -305,10 +364,11 @@ func splitcraftActivity(s splitSnap, username string) discord.Activity {
 // The ids are injected at build time (see build-*.sh + the .appids file) so they
 // stay out of source control; unset means that game just skips Rich Presence.
 var (
-	appGlow    = ""
-	appLoL     = ""
-	appForzaH6 = ""
-	appForzaH5 = ""
+	appGlow       = ""
+	appLoL        = ""
+	appForzaH6    = ""
+	appForzaH5    = ""
+	appSplitcraft = "" // named "SplitCraft", so Discord reads "Playing SplitCraft"
 )
 
 func orGlow(id string) string {
@@ -737,7 +797,7 @@ func (o *Orchestrator) tick() {
 		m := o.readMirrors(cfg.Endpoint, uid)
 		if cfg.SplitcraftPresence && m.splitOK {
 			st := Status{Game: "splitcraft", InGame: true, Detail: splitcraftDetail(m.split), Pushes: o.pushes, Delay: effDelay}
-			if err := o.presence(orGlow(""), splitcraftActivity(m.split, uname)); err != nil {
+			if err := o.presence(orGlow(appSplitcraft), splitcraftActivity(m.split, uname)); err != nil {
 				st.Err = "Discord: " + err.Error()
 			}
 			o.set(st)

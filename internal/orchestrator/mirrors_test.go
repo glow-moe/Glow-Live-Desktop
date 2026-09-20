@@ -93,8 +93,11 @@ func TestReadMirrorsIsThrottled(t *testing.T) {
 
 func TestSplitcraftActivityText(t *testing.T) {
 	var s splitSnap
-	s.World, s.Group, s.SessionStartedAt = "world_nether", "vipplus", 1758300000
+	s.Name, s.World, s.Group, s.SessionStartedAt = "Melocet", "world_nether", "vipplus", 1758300000
 	s.Server.Name, s.Server.Online = "SplitCraft", 12
+
+	// Shared glow app: the first line has to name the server.
+	appSplitcraft = ""
 	a := splitcraftActivity(s, "melocet")
 	if a.Details != "Playing on SplitCraft" || a.State != "Nether · VIP+" {
 		t.Fatalf("details=%q state=%q", a.Details, a.State)
@@ -102,12 +105,37 @@ func TestSplitcraftActivityText(t *testing.T) {
 	if a.Timestamps == nil || a.Timestamps.Start != 1758300000000 {
 		t.Fatalf("seconds must become milliseconds: %+v", a.Timestamps)
 	}
-	if a.Assets == nil || a.Assets.LargeImage != splitcraftImage || a.Assets.LargeText != "SplitCraft · 12 online" {
+	if a.Assets == nil || a.Assets.LargeImage != "https://mc-heads.net/head/Melocet/256" || a.Assets.LargeText != "Melocet" || a.Assets.SmallImage != splitcraftImage {
 		t.Fatalf("assets = %+v", a.Assets)
 	}
-	if len(a.Buttons) != 2 || a.Buttons[1].URL != "https://glow.moe/melocet" {
+	if len(a.Buttons) != 2 || a.Buttons[0].Label != "View my Glow profile" || a.Buttons[0].URL != "https://glow.moe/melocet" || a.Buttons[1].Label != "Visit SplitCraft" {
 		t.Fatalf("buttons = %+v", a.Buttons)
 	}
+
+	// Dedicated SplitCraft app: the headline is the app, the lines are place + crowd.
+	appSplitcraft = "123"
+	defer func() { appSplitcraft = "" }()
+	b := splitcraftActivity(s, "")
+	if b.Details != "Nether · VIP+" || b.State != "12 online" {
+		t.Fatalf("dedicated app: details=%q state=%q", b.Details, b.State)
+	}
+	if len(b.Buttons) != 1 || b.Buttons[0].Label != "Visit SplitCraft" {
+		t.Fatalf("buttons without a username = %+v", b.Buttons)
+	}
+
+	// The uuid wins over the name for the skin; Bedrock gets the server mark.
+	s.UUID = "CD0967DA-B198-4C8B-BCF3-F73172C7BD78"
+	if img := splitcraftSkin(s); img != "https://crafatar.com/renders/head/cd0967dab1984c8bbcf3f73172c7bd78?size=256&overlay" {
+		t.Fatalf("skin by uuid = %q", img)
+	}
+	s.Platform = "bedrock"
+	if img := splitcraftSkin(s); img != splitcraftImage {
+		t.Fatalf("bedrock skin = %q", img)
+	}
+	if img := splitcraftSkin(splitSnap{Name: "not a name!"}); img != splitcraftImage {
+		t.Fatalf("odd name must not reach a URL: %q", img)
+	}
+
 	if d := splitcraftDetail(s); d != "SplitCraft · Nether · VIP+" {
 		t.Fatalf("detail = %q", d)
 	}

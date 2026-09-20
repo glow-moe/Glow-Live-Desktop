@@ -154,14 +154,6 @@
         </div>
       </div>
 
-      <div class="games">
-        <span class="chip" id="chip-lol">League</span>
-        <span class="chip" id="chip-forza">Forza</span>
-        <span class="chip" id="chip-steam">Steam</span>
-        <span class="chip" id="chip-splitcraft">SplitCraft</span>
-        <span class="chip" id="chip-anime">Anime</span>
-      </div>
-
       <div class="split">
         <button class="btn ghost" id="btn-toggle">Stop</button>
         <button class="btn ghost" id="btn-settings" style="flex:0 0 auto; width:auto; padding:11px 16px">⚙</button>
@@ -393,9 +385,8 @@
 
         running = s.running;
         $("btn-toggle").textContent = running ? "Stop" : "Start";
-        // Linux builds don't read League: drop the chip and the mention.
+        // Linux builds don't read League: drop the mention.
         if (s.league === false) {
-          $("chip-lol").style.display = "none";
           $("link-copy").textContent = "Your Steam games and driving telemetry (Forza)";
         }
 
@@ -431,11 +422,6 @@
           $("st-main").textContent = "Watching for a game…";
           $("st-sub").textContent = "";
         }
-        $("chip-lol").classList.toggle("hot", running && st.game === "league");
-        $("chip-forza").classList.toggle("hot", running && st.game === "forza");
-        $("chip-steam").classList.toggle("hot", running && st.game === "steam");
-        $("chip-splitcraft").classList.toggle("hot", running && st.game === "splitcraft");
-        $("chip-anime").classList.toggle("hot", running && st.game === "anime");
 
         // The moment it starts delivering (a game/anime is live → pushing to the
         // site and/or Discord), tuck the window into the tray. Once per session,
