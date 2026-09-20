@@ -10,7 +10,7 @@ import (
 
 const mirrorsBody = `{"games":{
   "anime":{"live":true,"snapshot":{"title":"Frieren","episode":7,"poster":"https://x/p.jpg"}},
-  "splitcraft":{"live":true,"snapshot":{"game":"splitcraft","name":"Melocet","group":"vipplus","world":"world_nether","platform":"java","sessionStartedAt":1758300000,"server":{"name":"SplitCraft","online":12}}}
+  "splitcraft":{"live":true,"snapshot":{"game":"splitcraft","name":"Melocet","uuid":"cd0967da-b198-4c8b-bcf3-f73172c7bd78","group":"vipplus","world":"world_nether","platform":"java","sessionStartedAt":1758300000,"afk":true,"server":{"name":"SplitCraft","online":12}}}
 }}`
 
 // Both mirrors ride one request, and each side parses into its own snapshot.
@@ -33,7 +33,7 @@ func TestFetchMirrorsParsesBothSources(t *testing.T) {
 	if !m.animeOK || m.anime.Title != "Frieren" || m.anime.Episode != 7 {
 		t.Fatalf("anime = %+v ok=%v", m.anime, m.animeOK)
 	}
-	if !m.splitOK || m.split.World != "world_nether" || m.split.Group != "vipplus" || m.split.Server.Online != 12 {
+	if !m.splitOK || m.split.World != "world_nether" || m.split.Group != "vipplus" || m.split.Server.Online != 12 || !m.split.AFK || m.split.UUID == "" {
 		t.Fatalf("splitcraft = %+v ok=%v", m.split, m.splitOK)
 	}
 }
@@ -139,6 +139,11 @@ func TestSplitcraftActivityText(t *testing.T) {
 	if d := splitcraftDetail(s); d != "SplitCraft · Nether · VIP+" {
 		t.Fatalf("detail = %q", d)
 	}
+	s.AFK = true
+	if st := splitcraftState(s); st != "AFK · VIP+" {
+		t.Fatalf("afk state = %q", st)
+	}
+	s.AFK = false
 	// No rank, no world, no server name: still a sane line.
 	if d := splitcraftDetail(splitSnap{}); d != "SplitCraft" {
 		t.Fatalf("empty detail = %q", d)

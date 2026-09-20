@@ -93,6 +93,7 @@ type splitSnap struct {
 	World            string `json:"world"`
 	Platform         string `json:"platform"`
 	SessionStartedAt int64  `json:"sessionStartedAt"`
+	AFK              bool   `json:"afk"` // EssentialsX /afk, when the server runs it
 	Server           struct {
 		Name   string `json:"name"`
 		Online int    `json:"online"`
@@ -244,6 +245,9 @@ func splitcraftWorld(world string) string {
 // splitcraftState is the second Rich Presence line: where and as what rank.
 func splitcraftState(s splitSnap) string {
 	state := splitcraftWorld(s.World)
+	if s.AFK {
+		state = "AFK" // where they are matters less than that they stepped away
+	}
 	if g := splitcraftGroup(s.Group); g != "" {
 		if state != "" {
 			state += " · "
