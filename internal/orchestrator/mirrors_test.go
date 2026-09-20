@@ -99,7 +99,7 @@ func TestSplitcraftActivityText(t *testing.T) {
 	// Shared glow app: the first line has to name the server.
 	appSplitcraft = ""
 	a := splitcraftActivity(s, "melocet")
-	if a.Details != "Playing on SplitCraft" || a.State != "Nether · VIP+" {
+	if a.Details != "Playing on SplitCraft" || a.State != "Nether · VIP+ · on Java" {
 		t.Fatalf("details=%q state=%q", a.Details, a.State)
 	}
 	if a.Timestamps == nil || a.Timestamps.Start != 1758300000000 {
@@ -116,9 +116,19 @@ func TestSplitcraftActivityText(t *testing.T) {
 	appSplitcraft = "123"
 	defer func() { appSplitcraft = "" }()
 	b := splitcraftActivity(s, "")
-	if b.Details != "Nether · VIP+" || b.State != "12 online" {
+	if b.Details != "Nether · VIP+" || b.State != "on Java · 12 online" {
 		t.Fatalf("dedicated app: details=%q state=%q", b.Details, b.State)
 	}
+	// The plugin's device wins over the edition; an unknown device falls back.
+	s.Device, s.Platform = "playstation", "bedrock"
+	if c := splitcraftActivity(s, ""); c.State != "on PlayStation · 12 online" {
+		t.Fatalf("device line = %q", c.State)
+	}
+	s.Device = ""
+	if d := splitcraftDevice(s); d != "Bedrock" {
+		t.Fatalf("edition fallback = %q", d)
+	}
+	s.Device, s.Platform = "", "java"
 	if len(b.Buttons) != 1 || b.Buttons[0].Label != "Visit SplitCraft" {
 		t.Fatalf("buttons without a username = %+v", b.Buttons)
 	}
@@ -141,7 +151,8 @@ func TestSplitcraftActivityText(t *testing.T) {
 		t.Fatalf("odd name must not reach a URL: %q", img)
 	}
 
-	if d := splitcraftDetail(s); d != "SplitCraft · Nether · VIP+" {
+	s.Platform = "java" // back from the Bedrock skin case above
+	if d := splitcraftDetail(s); d != "SplitCraft · Nether · VIP+ · on Java" {
 		t.Fatalf("detail = %q", d)
 	}
 	s.AFK = true
@@ -150,7 +161,7 @@ func TestSplitcraftActivityText(t *testing.T) {
 	}
 	s.AFK = false
 	// No rank, no world, no server name: still a sane line.
-	if d := splitcraftDetail(splitSnap{}); d != "SplitCraft" {
+	if d := splitcraftDetail(splitSnap{}); d != "SplitCraft · on Java" {
 		t.Fatalf("empty detail = %q", d)
 	}
 }

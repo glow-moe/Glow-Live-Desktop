@@ -93,6 +93,7 @@ type splitSnap struct {
 	Group            string `json:"group"`
 	World            string `json:"world"`
 	Platform         string `json:"platform"`
+	Device           string `json:"device"` // plugin 1.2.3+: java, windows, android, ios, playstation, xbox, switch, bedrock
 	SessionStartedAt int64  `json:"sessionStartedAt"`
 	AFK              bool   `json:"afk"` // EssentialsX /afk, when the server runs it
 	Server           struct {
@@ -271,16 +272,34 @@ func splitcraftState(s splitSnap) string {
 	return state
 }
 
+// splitcraftDevice names what they play on: the plugin's device when it sends
+// one (1.2.3+), the edition otherwise.
+func splitcraftDevice(s splitSnap) string {
+	labels := map[string]string{
+		"java": "Java", "windows": "Windows", "android": "Android", "ios": "iOS",
+		"playstation": "PlayStation", "xbox": "Xbox", "switch": "Nintendo Switch", "bedrock": "Bedrock",
+	}
+	if l, ok := labels[strings.ToLower(s.Device)]; ok {
+		return l
+	}
+	if l, ok := labels[strings.ToLower(s.Platform)]; ok {
+		return l
+	}
+	return "Java"
+}
+
 // splitcraftDetail is the one-line status the GUI shows for SplitCraft.
 func splitcraftDetail(s splitSnap) string {
 	server := s.Server.Name
 	if server == "" {
 		server = "SplitCraft"
 	}
+	parts := []string{server}
 	if st := splitcraftState(s); st != "" {
-		return server + " · " + st
+		parts = append(parts, st)
 	}
-	return server
+	parts = append(parts, "on "+splitcraftDevice(s))
+	return strings.Join(parts, " · ")
 }
 
 // plainID lowercases a Minecraft uuid and drops its dashes; "" when it is not
@@ -337,6 +356,17 @@ func splitcraftSkin(s splitSnap) string {
 	return splitcraftImage
 }
 
+// joinDots glues the non-empty parts with the middle dot the cards use.
+func joinDots(parts ...string) string {
+	kept := parts[:0:0]
+	for _, p := range parts {
+		if p != "" {
+			kept = append(kept, p)
+		}
+	}
+	return strings.Join(kept, " · ")
+}
+
 // splitcraftActivity builds the Discord Rich Presence for a SplitCraft session.
 // Under the SplitCraft Discord app the headline already reads "Playing
 // SplitCraft", so the two lines carry where you are and how busy the server is;
@@ -350,12 +380,13 @@ func splitcraftActivity(s splitSnap, username string) discord.Activity {
 	if s.Server.Online > 0 {
 		online = fmt.Sprintf("%d online", s.Server.Online)
 	}
-	details, state := splitcraftState(s), online
+	device := "on " + splitcraftDevice(s)
+	// Dedicated app: "Playing SplitCraft" is the headline, so line one is where
+	// and as what, line two is the device and the crowd. Shared glow app: line
+	// one has to name the server, the rest folds into line two.
+	details, state := splitcraftState(s), joinDots(device, online)
 	if appSplitcraft == "" {
-		details, state = "Playing on "+server, splitcraftState(s)
-		if state == "" {
-			state = online
-		}
+		details, state = "Playing on "+server, joinDots(splitcraftState(s), device)
 	}
 	skin := splitcraftSkin(s)
 	assets := &discord.Assets{LargeImage: skin, LargeText: server, SmallImage: glowIcon, SmallText: "glow.moe"}
