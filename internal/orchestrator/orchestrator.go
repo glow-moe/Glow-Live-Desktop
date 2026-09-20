@@ -317,17 +317,19 @@ func isMCName(n string) bool {
 }
 
 // splitcraftSkin is the large Rich Presence image: the player's own Minecraft
-// head (Java skins are public, by uuid or by name), the SplitCraft mark when
-// there is nothing to render (Bedrock players, or an odd name).
+// face, served by splitcraft.net's skin endpoint (the public skin services did
+// not load in Discord's image fetcher; splitcraft.net renders from Mojang and
+// answers with a plain PNG). The SplitCraft mark when there is nothing to
+// render (Bedrock players, or an odd name).
 func splitcraftSkin(s splitSnap) string {
 	if s.Platform == "bedrock" {
 		return splitcraftImage
 	}
 	if id := plainID(s.UUID); id != "" {
-		return "https://crafatar.com/renders/head/" + id + "?size=256&overlay"
+		return "https://splitcraft.net/api/skin/" + id + ".png?size=256"
 	}
 	if isMCName(s.Name) {
-		return "https://mc-heads.net/head/" + s.Name + "/256"
+		return "https://splitcraft.net/api/skin/" + s.Name + ".png?size=256"
 	}
 	return splitcraftImage
 }
