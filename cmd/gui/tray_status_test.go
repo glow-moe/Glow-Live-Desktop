@@ -24,6 +24,9 @@ func TestTrayLine(t *testing.T) {
 		{"error", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{Err: "boom"}}, "Problem: boom", true},
 		{"live fresh", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{InGame: true, LastPushAt: ms(2 * time.Second)}}, "Live · pushed just now", false},
 		{"live stale", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{InGame: true, LastPushAt: ms(3 * time.Minute)}}, "Not reaching glow.moe (3m ago)", true},
+		// Mirrored sources never push, so an old push clock is not an outage.
+		{"splitcraft mirrored", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{Game: "splitcraft", InGame: true, LastPushAt: ms(3 * time.Minute)}}, "Live · on Discord", false},
+		{"anime mirrored", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{Game: "anime", InGame: true}}, "Live · on Discord", false},
 		{"idle after push", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{LastPushAt: ms(40 * time.Second)}}, "Watching · last push 40s ago", false},
 		{"idle never", gui.TrayInfo{Linked: true, Running: true}, "Watching for a game", false},
 	}

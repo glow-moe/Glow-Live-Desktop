@@ -237,6 +237,9 @@ func splitcraftGroup(group string) string {
 	if g == "" {
 		return ""
 	}
+	if g == "glow" && plus == "+" { // glow_plus, GlowPlus, glow+ all mean the same badge
+		return "Glow+"
+	}
 	return strings.ToUpper(g) + plus
 }
 
@@ -547,6 +550,12 @@ func (o *Orchestrator) SetUsername(name string) {
 // SetUserID sets the profile id used to read the anime "now watching" back.
 func (o *Orchestrator) SetUserID(id string) {
 	o.mu.Lock()
+	if id != o.userID {
+		// Another account: whatever the mirrors said about the old one must not
+		// show for the new one during the rest of the read window.
+		o.mirrorsCache = mirrors{}
+		o.mirrorsAt = time.Time{}
+	}
 	o.userID = id
 	o.mu.Unlock()
 }

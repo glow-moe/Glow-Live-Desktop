@@ -154,7 +154,7 @@ func TestSplitcraftActivityText(t *testing.T) {
 func TestSplitcraftGroupLabels(t *testing.T) {
 	cases := map[string]string{
 		"": "", "vip": "VIP", "vipplus": "VIP+", "mvp": "MVP", "mvpplus": "MVP+", "MVP+": "MVP+",
-		"insane": "INSANE", "hardcore": "HARDCORE", "glowplus": "Glow+", "legend_plus": "LEGEND+",
+		"insane": "INSANE", "hardcore": "HARDCORE", "glowplus": "Glow+", "GlowPlus": "Glow+", "glow_plus": "Glow+", "legend_plus": "LEGEND+",
 	}
 	for in, want := range cases {
 		if got := splitcraftGroup(in); got != want {

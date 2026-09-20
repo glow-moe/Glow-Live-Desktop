@@ -35,6 +35,12 @@ func trayLine(info gui.TrayInfo, now time.Time) (line string, alert bool) {
 		// A newer release is out but this one still works: nudge, no alert.
 		return "Update available (" + info.UpdateVer + ") · open the app", false
 	}
+	// Mirrored sources (anime from the browser extension, SplitCraft from the
+	// server plugin) are shown on Discord but never pushed from here, so the
+	// push clock says nothing about them: no "not reaching glow.moe" alarm.
+	if st.InGame && (st.Game == "anime" || st.Game == "splitcraft") {
+		return "Live · on Discord", false
+	}
 	if st.LastPushAt > 0 {
 		ago := now.Sub(time.UnixMilli(st.LastPushAt))
 		if st.InGame && ago > 90*time.Second {
