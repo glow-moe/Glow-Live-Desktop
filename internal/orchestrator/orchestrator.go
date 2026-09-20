@@ -317,19 +317,17 @@ func isMCName(n string) bool {
 }
 
 // splitcraftSkin is the large Rich Presence image: the player's own Minecraft
-// head (by uuid, or by name for Java players), the SplitCraft mark when there
-// is nothing to render (Bedrock players, or an odd name). The render comes
-// through glow.moe's own proxy: Discord's image fetcher showed a "?" for the
-// skin services themselves, while anything on glow.moe loads.
+// head (Java skins are public, by uuid or by name), the SplitCraft mark when
+// there is nothing to render (Bedrock players, or an odd name).
 func splitcraftSkin(s splitSnap) string {
 	if s.Platform == "bedrock" {
 		return splitcraftImage
 	}
 	if id := plainID(s.UUID); id != "" {
-		return "https://glow.moe/api/mc/skin/" + id + "?kind=head&size=256"
+		return "https://crafatar.com/renders/head/" + id + "?size=256&overlay"
 	}
 	if isMCName(s.Name) {
-		return "https://glow.moe/api/mc/skin/" + s.Name + "?kind=head&size=256"
+		return "https://mc-heads.net/head/" + s.Name + "/256"
 	}
 	return splitcraftImage
 }

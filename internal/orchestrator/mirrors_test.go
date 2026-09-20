@@ -105,7 +105,7 @@ func TestSplitcraftActivityText(t *testing.T) {
 	if a.Timestamps == nil || a.Timestamps.Start != 1758300000000 {
 		t.Fatalf("seconds must become milliseconds: %+v", a.Timestamps)
 	}
-	if a.Assets == nil || a.Assets.LargeImage != "https://glow.moe/api/mc/skin/Melocet?kind=head&size=256" || a.Assets.LargeText != "Melocet" || a.Assets.SmallImage != splitcraftImage {
+	if a.Assets == nil || a.Assets.LargeImage != "https://mc-heads.net/head/Melocet/256" || a.Assets.LargeText != "Melocet" || a.Assets.SmallImage != splitcraftImage {
 		t.Fatalf("assets = %+v", a.Assets)
 	}
 	if len(a.Buttons) != 2 || a.Buttons[0].Label != "View my Glow profile" || a.Buttons[0].URL != "https://glow.moe/melocet" || a.Buttons[1].Label != "Visit SplitCraft" {
@@ -125,7 +125,7 @@ func TestSplitcraftActivityText(t *testing.T) {
 
 	// The uuid wins over the name for the skin; Bedrock gets the server mark.
 	s.UUID = "CD0967DA-B198-4C8B-BCF3-F73172C7BD78"
-	if img := splitcraftSkin(s); img != "https://glow.moe/api/mc/skin/cd0967dab1984c8bbcf3f73172c7bd78?kind=head&size=256" {
+	if img := splitcraftSkin(s); img != "https://crafatar.com/renders/head/cd0967dab1984c8bbcf3f73172c7bd78?size=256&overlay" {
 		t.Fatalf("skin by uuid = %q", img)
 	}
 	s.Platform = "bedrock"
