@@ -158,6 +158,7 @@
         <span class="chip" id="chip-lol">League</span>
         <span class="chip" id="chip-forza">Forza</span>
         <span class="chip" id="chip-steam">Steam</span>
+        <span class="chip" id="chip-splitcraft">SplitCraft</span>
         <span class="chip" id="chip-anime">Anime</span>
       </div>
 
@@ -179,6 +180,10 @@
       <label class="opt">
         <input type="checkbox" id="steam-toggle" />
         <span class="sub">Show Steam games on Discord</span>
+      </label>
+      <label class="opt">
+        <input type="checkbox" id="splitcraft-toggle" />
+        <span class="sub">Show SplitCraft on Discord (link your account on glow.moe first)</span>
       </label>
       <label class="opt">
         <input type="checkbox" id="anime-toggle" />
@@ -321,6 +326,7 @@
       api("config").then((c) => {
         $("anime-toggle").checked = c.animePresence !== false;
         $("steam-toggle").checked = c.steamPresence !== false;
+        $("splitcraft-toggle").checked = c.splitcraftPresence !== false;
         $("autostart-toggle").checked = c.autoStart === true;
         $("hidden-toggle").checked = c.startHidden === true;
         $("hidegame-toggle").checked = c.hideOnGame !== false;
@@ -330,6 +336,8 @@
         api("config", { animePresence: $("anime-toggle").checked });
       $("steam-toggle").onchange = () =>
         api("config", { steamPresence: $("steam-toggle").checked });
+      $("splitcraft-toggle").onchange = () =>
+        api("config", { splitcraftPresence: $("splitcraft-toggle").checked });
       $("autostart-toggle").onchange = () =>
         api("config", { autoStart: $("autostart-toggle").checked }).then((c) => {
           // Reflect what actually happened; the write can be refused.
@@ -406,6 +414,9 @@
         } else if (st.inGame && st.game === "steam") {
           $("st-main").textContent = "Playing on Steam";
           $("st-sub").textContent = st.detail || "";
+        } else if (st.inGame && st.game === "splitcraft") {
+          $("st-main").textContent = "Playing on SplitCraft";
+          $("st-sub").textContent = st.detail || "";
         } else if (st.inGame && st.game === "anime") {
           $("st-main").textContent = "Watching anime";
           $("st-sub").textContent = st.detail || "";
@@ -423,6 +434,7 @@
         $("chip-lol").classList.toggle("hot", running && st.game === "league");
         $("chip-forza").classList.toggle("hot", running && st.game === "forza");
         $("chip-steam").classList.toggle("hot", running && st.game === "steam");
+        $("chip-splitcraft").classList.toggle("hot", running && st.game === "splitcraft");
         $("chip-anime").classList.toggle("hot", running && st.game === "anime");
 
         // The moment it starts delivering (a game/anime is live → pushing to the

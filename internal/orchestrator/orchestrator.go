@@ -84,27 +84,90 @@ type animeSnap struct {
 	Poster  string `json:"poster"`
 }
 
-// fetchAnime reads the profile's current anime "now watching" from glow.moe
-// (public read, keyed by the user id). ok is false when nothing is playing.
-func fetchAnime(endpoint, userID string) (animeSnap, bool) {
+// splitSnap is this player's row in the roster the SplitCraft server plugin
+// reports to glow.moe. The plugin owns detection; we only read it back.
+type splitSnap struct {
+	Name             string `json:"name"`
+	Group            string `json:"group"`
+	World            string `json:"world"`
+	Platform         string `json:"platform"`
+	SessionStartedAt int64  `json:"sessionStartedAt"`
+	Server           struct {
+		Name   string `json:"name"`
+		Online int    `json:"online"`
+	} `json:"server"`
+}
+
+// mirrors is what the other glow sources say this profile is doing right now.
+// Each ok is false when that source is idle (or the read failed).
+type mirrors struct {
+	anime   animeSnap
+	animeOK bool
+	split   splitSnap
+	splitOK bool
+}
+
+// mirrorEvery is how often the mirrors are re-read. They move on the scale of
+// an episode or a world hop, so every 10s is plenty; reading them on every
+// 1.5s tick (up to 26.6.2) was about half of all the live traffic glow.moe saw.
+const mirrorEvery = 10 * time.Second
+
+// fetchMirrors reads the anime "now watching" and the SplitCraft session in
+// one request (the read endpoint folds several games into a single answer).
+// ok is false when the request itself failed.
+func fetchMirrors(endpoint, userID string) (mirrors, bool) {
 	var out struct {
-		Live     bool       `json:"live"`
-		Snapshot *animeSnap `json:"snapshot"`
+		Games struct {
+			Anime struct {
+				Live     bool       `json:"live"`
+				Snapshot *animeSnap `json:"snapshot"`
+			} `json:"anime"`
+			Splitcraft struct {
+				Live     bool       `json:"live"`
+				Snapshot *splitSnap `json:"snapshot"`
+			} `json:"splitcraft"`
+		} `json:"games"`
 	}
 	// userID is a cuid ([a-z0-9]), safe to place in the query without escaping.
-	u := pair.BaseFrom(endpoint) + "/api/live/read?u=" + userID + "&game=anime"
+	u := pair.BaseFrom(endpoint) + "/api/live/read?u=" + userID + "&games=anime,splitcraft"
 	resp, err := (&http.Client{Timeout: 6 * time.Second}).Get(u)
 	if err != nil {
-		return animeSnap{}, false
+		return mirrors{}, false
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return animeSnap{}, false
+		return mirrors{}, false
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil || !out.Live || out.Snapshot == nil {
-		return animeSnap{}, false
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return mirrors{}, false
 	}
-	return *out.Snapshot, out.Snapshot.Title != ""
+	var m mirrors
+	if a := out.Games.Anime; a.Live && a.Snapshot != nil && a.Snapshot.Title != "" {
+		m.anime, m.animeOK = *a.Snapshot, true
+	}
+	if s := out.Games.Splitcraft; s.Live && s.Snapshot != nil {
+		m.split, m.splitOK = *s.Snapshot, true
+	}
+	return m, true
+}
+
+// readMirrors hands back the cached mirrors and re-reads them once they are
+// older than mirrorEvery. A failed read counts as "nothing live", the same as
+// before, so a dead connection never leaves a stale presence on Discord.
+func (o *Orchestrator) readMirrors(endpoint, userID string) mirrors {
+	o.mu.Lock()
+	fresh := !o.mirrorsAt.IsZero() && time.Since(o.mirrorsAt) < mirrorEvery
+	cached := o.mirrorsCache
+	o.mu.Unlock()
+	if fresh {
+		return cached
+	}
+	m, _ := fetchMirrors(endpoint, userID)
+	o.mu.Lock()
+	o.mirrorsAt = time.Now()
+	o.mirrorsCache = m
+	o.mu.Unlock()
+	return m
 }
 
 // animeDetail is the one-line status the GUI shows for anime.
@@ -148,6 +211,95 @@ func animeActivity(a animeSnap, username string) discord.Activity {
 	return act
 }
 
+// splitcraftGroup turns the plugin's LuckPerms group slug into the badge the
+// server shows in chat. Unknown groups pass through as they are.
+func splitcraftGroup(group string) string {
+	switch group {
+	case "mvp":
+		return "MVP"
+	case "vipplus":
+		return "VIP+"
+	case "glowplus":
+		return "Glow+"
+	case "vip":
+		return "VIP"
+	}
+	return group
+}
+
+// splitcraftWorld names a Minecraft world the way players say it.
+func splitcraftWorld(world string) string {
+	switch world {
+	case "world":
+		return "Overworld"
+	case "world_nether":
+		return "Nether"
+	case "world_the_end":
+		return "The End"
+	}
+	return world
+}
+
+// splitcraftState is the second Rich Presence line: where and as what rank.
+func splitcraftState(s splitSnap) string {
+	state := splitcraftWorld(s.World)
+	if g := splitcraftGroup(s.Group); g != "" {
+		if state != "" {
+			state += " · "
+		}
+		state += g
+	}
+	return state
+}
+
+// splitcraftDetail is the one-line status the GUI shows for SplitCraft.
+func splitcraftDetail(s splitSnap) string {
+	server := s.Server.Name
+	if server == "" {
+		server = "SplitCraft"
+	}
+	if st := splitcraftState(s); st != "" {
+		return server + " · " + st
+	}
+	return server
+}
+
+// splitcraftActivity builds the Discord Rich Presence for a SplitCraft session.
+// Like anime it runs under the shared glow app (there is no per-server Discord
+// app), so the headline reads "glow.moe" and the server lands in the details.
+func splitcraftActivity(s splitSnap, username string) discord.Activity {
+	server := s.Server.Name
+	if server == "" {
+		server = "SplitCraft"
+	}
+	large := server
+	if s.Server.Online > 0 {
+		large = fmt.Sprintf("%s · %d online", server, s.Server.Online)
+	}
+	act := discord.Activity{
+		Details: "Playing on " + server,
+		State:   splitcraftState(s),
+		Assets: &discord.Assets{
+			LargeImage: splitcraftImage,
+			LargeText:  large,
+			SmallImage: glowIcon,
+			SmallText:  "glow.moe",
+		},
+	}
+	if s.SessionStartedAt > 0 {
+		start := s.SessionStartedAt
+		if start < 1_000_000_000_000 { // seconds, not milliseconds
+			start *= 1000
+		}
+		act.Timestamps = &discord.Timestamps{Start: start}
+	}
+	act.Buttons = []discord.Button{{Label: "Join SplitCraft", URL: "https://splitcraft.net"}}
+	if username != "" {
+		act.Buttons = append(act.Buttons, discord.Button{Label: "View my Glow profile", URL: "https://glow.moe/" + username})
+	}
+	return act
+}
+
 // Per-game Discord apps. Each is named after the game, so the "Playing X" line
 // (which Discord ties to the app name, not the activity) shows the real game.
 // The ids are injected at build time (see build-*.sh + the .appids file) so they
@@ -178,6 +330,9 @@ const glowIcon = "https://glow.moe/icon-512.png"
 
 // forzaImage is the large Rich Presence image while driving Forza.
 const forzaImage = "https://glow.moe/games/forza.png"
+
+// splitcraftImage is the large Rich Presence image while on SplitCraft.
+const splitcraftImage = "https://glow.moe/games/splitcraft.png"
 
 // Status is what the GUI renders each poll.
 type Status struct {
@@ -241,10 +396,13 @@ type Orchestrator struct {
 	onSeenGame  func(appID int, name string) // records a Steam game for the settings list
 
 	// Discord Rich Presence (best-effort; nil when Discord isn't running).
-	dc           *discord.Client
-	dcApp        string // app id the current client is connected with
-	username     string
-	userID       string // profile cuid, for reading own anime "now watching"
+	dc       *discord.Client
+	dcApp    string // app id the current client is connected with
+	username string
+	userID   string // profile cuid, for reading own anime "now watching"
+	// The mirrors (anime, SplitCraft) as last read from glow.moe, and when.
+	mirrorsCache mirrors
+	mirrorsAt    time.Time
 	steamID      uint32 // Steam account id signed in on this machine (0 = none)
 	steamIDAt    time.Time
 	steamSnap    steam.Snap // last good Steam answer
@@ -571,13 +729,23 @@ func (o *Orchestrator) tick() {
 	// No game this tick: keep sending the delayed tail of the last one.
 	o.drainDelayed(cfg, effDelay)
 
-	// Anime: no game running, so mirror what you're watching (detected + pushed
-	// by the browser extension, read back from glow.moe) to Discord. We only set
-	// the local Rich Presence here; the extension owns detection and the push.
-	if cfg.AnimePresence && cfg.Token != "" && uid != "" {
-		if a, ok := fetchAnime(cfg.Endpoint, uid); ok {
-			st := Status{Game: "anime", InGame: true, Detail: animeDetail(a), Pushes: o.pushes, Delay: effDelay}
-			if err := o.presence(orGlow(""), animeActivity(a, uname)); err != nil {
+	// No game running, so mirror what the other glow sources say you're doing
+	// (the SplitCraft plugin's roster, the browser extension's "now watching")
+	// to Discord. We only set the local Rich Presence here; those sources own
+	// detection and the push. One read covers both, refreshed every 10s.
+	if (cfg.SplitcraftPresence || cfg.AnimePresence) && cfg.Token != "" && uid != "" {
+		m := o.readMirrors(cfg.Endpoint, uid)
+		if cfg.SplitcraftPresence && m.splitOK {
+			st := Status{Game: "splitcraft", InGame: true, Detail: splitcraftDetail(m.split), Pushes: o.pushes, Delay: effDelay}
+			if err := o.presence(orGlow(""), splitcraftActivity(m.split, uname)); err != nil {
+				st.Err = "Discord: " + err.Error()
+			}
+			o.set(st)
+			return
+		}
+		if cfg.AnimePresence && m.animeOK {
+			st := Status{Game: "anime", InGame: true, Detail: animeDetail(m.anime), Pushes: o.pushes, Delay: effDelay}
+			if err := o.presence(orGlow(""), animeActivity(m.anime, uname)); err != nil {
 				st.Err = "Discord: " + err.Error()
 			}
 			o.set(st)

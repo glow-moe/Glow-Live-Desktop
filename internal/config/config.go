@@ -30,6 +30,9 @@ type Config struct {
 	// SteamPresence mirrors the Steam game (and its Rich Presence line) to
 	// Discord when no richer source is running.
 	SteamPresence bool `json:"steamPresence"`
+	// SplitcraftPresence mirrors a session on the SplitCraft Minecraft server
+	// (its plugin reports the roster to glow.moe) to Discord Rich Presence.
+	SplitcraftPresence bool `json:"splitcraftPresence"`
 	// AutoStart launches the app when the computer starts (a Run key on
 	// Windows, an XDG autostart entry on Linux). The OS artifact is written or
 	// removed when this is toggled; the flag here just drives the checkbox.
@@ -58,13 +61,14 @@ type SeenGame struct {
 // Default returns sane starting settings (no token yet).
 func Default() Config {
 	return Config{
-		Endpoint:      "https://glow.moe/api/live/ingest",
-		DelaySec:      0,
-		PollMs:        1500,
-		AnimePresence: true,
-		SteamPresence: true,
-		HideOnGame:    true,
-		AutoStart:     true, // launch with the computer, straight into the tray
+		Endpoint:           "https://glow.moe/api/live/ingest",
+		DelaySec:           0,
+		PollMs:             1500,
+		AnimePresence:      true,
+		SteamPresence:      true,
+		SplitcraftPresence: true,
+		HideOnGame:         true,
+		AutoStart:          true, // launch with the computer, straight into the tray
 	}
 }
 

@@ -338,10 +338,12 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 			Endpoint      *string `json:"endpoint"`
 			AnimePresence *bool   `json:"animePresence"`
 			SteamPresence *bool   `json:"steamPresence"`
-			AutoStart     *bool   `json:"autoStart"`
-			StartHidden   *bool   `json:"startHidden"`
-			HideOnGame    *bool   `json:"hideOnGame"`
-			HideGame      *struct {
+			// SplitcraftPresence: the SplitCraft session on Discord.
+			SplitcraftPresence *bool `json:"splitcraftPresence"`
+			AutoStart          *bool `json:"autoStart"`
+			StartHidden        *bool `json:"startHidden"`
+			HideOnGame         *bool `json:"hideOnGame"`
+			HideGame           *struct {
 				AppID  int  `json:"appId"`
 				Hidden bool `json:"hidden"`
 			} `json:"hideGame"`
@@ -362,6 +364,9 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.SteamPresence != nil {
 			s.cfg.SteamPresence = *body.SteamPresence
+		}
+		if body.SplitcraftPresence != nil {
+			s.cfg.SplitcraftPresence = *body.SplitcraftPresence
 		}
 		if body.AutoStart != nil {
 			// The OS artifact is the real switch; the flag only survives when
@@ -388,16 +393,17 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	out := map[string]any{
-		"delaySec":      s.cfg.DelaySec,
-		"pollMs":        s.cfg.PollMs,
-		"endpoint":      s.cfg.Endpoint,
-		"animePresence": s.cfg.AnimePresence,
-		"steamPresence": s.cfg.SteamPresence,
-		"autoStart":     s.cfg.AutoStart,
-		"startHidden":   s.cfg.StartHidden,
-		"hideOnGame":    s.cfg.HideOnGame,
-		"seenGames":     s.cfg.SeenGames,
-		"hiddenGames":   s.cfg.HiddenGames,
+		"delaySec":           s.cfg.DelaySec,
+		"pollMs":             s.cfg.PollMs,
+		"endpoint":           s.cfg.Endpoint,
+		"animePresence":      s.cfg.AnimePresence,
+		"steamPresence":      s.cfg.SteamPresence,
+		"splitcraftPresence": s.cfg.SplitcraftPresence,
+		"autoStart":          s.cfg.AutoStart,
+		"startHidden":        s.cfg.StartHidden,
+		"hideOnGame":         s.cfg.HideOnGame,
+		"seenGames":          s.cfg.SeenGames,
+		"hiddenGames":        s.cfg.HiddenGames,
 	}
 	s.mu.Unlock()
 	writeJSON(w, out)
