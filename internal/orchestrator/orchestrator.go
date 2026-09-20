@@ -852,10 +852,13 @@ func (o *Orchestrator) tick() {
 	// detection and the push. One read covers both, refreshed every 10s.
 	if (cfg.SplitcraftPresence || cfg.AnimePresence) && cfg.Token != "" && uid != "" {
 		m := o.readMirrors(cfg.Endpoint, uid)
+		// A mirror exists only for Discord, so Discord being closed is not a
+		// problem to alarm about (the game branches ignore it too): the status
+		// line says so and the app stays green.
 		if cfg.SplitcraftPresence && m.splitOK {
 			st := Status{Game: "splitcraft", InGame: true, Detail: splitcraftDetail(m.split), Pushes: o.pushes, Delay: effDelay}
 			if err := o.presence(orGlow(appSplitcraft), splitcraftActivity(m.split, uname)); err != nil {
-				st.Err = "Discord: " + err.Error()
+				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)
 			return
@@ -863,7 +866,7 @@ func (o *Orchestrator) tick() {
 		if cfg.AnimePresence && m.animeOK {
 			st := Status{Game: "anime", InGame: true, Detail: animeDetail(m.anime), Pushes: o.pushes, Delay: effDelay}
 			if err := o.presence(orGlow(""), animeActivity(m.anime, uname)); err != nil {
-				st.Err = "Discord: " + err.Error()
+				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)
 			return
