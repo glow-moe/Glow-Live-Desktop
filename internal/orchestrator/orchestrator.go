@@ -325,13 +325,13 @@ func isMCName(n string) bool {
 // answers with a plain PNG). The SplitCraft mark when there is nothing to
 // render (Bedrock players, or an odd name).
 func splitcraftSkin(s splitSnap) string {
-	if s.Platform == "bedrock" {
-		return splitcraftImage
-	}
+	// A Floodgate uuid works too: splitcraft.net resolves Bedrock skins via
+	// Geyser. Without a uuid a Bedrock name (prefixed, may hold spaces) has no
+	// render, so it falls through to the mark.
 	if id := plainID(s.UUID); id != "" {
 		return "https://splitcraft.net/api/skin/" + id + ".png?size=256"
 	}
-	if isMCName(s.Name) {
+	if s.Platform != "bedrock" && isMCName(s.Name) {
 		return "https://splitcraft.net/api/skin/" + s.Name + ".png?size=256"
 	}
 	return splitcraftImage

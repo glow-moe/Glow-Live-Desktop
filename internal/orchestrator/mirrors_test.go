@@ -128,9 +128,14 @@ func TestSplitcraftActivityText(t *testing.T) {
 	if img := splitcraftSkin(s); img != "https://splitcraft.net/api/skin/cd0967dab1984c8bbcf3f73172c7bd78.png?size=256" {
 		t.Fatalf("skin by uuid = %q", img)
 	}
+	// Bedrock with a Floodgate uuid still renders (splitcraft.net asks Geyser);
+	// without a uuid the prefixed Bedrock name never reaches a URL.
 	s.Platform = "bedrock"
-	if img := splitcraftSkin(s); img != splitcraftImage {
-		t.Fatalf("bedrock skin = %q", img)
+	if img := splitcraftSkin(s); img != "https://splitcraft.net/api/skin/cd0967dab1984c8bbcf3f73172c7bd78.png?size=256" {
+		t.Fatalf("bedrock skin by uuid = %q", img)
+	}
+	if img := splitcraftSkin(splitSnap{Name: "Melocet", Platform: "bedrock"}); img != splitcraftImage {
+		t.Fatalf("bedrock skin without uuid = %q", img)
 	}
 	if img := splitcraftSkin(splitSnap{Name: "not a name!"}); img != splitcraftImage {
 		t.Fatalf("odd name must not reach a URL: %q", img)
