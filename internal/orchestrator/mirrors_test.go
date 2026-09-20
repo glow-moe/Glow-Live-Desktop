@@ -149,3 +149,16 @@ func TestSplitcraftActivityText(t *testing.T) {
 		t.Fatalf("empty detail = %q", d)
 	}
 }
+
+// Every server rank reads as its badge, including ones added after this build.
+func TestSplitcraftGroupLabels(t *testing.T) {
+	cases := map[string]string{
+		"": "", "vip": "VIP", "vipplus": "VIP+", "mvp": "MVP", "mvpplus": "MVP+", "MVP+": "MVP+",
+		"insane": "INSANE", "hardcore": "HARDCORE", "glowplus": "Glow+", "legend_plus": "LEGEND+",
+	}
+	for in, want := range cases {
+		if got := splitcraftGroup(in); got != want {
+			t.Errorf("splitcraftGroup(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

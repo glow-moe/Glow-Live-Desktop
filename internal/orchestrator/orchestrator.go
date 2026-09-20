@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -216,17 +217,27 @@ func animeActivity(a animeSnap, username string) discord.Activity {
 // splitcraftGroup turns the plugin's LuckPerms group slug into the badge the
 // server shows in chat. Unknown groups pass through as they are.
 func splitcraftGroup(group string) string {
-	switch group {
-	case "mvp":
-		return "MVP"
-	case "vipplus":
-		return "VIP+"
-	case "glowplus":
-		return "Glow+"
-	case "vip":
-		return "VIP"
+	if group == "" {
+		return ""
 	}
-	return group
+	if group == "glowplus" {
+		return "Glow+"
+	}
+	// Server ranks read as shouted slugs: vip, vipplus, mvp, mvpplus, insane,
+	// hardcore ... "plus" becomes the sign, the rest goes upper case, so a rank
+	// the server adds later needs no app update.
+	g := strings.ToLower(group)
+	plus := ""
+	if strings.HasSuffix(g, "plus") {
+		g, plus = strings.TrimSuffix(g, "plus"), "+"
+	} else if strings.HasSuffix(g, "+") {
+		g, plus = strings.TrimSuffix(g, "+"), "+"
+	}
+	g = strings.Trim(g, "_- ")
+	if g == "" {
+		return ""
+	}
+	return strings.ToUpper(g) + plus
 }
 
 // splitcraftWorld names a Minecraft world the way players say it.
