@@ -399,7 +399,8 @@ func Build(d *live.AllGameData, patch string, now int64) Snapshot {
 			p.SummonerName == d.ActivePlayer.SummonerName
 	}
 
-	var blue, red []Player
+	// Empty teams (Practice Tool, a lobby with no enemies) go out as [], not null.
+	blue, red := []Player{}, []Player{}
 	var selfChampKey, selfTeam string
 	// Events refer to players by their in-game name, which is riotIdGameName for
 	// humans but "<Champ> Bot" for bots - index both so team lookup always hits.
@@ -643,8 +644,8 @@ const maxFeed = 120
 
 func mapFeed(d *live.AllGameData, selfName, selfTeam string, teamOf map[string]string) []FeedEvent {
 	evs := d.Events.Events
-	var out []FeedEvent
-	// newest first, cap at 8
+	out := []FeedEvent{} // an empty feed goes out as [], not null
+	// newest first, cap at maxFeed
 	for i := len(evs) - 1; i >= 0 && len(out) < maxFeed; i-- {
 		if fe, ok := feedLine(evs[i], selfName, selfTeam, teamOf); ok {
 			out = append(out, fe)
