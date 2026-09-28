@@ -100,6 +100,13 @@ type splitSnap struct {
 		Name   string `json:"name"`
 		Online int    `json:"online"`
 	} `json:"server"`
+	// Display is what glow.moe names the world and rank, from the
+	// splitcraft.net manifest. When present it wins over the names built into
+	// this app, so a rename on the server needs no app update.
+	Display struct {
+		World string `json:"world"`
+		Rank  string `json:"rank"`
+	} `json:"display"`
 }
 
 // mirrors is what the other glow sources say this profile is doing right now.
@@ -329,12 +336,21 @@ func splitcraftWorld(world string) string {
 }
 
 // splitcraftState is the second Rich Presence line: where and as what rank.
+// glow's display names come first; the built-in ones cover an older glow or a
+// missing manifest.
 func splitcraftState(s splitSnap) string {
-	state := splitcraftWorld(s.World)
+	state := s.Display.World
+	if state == "" {
+		state = splitcraftWorld(s.World)
+	}
 	if s.AFK {
 		state = "AFK" // where they are matters less than that they stepped away
 	}
-	if g := splitcraftGroup(s.Group); g != "" {
+	g := s.Display.Rank
+	if g == "" {
+		g = splitcraftGroup(s.Group)
+	}
+	if g != "" {
 		if state != "" {
 			state += " · "
 		}

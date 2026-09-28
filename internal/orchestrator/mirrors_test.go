@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -223,5 +224,35 @@ func TestSplitcraftWorldLabels(t *testing.T) {
 	// AFK still wins over the place.
 	if st := splitcraftState(splitSnap{World: "Base Build · mansion · Human", AFK: true, Group: "mvp"}); st != "AFK · Galaxy" {
 		t.Errorf("afk state = %q", st)
+	}
+}
+
+// glow's display names (from the splitcraft.net manifest) win over the
+// built-in ones; either half missing falls back on its own.
+func TestSplitcraftDisplayNames(t *testing.T) {
+	s := splitSnap{World: "s3_world", Group: "vip"}
+	s.Display.World, s.Display.Rank = "Aurora", "Comet"
+	if st := splitcraftState(s); st != "Aurora · Comet" {
+		t.Errorf("display state = %q", st)
+	}
+	s.Display.Rank = ""
+	if st := splitcraftState(s); st != "Aurora · Star" {
+		t.Errorf("rank fallback = %q", st)
+	}
+	s.Display.World, s.Display.Rank = "", "Comet"
+	if st := splitcraftState(s); st != "s3 world · Comet" {
+		t.Errorf("world fallback = %q", st)
+	}
+	s.AFK = true
+	if st := splitcraftState(s); st != "AFK · Comet" {
+		t.Errorf("afk with display = %q", st)
+	}
+	// The read endpoint's JSON shape decodes into it.
+	var d splitSnap
+	if err := json.Unmarshal([]byte(`{"world":"s2_world","group":"vipplus","display":{"world":"Celestia","rank":"Nebula"}}`), &d); err != nil {
+		t.Fatal(err)
+	}
+	if d.Display.World != "Celestia" || d.Display.Rank != "Nebula" {
+		t.Errorf("decoded display = %+v", d.Display)
 	}
 }
