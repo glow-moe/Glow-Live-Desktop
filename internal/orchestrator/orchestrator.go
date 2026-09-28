@@ -99,6 +99,7 @@ type splitSnap struct {
 	Server           struct {
 		Name   string `json:"name"`
 		Online int    `json:"online"`
+		Max    int    `json:"max"` // player slots, when the server sends them
 	} `json:"server"`
 	// Display is what glow.moe names the world and rank, from the
 	// splitcraft.net manifest. When present it wins over the names built into
@@ -463,6 +464,18 @@ func joinDots(parts ...string) string {
 	return strings.Join(kept, " · ")
 }
 
+// splitcraftOnline is the crowd line: "12/50 online" when the server sends its
+// slot count, "12 online" otherwise, nothing on an empty server.
+func splitcraftOnline(s splitSnap) string {
+	if s.Server.Online <= 0 {
+		return ""
+	}
+	if s.Server.Max > 0 {
+		return fmt.Sprintf("%d/%d online", s.Server.Online, s.Server.Max)
+	}
+	return fmt.Sprintf("%d online", s.Server.Online)
+}
+
 // splitcraftActivity builds the Discord Rich Presence for a SplitCraft session.
 // Under the SplitCraft Discord app the headline already reads "Playing
 // SplitCraft", so the two lines carry where you are and how busy the server is;
@@ -472,10 +485,7 @@ func splitcraftActivity(s splitSnap, username string) discord.Activity {
 	if server == "" {
 		server = "SplitCraft"
 	}
-	online := ""
-	if s.Server.Online > 0 {
-		online = fmt.Sprintf("%d online", s.Server.Online)
-	}
+	online := splitcraftOnline(s)
 	device := "on " + splitcraftDevice(s)
 	// Dedicated app: "Playing SplitCraft" is the headline, so line one is where
 	// and as what, line two is the device and the crowd. Shared glow app: line

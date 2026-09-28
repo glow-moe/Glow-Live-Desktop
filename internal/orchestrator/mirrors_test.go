@@ -256,3 +256,24 @@ func TestSplitcraftDisplayNames(t *testing.T) {
 		t.Errorf("decoded display = %+v", d.Display)
 	}
 }
+
+// The crowd line: slots when the server sends them, nothing on an empty server.
+func TestSplitcraftOnline(t *testing.T) {
+	var s splitSnap
+	if got := splitcraftOnline(s); got != "" {
+		t.Errorf("empty server = %q", got)
+	}
+	s.Server.Online = 12
+	if got := splitcraftOnline(s); got != "12 online" {
+		t.Errorf("no max = %q", got)
+	}
+	s.Server.Max = 50
+	if got := splitcraftOnline(s); got != "12/50 online" {
+		t.Errorf("with max = %q", got)
+	}
+	appSplitcraft = "123"
+	defer func() { appSplitcraft = "" }()
+	if a := splitcraftActivity(s, ""); a.State != "on Java · 12/50 online" {
+		t.Errorf("state = %q", a.State)
+	}
+}
