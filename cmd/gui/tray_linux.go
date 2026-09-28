@@ -23,7 +23,19 @@ typedef void  (*glow_ai_icon_t)(void*, const char*, const char*);
 extern void glowTrayOpen();
 extern void glowTrayQuit();
 extern void glowTrayProfile();
+extern void glowTrayHideHour();
+extern void glowTrayHideGame();
+extern void glowTrayShowDiscord();
 static void glow_on_profile(GtkMenuItem *item, gpointer data) { glowTrayProfile(); }
+static void glow_on_hide_hour(GtkMenuItem *item, gpointer data) { glowTrayHideHour(); }
+static void glow_on_hide_game(GtkMenuItem *item, gpointer data) { glowTrayHideGame(); }
+static void glow_on_show_dc(GtkMenuItem *item, gpointer data) { glowTrayShowDiscord(); }
+
+// The Discord hide items: both "hide" items while shown, "show again" while
+// hidden (swapped in glow_tray_update).
+static GtkWidget *g_hide_hour_item = NULL;
+static GtkWidget *g_hide_game_item = NULL;
+static GtkWidget *g_show_dc_item = NULL;
 
 // Kept for glow_tray_update: the indicator, its icon setter and the two items
 // that change (status line, profile).
@@ -55,16 +67,28 @@ static int glow_tray_init(const char *icon_dir) {
     g_profile_item = gtk_menu_item_new_with_label("Open my profile");
     gtk_widget_set_sensitive(g_profile_item, FALSE);
     GtkWidget *quit = gtk_menu_item_new_with_label("Quit");
+    g_hide_hour_item = gtk_menu_item_new_with_label("Hide on Discord for 1 hour");
+    g_hide_game_item = gtk_menu_item_new_with_label("Hide on Discord until I leave this game");
+    g_show_dc_item = gtk_menu_item_new_with_label("Show on Discord again");
+    gtk_widget_set_sensitive(g_hide_game_item, FALSE);
     g_signal_connect(open, "activate", G_CALLBACK(glow_on_open), NULL);
     g_signal_connect(g_profile_item, "activate", G_CALLBACK(glow_on_profile), NULL);
+    g_signal_connect(g_hide_hour_item, "activate", G_CALLBACK(glow_on_hide_hour), NULL);
+    g_signal_connect(g_hide_game_item, "activate", G_CALLBACK(glow_on_hide_game), NULL);
+    g_signal_connect(g_show_dc_item, "activate", G_CALLBACK(glow_on_show_dc), NULL);
     g_signal_connect(quit, "activate", G_CALLBACK(glow_on_quit), NULL);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), g_status_item);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), open);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), g_profile_item);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), g_hide_hour_item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), g_hide_game_item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), g_show_dc_item);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), quit);
     gtk_widget_show_all(menu);
+    gtk_widget_hide(g_show_dc_item);
 
     // 0 = APPLICATION_STATUS, 1 = ACTIVE.
     void *ind = ai_new("glow-live", "glow-live", 0, icon_dir);
@@ -78,9 +102,15 @@ static int glow_tray_init(const char *icon_dir) {
 // glow_tray_update sets the status line, the profile item and swaps the icon
 // between glow-live and glow-live-alert (both PNGs live in icon_dir). Runs on
 // the GTK thread.
-static void glow_tray_update(const char *line, int alert, int hasProfile) {
+static void glow_tray_update(const char *line, int alert, int hasProfile, int dcHidden, int inGame) {
     if (g_status_item) gtk_menu_item_set_label(GTK_MENU_ITEM(g_status_item), line);
     if (g_profile_item) gtk_widget_set_sensitive(g_profile_item, hasProfile ? TRUE : FALSE);
+    if (g_hide_hour_item && g_hide_game_item && g_show_dc_item) {
+        gtk_widget_set_visible(g_hide_hour_item, dcHidden ? FALSE : TRUE);
+        gtk_widget_set_visible(g_hide_game_item, dcHidden ? FALSE : TRUE);
+        gtk_widget_set_visible(g_show_dc_item, dcHidden ? TRUE : FALSE);
+        gtk_widget_set_sensitive(g_hide_game_item, inGame ? TRUE : FALSE);
+    }
     if (g_ind && g_ai_icon && alert != g_alert) {
         g_ai_icon(g_ind, alert ? "glow-live-alert" : "glow-live", "glow L!VE");
         g_alert = alert;
@@ -195,18 +225,17 @@ func iconDir() (string, error) {
 
 // trayUpdate pushes the status line, profile availability and alert state to
 // the indicator. Runs on the GTK thread (see watchTray).
-func trayUpdate(line string, alert bool, hasProfile bool) {
+func trayUpdate(line string, alert, hasProfile, dcHidden, inGame bool) {
 	if !trayUp {
 		return
 	}
 	cl := C.CString(line)
 	defer C.free(unsafe.Pointer(cl))
-	a, p := 0, 0
-	if alert {
-		a = 1
+	b := func(v bool) C.int {
+		if v {
+			return 1
+		}
+		return 0
 	}
-	if hasProfile {
-		p = 1
-	}
-	C.glow_tray_update(cl, C.int(a), C.int(p))
+	C.glow_tray_update(cl, b(alert), b(hasProfile), b(dcHidden), b(inGame))
 }

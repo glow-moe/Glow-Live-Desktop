@@ -13,13 +13,23 @@ package main
 #define GLOW_ID_QUIT    0xF002
 #define GLOW_ID_PROFILE 0xF003
 #define GLOW_ID_STATUS  0xF004
+#define GLOW_ID_HIDE_HOUR 0xF005
+#define GLOW_ID_HIDE_GAME 0xF006
+#define GLOW_ID_SHOW_DC   0xF007
 
 extern void glowTrayProfile();
+extern void glowTrayHideHour();
+extern void glowTrayHideGame();
+extern void glowTrayShowDiscord();
 
 // Tray status line (menu + tooltip) and whether the alert icon is showing.
 static wchar_t g_status[128] = L"glow L!VE";
 static int g_alert = 0;
 static int g_hasProfile = 0;
+// Discord hide state for the menu: hidden now, and a game running (the
+// "until I leave this game" item needs one).
+static int g_dcHidden = 0;
+static int g_inGame = 0;
 static HWND g_trayHwnd = NULL;
 
 // Original webview window procedure, so unhandled messages still reach it.
@@ -176,6 +186,13 @@ static LRESULT CALLBACK glow_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
             AppendMenuW(menu, MF_STRING, GLOW_ID_OPEN, L"Open glow L!VE");
             AppendMenuW(menu, MF_STRING | (g_hasProfile ? 0 : MF_GRAYED), GLOW_ID_PROFILE, L"Open my profile");
             AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
+            if (g_dcHidden) {
+                AppendMenuW(menu, MF_STRING, GLOW_ID_SHOW_DC, L"Show on Discord again");
+            } else {
+                AppendMenuW(menu, MF_STRING, GLOW_ID_HIDE_HOUR, L"Hide on Discord for 1 hour");
+                AppendMenuW(menu, MF_STRING | (g_inGame ? 0 : MF_GRAYED), GLOW_ID_HIDE_GAME, L"Hide on Discord until I leave this game");
+            }
+            AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
             AppendMenuW(menu, MF_STRING, GLOW_ID_QUIT, L"Quit");
             // Required so the menu dismisses on click-away.
             SetForegroundWindow(hwnd);
@@ -194,6 +211,21 @@ static LRESULT CALLBACK glow_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
             glowTrayProfile();
             return 0;
         }
+        if (LOWORD(wp) == GLOW_ID_HIDE_HOUR) {
+            g_dcHidden = 1; // the menu flips now; the next status refresh confirms
+            glowTrayHideHour();
+            return 0;
+        }
+        if (LOWORD(wp) == GLOW_ID_HIDE_GAME) {
+            g_dcHidden = 1;
+            glowTrayHideGame();
+            return 0;
+        }
+        if (LOWORD(wp) == GLOW_ID_SHOW_DC) {
+            g_dcHidden = 0;
+            glowTrayShowDiscord();
+            return 0;
+        }
         if (LOWORD(wp) == GLOW_ID_QUIT) {
             glow_del_tray(hwnd);
             DestroyWindow(hwnd); // real close: skips WM_CLOSE, ends the loop
@@ -209,10 +241,12 @@ static LRESULT CALLBACK glow_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
 
 // glow_tray_update sets the status line (menu + tooltip), the profile item's
 // availability and the alert icon. Called on the GUI thread.
-static void glow_tray_update(const wchar_t *line, int alert, int hasProfile) {
+static void glow_tray_update(const wchar_t *line, int alert, int hasProfile, int dcHidden, int inGame) {
     lstrcpynW(g_status, line, 128);
     g_alert = alert;
     g_hasProfile = hasProfile;
+    g_dcHidden = dcHidden;
+    g_inGame = inGame;
     if (!g_trayHwnd) return;
     NOTIFYICONDATAW nid;
     glow_fill(&nid, g_trayHwnd);
@@ -292,17 +326,16 @@ func showWindow(win unsafe.Pointer) {
 
 // trayUpdate pushes the status line, tooltip and alert state to the tray.
 // Runs on the GUI thread (see watchTray).
-func trayUpdate(line string, alert bool, hasProfile bool) {
+func trayUpdate(line string, alert, hasProfile, dcHidden, inGame bool) {
 	w, err := syscall.UTF16PtrFromString("glow L!VE · " + line)
 	if err != nil {
 		return
 	}
-	a, p := 0, 0
-	if alert {
-		a = 1
+	b := func(v bool) C.int {
+		if v {
+			return 1
+		}
+		return 0
 	}
-	if hasProfile {
-		p = 1
-	}
-	C.glow_tray_update((*C.wchar_t)(unsafe.Pointer(w)), C.int(a), C.int(p))
+	C.glow_tray_update((*C.wchar_t)(unsafe.Pointer(w)), b(alert), b(hasProfile), b(dcHidden), b(inGame))
 }

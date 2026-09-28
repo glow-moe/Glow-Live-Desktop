@@ -76,6 +76,16 @@ func (s *Server) TrayInfo() TrayInfo {
 	return TrayInfo{Running: s.orch.Running(), Linked: linked, Username: name, ProfileURL: url, UpdateVer: upd, Status: s.orch.Status()}
 }
 
+// HideOnDiscord, HideOnDiscordForGame and ShowOnDiscord are the tray menu's
+// Discord items: the profile keeps updating, only the Rich Presence goes away.
+func (s *Server) HideOnDiscord(d time.Duration) { s.orch.HideOnDiscord(d) }
+
+// HideOnDiscordForGame hides until the running game ends; false with no game.
+func (s *Server) HideOnDiscordForGame() bool { return s.orch.HideOnDiscordForGame() }
+
+// ShowOnDiscord ends a hide early.
+func (s *Server) ShowOnDiscord() { s.orch.ShowOnDiscord() }
+
 // SetHideToTray registers the callback that parks the window in the system tray
 // (wired by main to the native window). Called once the collector starts pushing
 // so the widget auto-tucks away instead of sitting open on screen.

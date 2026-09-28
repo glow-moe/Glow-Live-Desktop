@@ -12,4 +12,4 @@ func enableCloseToTray(win unsafe.Pointer) {}
 func hideToTray(win unsafe.Pointer) {}
 
 // trayUpdate is a no-op where there is no tray.
-func trayUpdate(line string, alert bool, hasProfile bool) {}
+func trayUpdate(line string, alert, hasProfile, dcHidden, inGame bool) {}

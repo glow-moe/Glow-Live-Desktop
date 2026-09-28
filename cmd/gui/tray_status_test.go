@@ -29,6 +29,11 @@ func TestTrayLine(t *testing.T) {
 		{"anime mirrored", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{Game: "anime", InGame: true}}, "Live · on Discord", false},
 		{"idle after push", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{LastPushAt: ms(40 * time.Second)}}, "Watching · last push 40s ago", false},
 		{"idle never", gui.TrayInfo{Linked: true, Running: true}, "Watching for a game", false},
+		// Hidden on Discord from the tray: says so and how long, never an alert.
+		{"hidden for an hour", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{InGame: true, DiscordHidden: true, DiscordHiddenUntil: now.Add(42 * time.Minute).UnixMilli()}}, "Hidden on Discord · 42m left", false},
+		{"hidden for the game", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{InGame: true, DiscordHidden: true}}, "Hidden on Discord until this game ends", false},
+		// A real problem still wins over the hide note.
+		{"hidden with an error", gui.TrayInfo{Linked: true, Running: true, Status: orchestrator.Status{Err: "boom", DiscordHidden: true}}, "Problem: boom", true},
 	}
 	for _, c := range cases {
 		got, alert := trayLine(c.info, now)

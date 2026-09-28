@@ -13,3 +13,16 @@ import "C"
 func glowTrayProfile() {
 	openProfile()
 }
+
+// glowTrayHideHour, glowTrayHideGame and glowTrayShowDiscord are the Discord
+// hide items. They only flip state in the orchestrator, so calling them from
+// the window procedure is fine.
+//
+//export glowTrayHideHour
+func glowTrayHideHour() { trayHideHour() }
+
+//export glowTrayHideGame
+func glowTrayHideGame() { trayHideGame() }
+
+//export glowTrayShowDiscord
+func glowTrayShowDiscord() { trayShowDiscord() }

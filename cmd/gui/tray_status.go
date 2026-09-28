@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/glow-moe/glow-collector/internal/gui"
+	"github.com/glow-moe/glow-collector/internal/orchestrator"
 )
 
 // The tray shows a one-line status (menu + tooltip) and flips to the alert
@@ -16,8 +17,47 @@ import (
 
 var (
 	trayMu      sync.Mutex
-	trayProfile string // URL the "Open my profile" item opens
+	trayProfile string      // URL the "Open my profile" item opens
+	traySrv     *gui.Server // for the Discord hide items
 )
+
+// The tray menu's Discord items. The profile on glow.moe keeps updating; only
+// the Rich Presence is taken down.
+func trayHideHour() {
+	if s := trayServer(); s != nil {
+		s.HideOnDiscord(time.Hour)
+	}
+}
+
+func trayHideGame() {
+	if s := trayServer(); s != nil {
+		s.HideOnDiscordForGame()
+	}
+}
+
+func trayShowDiscord() {
+	if s := trayServer(); s != nil {
+		s.ShowOnDiscord()
+	}
+}
+
+func trayServer() *gui.Server {
+	trayMu.Lock()
+	defer trayMu.Unlock()
+	return traySrv
+}
+
+// hiddenLine is the status line while Discord is hidden from the tray.
+func hiddenLine(st orchestrator.Status, now time.Time) string {
+	if st.DiscordHiddenUntil == 0 {
+		return "Hidden on Discord until this game ends"
+	}
+	left := time.UnixMilli(st.DiscordHiddenUntil).Sub(now)
+	if left < time.Minute {
+		return "Hidden on Discord · back in a moment"
+	}
+	return fmt.Sprintf("Hidden on Discord · %dm left", int(left.Minutes()+0.5))
+}
 
 // trayLine renders the status line and whether the icon should alert.
 func trayLine(info gui.TrayInfo, now time.Time) (line string, alert bool) {
@@ -34,6 +74,8 @@ func trayLine(info gui.TrayInfo, now time.Time) (line string, alert bool) {
 	case info.UpdateVer != "":
 		// A newer release is out but this one still works: nudge, no alert.
 		return "Update available (" + info.UpdateVer + ") · open the app", false
+	case st.DiscordHidden:
+		return hiddenLine(st, now), false
 	}
 	// Mirrored sources (anime from the browser extension, SplitCraft from the
 	// server plugin) are shown on Discord but never pushed from here, so the
@@ -81,9 +123,15 @@ func trim(s string, n int) string {
 // things. `apply` runs on the GUI thread (webview Dispatch) because both trays
 // are GUI-thread objects.
 func watchTray(srv *gui.Server, apply func(fn func())) {
+	trayMu.Lock()
+	traySrv = srv
+	trayMu.Unlock()
 	go func() {
-		var lastLine string
-		var lastAlert bool
+		type view struct {
+			line                  string
+			alert, hidden, inGame bool
+		}
+		var last view
 		first := true
 		t := time.NewTicker(3 * time.Second)
 		defer t.Stop()
@@ -93,11 +141,12 @@ func watchTray(srv *gui.Server, apply func(fn func())) {
 			trayProfile = info.ProfileURL
 			trayMu.Unlock()
 			line, alert := trayLine(info, time.Now())
-			if !first && line == lastLine && alert == lastAlert {
+			v := view{line, alert, info.Status.DiscordHidden, info.Status.InGame}
+			if !first && v == last {
 				continue
 			}
-			first, lastLine, lastAlert = false, line, alert
-			apply(func() { trayUpdate(line, alert, info.ProfileURL != "") })
+			first, last = false, v
+			apply(func() { trayUpdate(v.line, v.alert, info.ProfileURL != "", v.hidden, v.inGame) })
 		}
 	}()
 }

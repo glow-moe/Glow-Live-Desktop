@@ -564,6 +564,10 @@ type Status struct {
 	// client APIs don't work under Wine, so the Linux build never looks for it
 	// and the UI hides the chip.
 	League bool `json:"league"`
+	// Hide on Discord: on, and until when (unix ms; 0 while on means "until
+	// this game ends").
+	DiscordHidden      bool  `json:"discordHidden"`
+	DiscordHiddenUntil int64 `json:"discordHiddenUntil"`
 }
 
 // delayed is a snapshot waiting out the stream-snipe delay.
@@ -645,6 +649,10 @@ type Orchestrator struct {
 	// the overlay + status instead of blanking them for a tick.
 	lobbyAt    time.Time
 	lobbyLabel string
+	// Hide on Discord (tray menu): until a moment, or until the game it was
+	// turned on in ends. The profile keeps updating; only Discord goes quiet.
+	dcHideUntil time.Time
+	dcHideGame  string
 }
 
 // New builds an orchestrator from the saved config.
@@ -705,7 +713,62 @@ func (o *Orchestrator) SetConfig(cfg config.Config) {
 func (o *Orchestrator) Status() Status {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return o.status
+	s := o.status
+	s.DiscordHidden = o.discordHiddenLocked(time.Now())
+	if s.DiscordHidden && !o.dcHideUntil.IsZero() {
+		s.DiscordHiddenUntil = o.dcHideUntil.UnixMilli()
+	}
+	return s
+}
+
+// HideOnDiscord takes the Rich Presence down for d. glow.moe keeps getting
+// the game; only Discord stops showing it.
+func (o *Orchestrator) HideOnDiscord(d time.Duration) {
+	o.mu.Lock()
+	o.dcHideUntil, o.dcHideGame = time.Now().Add(d), ""
+	o.mu.Unlock()
+	o.clearPresence()
+}
+
+// HideOnDiscordForGame hides the Rich Presence until the game running now
+// ends; false (and nothing changes) when no game is on.
+func (o *Orchestrator) HideOnDiscordForGame() bool {
+	o.mu.Lock()
+	if !o.status.InGame || o.status.Game == "" {
+		o.mu.Unlock()
+		return false
+	}
+	o.dcHideGame, o.dcHideUntil = o.status.Game, time.Time{}
+	o.mu.Unlock()
+	o.clearPresence()
+	return true
+}
+
+// ShowOnDiscord ends a hide early; the next tick publishes again.
+func (o *Orchestrator) ShowOnDiscord() {
+	o.mu.Lock()
+	o.dcHideUntil, o.dcHideGame = time.Time{}, ""
+	o.lastPresence = time.Time{} // skip the 5s throttle so it comes back at once
+	o.mu.Unlock()
+}
+
+// discordHiddenLocked reports whether Discord is hidden right now, dropping a
+// hide whose time ran out or whose game ended. Call with o.mu held.
+func (o *Orchestrator) discordHiddenLocked(now time.Time) bool {
+	if o.dcHideGame != "" {
+		if o.status.InGame && o.status.Game == o.dcHideGame {
+			return true
+		}
+		o.dcHideGame = ""
+		return false
+	}
+	if !o.dcHideUntil.IsZero() {
+		if now.Before(o.dcHideUntil) {
+			return true
+		}
+		o.dcHideUntil = time.Time{}
+	}
+	return false
 }
 
 // Running reports whether the loop is active.
@@ -1203,6 +1266,12 @@ func (o *Orchestrator) useApp(appID string) (*discord.Client, error) {
 // its images, timestamps and buttons.
 func (o *Orchestrator) presence(appID string, a discord.Activity) error {
 	o.mu.Lock()
+	if o.discordHiddenLocked(time.Now()) {
+		// Hidden from the tray: keep Discord empty, report no problem.
+		o.mu.Unlock()
+		o.clearPresence()
+		return nil
+	}
 	throttled := time.Since(o.lastPresence) < 5*time.Second && o.dcApp == appID
 	// A connect that just failed (Discord closed) is not retried on every 1.5s
 	// tick either: the pipe probe is ten CreateFile calls.
