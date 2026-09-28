@@ -61,3 +61,26 @@ func Post(endpoint, token string, delaySec int, snap any) error {
 // Version is the build label reported to the server (see SetVersion). Every
 // request the server gates on release must carry it, not just the push.
 func Version() string { return version }
+
+// Report tells glow.moe about a failure this app hit (POST <base>/api/live/report)
+// so it shows on the site's ops page next to the member. Best effort: the answer
+// is not read and a failed report is dropped.
+func Report(base, token, kind, message, game, osName string) error {
+	body, err := json.Marshal(map[string]string{"kind": kind, "message": message, "game": game, "os": osName})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPost, base+"/api/live/report", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("X-Glow-Live-Version", version)
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
+}

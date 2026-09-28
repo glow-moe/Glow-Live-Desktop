@@ -653,6 +653,12 @@ type Orchestrator struct {
 	// turned on in ends. The profile keeps updating; only Discord goes quiet.
 	dcHideUntil time.Time
 	dcHideGame  string
+	// Error reports to glow.moe: the kind the failing step set (push), when
+	// each message was last sent (one per hour each) and the recent sends (a
+	// hard cap per hour, so a broken machine cannot flood the site).
+	errKind    string
+	reportedAt map[string]time.Time
+	reportLog  []time.Time
 }
 
 // New builds an orchestrator from the saved config.
@@ -1111,6 +1117,9 @@ func (o *Orchestrator) post(cfg config.Config, delaySec int, snap any, st *Statu
 			o.mu.Unlock()
 		} else {
 			st.Err = err.Error()
+			o.mu.Lock()
+			o.errKind = "push"
+			o.mu.Unlock()
 		}
 		return
 	}
@@ -1131,8 +1140,83 @@ func (o *Orchestrator) set(s Status) {
 	s.Outdated = o.outdated
 	s.League = leagueSupported
 	o.status = s
+	kind := o.errKind
+	o.errKind = ""
 	o.mu.Unlock()
+	o.reportErr(s, kind)
 	o.emit(s)
+}
+
+// Errors that are states, not failures: nothing to fix on our side.
+var quietErrors = []string{"not linked", "Update required"}
+
+const (
+	reportEvery    = time.Hour // same message at most once per hour
+	reportsPerHour = 10        // and never more than this many reports an hour
+)
+
+// reportErr sends a status error to glow.moe (once per message per hour,
+// capped per hour) so the site's ops page shows what broke on this machine.
+func (o *Orchestrator) reportErr(s Status, kind string) {
+	msg := s.Err
+	if msg == "" {
+		return
+	}
+	for _, q := range quietErrors {
+		if strings.HasPrefix(msg, q) {
+			return
+		}
+	}
+	if kind == "" {
+		kind = errorKind(msg, s.Game)
+	}
+	now := time.Now()
+	o.mu.Lock()
+	cfg := o.cfg
+	if last, ok := o.reportedAt[msg]; ok && now.Sub(last) < reportEvery {
+		o.mu.Unlock()
+		return
+	}
+	recent := o.reportLog[:0]
+	for _, t := range o.reportLog {
+		if now.Sub(t) < time.Hour {
+			recent = append(recent, t)
+		}
+	}
+	o.reportLog = recent
+	if len(recent) >= reportsPerHour || cfg.Token == "" {
+		o.mu.Unlock()
+		return
+	}
+	if o.reportedAt == nil {
+		o.reportedAt = map[string]time.Time{}
+	}
+	o.reportedAt[msg] = now
+	o.reportLog = append(o.reportLog, now)
+	o.mu.Unlock()
+	game := s.Game
+	if game == "league" {
+		game = "lol" // the site's game key
+	}
+	go func() { _ = poster.Report(pair.BaseFrom(cfg.Endpoint), cfg.Token, kind, msg, game, runtime.GOOS) }()
+}
+
+// errorKind sorts a status error into the ops page's buckets.
+func errorKind(msg, game string) string {
+	low := strings.ToLower(msg)
+	switch {
+	case strings.Contains(low, "discord"):
+		return "discord"
+	case game == "league" || strings.Contains(low, "league") || strings.Contains(low, "lcu"):
+		return "league"
+	case game == "forza":
+		return "forza"
+	case game == "steam":
+		return "steam"
+	case strings.Contains(low, "update"):
+		return "update"
+	}
+	return "other"
 }
 
 // LeagueSupported reports whether this build reads League of Legends at all
