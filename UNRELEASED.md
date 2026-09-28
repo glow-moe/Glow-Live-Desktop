@@ -9,3 +9,4 @@ and gets cleared.
 - Tray: "Hide on Discord for 1 hour" and "Hide on Discord until I leave this game", with "Show on Discord again" to undo. Your glow profile keeps updating while Discord stays quiet.
 - When something breaks (Discord, a push glow.moe refused, the League client), the app tells glow.moe so support can see what went wrong. It sends the error line, the app version and the game, nothing else, at most once an hour per error.
 - SplitCraft on Discord shows the crowd as "12/50 online" once the server shares its slot count, and nothing when the server is empty.
+- Steam: the built-in game table refreshed (19483 games) so new releases get their own "Playing <game>" headline offline too.
