@@ -107,6 +107,9 @@ type splitSnap struct {
 	Display struct {
 		World string `json:"world"`
 		Rank  string `json:"rank"`
+		// Logo is the SplitCraft image URL, versioned by glow.moe so a new
+		// image gets past Discord's URL cache without an app update.
+		Logo string `json:"logo"`
 	} `json:"display"`
 }
 
@@ -441,6 +444,15 @@ func splitcraftSkin(s splitSnap) string {
 	if s.Platform != "bedrock" && isMCName(s.Name) {
 		return "https://splitcraft.net/api/skin/" + s.Name + ".png?size=256"
 	}
+	return splitcraftLogo(s)
+}
+
+// splitcraftLogo is the SplitCraft image: the versioned URL glow.moe sends when
+// it does, the built-in one otherwise.
+func splitcraftLogo(s splitSnap) string {
+	if strings.HasPrefix(s.Display.Logo, "https://") && len(s.Display.Logo) <= 256 {
+		return s.Display.Logo
+	}
 	return splitcraftImage
 }
 
@@ -494,12 +506,12 @@ func splitcraftActivity(s splitSnap, username string) discord.Activity {
 	if appSplitcraft == "" {
 		details, state = "Playing on "+server, joinDots(splitcraftState(s), device)
 	}
-	skin := splitcraftSkin(s)
+	skin, logo := splitcraftSkin(s), splitcraftLogo(s)
 	assets := &discord.Assets{LargeImage: skin, LargeText: server, SmallImage: glowIcon, SmallText: "glow.moe"}
-	if skin != splitcraftImage {
+	if skin != logo {
 		// The big picture is the player, so the corner carries the server mark.
 		assets.LargeText = atLeast2(s.Name, server)
-		assets.SmallImage, assets.SmallText = splitcraftImage, server
+		assets.SmallImage, assets.SmallText = logo, server
 	}
 	// Discord drops the whole activity when a text field is a single character
 	// (a one-letter world name, a two-letter legacy name is fine).

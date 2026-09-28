@@ -277,3 +277,27 @@ func TestSplitcraftOnline(t *testing.T) {
 		t.Errorf("state = %q", a.State)
 	}
 }
+
+// glow's versioned logo URL wins for the corner image, so a new picture beats
+// Discord's URL cache; without it the built-in URL stays.
+func TestSplitcraftLogoFromDisplay(t *testing.T) {
+	s := splitSnap{Name: "Melocet"}
+	if a := splitcraftActivity(s, ""); a.Assets.SmallImage != splitcraftImage {
+		t.Errorf("built-in corner = %q", a.Assets.SmallImage)
+	}
+	s.Display.Logo = "https://glow.moe/games/splitcraft.png?v=2"
+	if a := splitcraftActivity(s, ""); a.Assets.SmallImage != s.Display.Logo || a.Assets.LargeImage == s.Display.Logo {
+		t.Errorf("display logo: large=%q small=%q", a.Assets.LargeImage, a.Assets.SmallImage)
+	}
+	// No skin to show (Bedrock without a uuid): the logo becomes the big picture.
+	b := splitSnap{Name: ".Steve", Platform: "bedrock"}
+	b.Display.Logo = s.Display.Logo
+	if a := splitcraftActivity(b, ""); a.Assets.LargeImage != b.Display.Logo || a.Assets.SmallImage != glowIcon {
+		t.Errorf("bedrock: large=%q small=%q", a.Assets.LargeImage, a.Assets.SmallImage)
+	}
+	// Anything but https is ignored.
+	s.Display.Logo = "http://evil.example/x.png"
+	if a := splitcraftActivity(s, ""); a.Assets.SmallImage != splitcraftImage {
+		t.Errorf("non-https logo used: %q", a.Assets.SmallImage)
+	}
+}
