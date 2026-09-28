@@ -215,6 +215,12 @@ func animeActivity(a animeSnap, username string) discord.Activity {
 	return act
 }
 
+// splitcraftRanks are the store ranks by their Season 2 names (the LuckPerms
+// slugs did not change when the ranks were renamed).
+var splitcraftRanks = map[string]string{
+	"vip": "Star", "vipplus": "Nebula", "vip+": "Nebula", "mvp": "Galaxy", "creator": "Creator",
+}
+
 // splitcraftGroup turns the plugin's LuckPerms group slug into the badge the
 // server shows in chat. Unknown groups pass through as they are.
 func splitcraftGroup(group string) string {
@@ -224,9 +230,12 @@ func splitcraftGroup(group string) string {
 	if group == "glowplus" {
 		return "Glow+"
 	}
-	// Server ranks read as shouted slugs: vip, vipplus, mvp, mvpplus, insane,
-	// hardcore ... "plus" becomes the sign, the rest goes upper case, so a rank
-	// the server adds later needs no app update.
+	if name, ok := splitcraftRanks[strings.ToLower(group)]; ok {
+		return name
+	}
+	// Any other rank reads as a shouted slug (insane, hardcore ...): "plus"
+	// becomes the sign, the rest goes upper case, so a rank the server adds
+	// later needs no app update.
 	g := strings.ToLower(group)
 	plus := ""
 	if strings.HasSuffix(g, "plus") {
@@ -244,17 +253,79 @@ func splitcraftGroup(group string) string {
 	return strings.ToUpper(g) + plus
 }
 
-// splitcraftWorld names a Minecraft world the way players say it.
-func splitcraftWorld(world string) string {
-	switch world {
-	case "world":
-		return "Overworld"
-	case "world_nether":
-		return "Nether"
-	case "world_the_end":
-		return "The End"
+// splitcraftBaseBuildRoles normalizes the side at the end of a Base Build line.
+var splitcraftBaseBuildRoles = map[string]string{
+	"lobby": "Lobby", "waiting": "waiting", "watching": "watching",
+	"human": "Human", "zombie": "Zombie", "alpha zombie": "Alpha zombie",
+}
+
+// splitcraftBaseBuild rebuilds a Base Build presence line ("Base Build ·
+// mansion · Zombie") with the map title-cased; ok is false for any other world.
+func splitcraftBaseBuild(world string) (string, bool) {
+	parts := strings.Split(world, "·")
+	if !strings.EqualFold(strings.TrimSpace(parts[0]), "base build") {
+		return "", false
 	}
-	return world
+	out := []string{"Base Build"}
+	rest := make([]string, 0, len(parts)-1)
+	for _, p := range parts[1:] {
+		if p = strings.TrimSpace(p); p != "" {
+			rest = append(rest, p)
+		}
+	}
+	role := ""
+	if n := len(rest); n > 0 {
+		if r, ok := splitcraftBaseBuildRoles[strings.ToLower(rest[n-1])]; ok {
+			role, rest = r, rest[:n-1]
+		}
+	}
+	for _, m := range rest {
+		out = append(out, titleWords(m))
+	}
+	if role != "" {
+		out = append(out, role)
+	}
+	return strings.Join(out, " · "), true
+}
+
+// titleWords capitalizes the first letter of every word ("sky_temple" reads
+// "Sky Temple").
+func titleWords(s string) string {
+	words := strings.Fields(strings.ReplaceAll(s, "_", " "))
+	for i, w := range words {
+		r := []rune(w)
+		words[i] = strings.ToUpper(string(r[0])) + string(r[1:])
+	}
+	return strings.Join(words, " ")
+}
+
+// splitcraftWorld names a world the way players say it: Floralia is Season 1,
+// Celestia Season 2, spawn_s2 the lobby island, Base Build lines keep their
+// map and side. Custom worlds keep their name.
+func splitcraftWorld(world string) string {
+	if line, ok := splitcraftBaseBuild(world); ok {
+		return line
+	}
+	w := strings.ToLower(strings.TrimSpace(world))
+	switch w {
+	case "world", "overworld":
+		return "Floralia"
+	case "world_nether", "nether":
+		return "Floralia · Nether"
+	case "s2_world":
+		return "Celestia"
+	case "s2_world_nether":
+		return "Celestia · Nether"
+	case "spawn_s2":
+		return "Lobby"
+	}
+	switch {
+	case strings.HasSuffix(w, "_the_end") || w == "the_end" || w == "end":
+		return "The End"
+	case strings.HasSuffix(w, "_nether"):
+		return "Nether"
+	}
+	return strings.ReplaceAll(world, "_", " ")
 }
 
 // splitcraftState is the second Rich Presence line: where and as what rank.

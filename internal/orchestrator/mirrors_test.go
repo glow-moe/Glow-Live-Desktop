@@ -99,7 +99,7 @@ func TestSplitcraftActivityText(t *testing.T) {
 	// Shared glow app: the first line has to name the server.
 	appSplitcraft = ""
 	a := splitcraftActivity(s, "melocet")
-	if a.Details != "Playing on SplitCraft" || a.State != "Nether · VIP+ · on Java" {
+	if a.Details != "Playing on SplitCraft" || a.State != "Floralia · Nether · Nebula · on Java" {
 		t.Fatalf("details=%q state=%q", a.Details, a.State)
 	}
 	if a.Timestamps == nil || a.Timestamps.Start != 1758300000000 {
@@ -116,7 +116,7 @@ func TestSplitcraftActivityText(t *testing.T) {
 	appSplitcraft = "123"
 	defer func() { appSplitcraft = "" }()
 	b := splitcraftActivity(s, "")
-	if b.Details != "Nether · VIP+" || b.State != "on Java · 12 online" {
+	if b.Details != "Floralia · Nether · Nebula" || b.State != "on Java · 12 online" {
 		t.Fatalf("dedicated app: details=%q state=%q", b.Details, b.State)
 	}
 	// The plugin's device wins over the edition; an unknown device falls back.
@@ -157,11 +157,11 @@ func TestSplitcraftActivityText(t *testing.T) {
 	}
 
 	s.Platform = "java" // back from the Bedrock skin case above
-	if d := splitcraftDetail(s); d != "SplitCraft · Nether · VIP+ · on Java" {
+	if d := splitcraftDetail(s); d != "SplitCraft · Floralia · Nether · Nebula · on Java" {
 		t.Fatalf("detail = %q", d)
 	}
 	s.AFK = true
-	if st := splitcraftState(s); st != "AFK · VIP+" {
+	if st := splitcraftState(s); st != "AFK · Nebula" {
 		t.Fatalf("afk state = %q", st)
 	}
 	s.AFK = false
@@ -171,15 +171,57 @@ func TestSplitcraftActivityText(t *testing.T) {
 	}
 }
 
-// Every server rank reads as its badge, including ones added after this build.
+// Store ranks read by their Season 2 names; any other rank still reads as its
+// badge, including ones added after this build.
 func TestSplitcraftGroupLabels(t *testing.T) {
 	cases := map[string]string{
-		"": "", "vip": "VIP", "vipplus": "VIP+", "mvp": "MVP", "mvpplus": "MVP+", "MVP+": "MVP+",
-		"insane": "INSANE", "hardcore": "HARDCORE", "glowplus": "Glow+", "GlowPlus": "Glow+", "glow_plus": "Glow+", "legend_plus": "LEGEND+",
+		"": "", "vip": "Star", "vipplus": "Nebula", "VIP+": "Nebula", "mvp": "Galaxy", "creator": "Creator",
+		"mvpplus": "MVP+", "insane": "INSANE", "hardcore": "HARDCORE", "glowplus": "Glow+", "GlowPlus": "Glow+", "glow_plus": "Glow+", "legend_plus": "LEGEND+",
 	}
 	for in, want := range cases {
 		if got := splitcraftGroup(in); got != want {
 			t.Errorf("splitcraftGroup(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// Both seasons' worlds, the lobby and every Base Build line read the way the
+// web page shows them; a custom world keeps its name.
+func TestSplitcraftWorldLabels(t *testing.T) {
+	cases := map[string]string{
+		"world":                                 "Floralia",
+		"world_nether":                          "Floralia · Nether",
+		"world_the_end":                         "The End",
+		"s2_world":                              "Celestia",
+		"s2_world_nether":                       "Celestia · Nether",
+		"spawn_s2":                              "Lobby",
+		"Base Build":                            "Base Build",
+		"Base Build · Lobby":                    "Base Build · Lobby",
+		"Base Build · mansion · waiting":        "Base Build · Mansion · waiting",
+		"Base Build · resort · watching":        "Base Build · Resort · watching",
+		"Base Build · World · Human":            "Base Build · World · Human",
+		"Base Build · orphanage · Zombie":       "Base Build · Orphanage · Zombie",
+		"Base Build · orphanage · Alpha zombie": "Base Build · Orphanage · Alpha zombie",
+		"sky_block":                             "sky block",
+		"resource_nether":                       "Nether",
+		"":                                      "",
+	}
+	for in, want := range cases {
+		if got := splitcraftWorld(in); got != want {
+			t.Errorf("splitcraftWorld(%q) = %q, want %q", in, got, want)
+		}
+	}
+	// The Discord lines read "Celestia · Nebula" and "Base Build · Orphanage · Zombie".
+	appSplitcraft = "123"
+	defer func() { appSplitcraft = "" }()
+	if a := splitcraftActivity(splitSnap{World: "s2_world", Group: "vipplus"}, ""); a.Details != "Celestia · Nebula" {
+		t.Errorf("celestia details = %q", a.Details)
+	}
+	if a := splitcraftActivity(splitSnap{World: "Base Build · orphanage · Zombie"}, ""); a.Details != "Base Build · Orphanage · Zombie" {
+		t.Errorf("base build details = %q", a.Details)
+	}
+	// AFK still wins over the place.
+	if st := splitcraftState(splitSnap{World: "Base Build · mansion · Human", AFK: true, Group: "mvp"}); st != "AFK · Galaxy" {
+		t.Errorf("afk state = %q", st)
 	}
 }
