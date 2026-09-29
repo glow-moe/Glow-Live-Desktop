@@ -1078,6 +1078,16 @@ func (o *Orchestrator) push(cfg config.Config, delaySec int, snap any, st *Statu
 		st.Err = "not linked"
 		return
 	}
+	// Nothing goes out until the site's L!VE settings have loaded once: they
+	// carry the stream-snipe delay, and without them a failed first fetch would
+	// publish live with no delay at all. They are retried every 15s until then.
+	o.mu.Lock()
+	loaded := !o.settingsAt.IsZero()
+	o.mu.Unlock()
+	if !loaded {
+		st.Err = "waiting for your L!VE settings"
+		return
+	}
 	// With a delay set, queue this tick's snapshot and send the one that has
 	// now aged past the delay (the newest such, older ones are dropped).
 	if delaySec > 0 {
