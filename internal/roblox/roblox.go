@@ -37,8 +37,16 @@ var (
 	tsRe    = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)`)
 )
 
-// lastJoin scans a log for the newest join that wasn't followed by a leave.
-func lastJoin(r io.Reader) (placeID int64, at time.Time, ok bool) {
+// joinState is what the log has said so far: the newest join, unless a leave
+// came after it.
+type joinState struct {
+	placeID int64
+	at      time.Time
+	ok      bool
+}
+
+// feed moves the state along the given log lines.
+func (j *joinState) feed(r io.Reader) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	for sc.Scan() {
@@ -48,18 +56,24 @@ func lastJoin(r io.Reader) (placeID int64, at time.Time, ok bool) {
 			if err != nil {
 				continue
 			}
-			placeID, ok = id, true
-			at = time.Time{}
+			j.placeID, j.ok = id, true
+			j.at = time.Time{}
 			if t := tsRe.FindSubmatch(line); t != nil {
-				at, _ = time.Parse(time.RFC3339Nano, string(t[1]))
+				j.at, _ = time.Parse(time.RFC3339Nano, string(t[1]))
 			}
 			continue
 		}
-		if ok && leaveRe.Match(line) {
-			ok, placeID = false, 0
+		if j.ok && leaveRe.Match(line) {
+			j.ok, j.placeID = false, 0
 		}
 	}
-	return placeID, at, ok
+}
+
+// lastJoin scans a log for the newest join that wasn't followed by a leave.
+func lastJoin(r io.Reader) (placeID int64, at time.Time, ok bool) {
+	var j joinState
+	j.feed(r)
+	return j.placeID, j.at, j.ok
 }
 
 // newestLog is the most recently written client log across the folders, if
@@ -99,31 +113,62 @@ func newestLog(dirs []string) (string, bool) {
 	return all[0].p, true
 }
 
-// tail reads at most the last n bytes of a file (logs grow to tens of MB).
-func tail(path string, n int64) ([]byte, error) {
+// logReader follows one log file: the first look reads its last few MB (logs
+// grow to tens of MB), after that only the lines added since, so a tick every
+// second or so costs a few KB, not a re-read.
+type logReader struct {
+	path   string
+	offset int64
+	state  joinState
+}
+
+const (
+	firstLook = 4 << 20
+	maxStep   = 8 << 20
+)
+
+func (l *logReader) read(path string) (joinState, error) {
 	fh, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return joinState{}, err
 	}
 	defer fh.Close()
 	st, err := fh.Stat()
 	if err != nil {
-		return nil, err
+		return joinState{}, err
 	}
-	off := st.Size() - n
-	if off < 0 {
-		off = 0
+	size := st.Size()
+	if path != l.path || size < l.offset {
+		// A new session's log (or one that was cut short): start over.
+		*l = logReader{path: path, offset: max(0, size-firstLook)}
 	}
-	if _, err := fh.Seek(off, io.SeekStart); err != nil {
-		return nil, err
+	if size-l.offset > maxStep {
+		l.offset = size - maxStep
 	}
-	return io.ReadAll(fh)
+	if size > l.offset {
+		buf := make([]byte, size-l.offset)
+		n, err := fh.ReadAt(buf, l.offset)
+		if err != nil && err != io.EOF {
+			return l.state, err
+		}
+		buf = buf[:n]
+		// Only whole lines; a half-written one waits for the next look.
+		if end := bytes.LastIndexByte(buf, '\n'); end >= 0 {
+			l.state.feed(bytes.NewReader(buf[:end+1]))
+			l.offset += int64(end + 1)
+		}
+	}
+	return l.state, nil
 }
 
 var (
 	mu        sync.Mutex
 	infoCache = map[int64]Game{}
 	missAt    = map[int64]time.Time{}
+	fetching  = map[int64]bool{}
+
+	logMu sync.Mutex
+	logs  logReader
 )
 
 // Current is the experience being played, or ok=false when Roblox isn't
@@ -136,45 +181,45 @@ func Current() (Game, bool) {
 	if !ok {
 		return Game{}, false
 	}
-	b, err := tail(p, 4<<20)
-	if err != nil {
+	logMu.Lock()
+	j, err := logs.read(p)
+	logMu.Unlock()
+	if err != nil || !j.ok {
 		return Game{}, false
 	}
-	placeID, at, ok := lastJoin(bytes.NewReader(b))
-	if !ok {
-		return Game{}, false
-	}
-	g := lookup(placeID)
-	g.PlaceID, g.JoinedAt = placeID, at
+	g := lookup(j.placeID)
+	g.PlaceID, g.JoinedAt = j.placeID, j.at
 	return g, true
 }
 
-// lookup names a place, cached; a failed lookup is retried after a minute and
-// the game shows as plain "Roblox" meanwhile.
+// lookup names a place from the cache. A miss starts the lookup in the
+// background (the tick never waits on Roblox's API) and shows plain "Roblox"
+// until it lands; a failed lookup is retried after a minute.
 func lookup(placeID int64) Game {
 	mu.Lock()
+	defer mu.Unlock()
 	if g, ok := infoCache[placeID]; ok {
-		mu.Unlock()
 		return g
 	}
-	if t, ok := missAt[placeID]; ok && time.Since(t) < time.Minute {
-		mu.Unlock()
+	if t, ok := missAt[placeID]; (ok && time.Since(t) < time.Minute) || fetching[placeID] {
 		return Game{Name: "Roblox"}
 	}
-	mu.Unlock()
-
-	g, err := fetchInfo(placeID)
-	mu.Lock()
-	defer mu.Unlock()
-	if err != nil {
-		missAt[placeID] = time.Now()
-		return Game{Name: "Roblox"}
-	}
-	if len(infoCache) > 500 {
-		infoCache = map[int64]Game{}
-	}
-	infoCache[placeID] = g
-	return g
+	fetching[placeID] = true
+	go func() {
+		g, err := fetchInfo(placeID)
+		mu.Lock()
+		defer mu.Unlock()
+		delete(fetching, placeID)
+		if err != nil {
+			missAt[placeID] = time.Now()
+			return
+		}
+		if len(infoCache) > 500 {
+			infoCache = map[int64]Game{}
+		}
+		infoCache[placeID] = g
+	}()
+	return Game{Name: "Roblox"}
 }
 
 var client = &http.Client{Timeout: 6 * time.Second}

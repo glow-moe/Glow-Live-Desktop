@@ -44,3 +44,41 @@ func TestNewestLogSkipsCrashHandler(t *testing.T) {
 		t.Fatalf("got %q %v", p, ok)
 	}
 }
+
+func TestLogReaderFollowsNewLines(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "x_Player_last.log")
+	write := func(s string) {
+		f, err := os.OpenFile(p, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = f.WriteString(s)
+		_ = f.Close()
+	}
+	var l logReader
+	write("2026-10-05T12:00:00.000Z,1,ab,6 [FLog::Output] ! Joining game 'a' place 111 at 1.2.3.4\n")
+	if j, _ := l.read(p); !j.ok || j.placeID != 111 {
+		t.Fatalf("first join: %+v", j)
+	}
+	// Half a line is held back until it ends.
+	write("2026-10-05T12:05:00.000Z,2,ab,6 [FLog::Output] ! Joining game 'b' place 222")
+	if j, _ := l.read(p); j.placeID != 111 {
+		t.Fatalf("half line read: %+v", j)
+	}
+	write(" at 1.2.3.4\n")
+	if j, _ := l.read(p); j.placeID != 222 {
+		t.Fatalf("second join: %+v", j)
+	}
+	write("2026-10-05T12:30:00.000Z,3,ab,6 [FLog::Network] Client:Disconnect 1\n")
+	if j, _ := l.read(p); j.ok {
+		t.Fatalf("left: %+v", j)
+	}
+	// A different file is a fresh start.
+	q := filepath.Join(t.TempDir(), "y_Player_last.log")
+	if err := os.WriteFile(q, []byte("2026-10-05T13:00:00.000Z,1,ab,6 [FLog::Output] ! Joining game 'c' place 333 at 1.2.3.4\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if j, _ := l.read(q); !j.ok || j.placeID != 333 {
+		t.Fatalf("new file: %+v", j)
+	}
+}
