@@ -674,7 +674,10 @@ var (
 	appForzaH6    = ""
 	appForzaH5    = ""
 	appSplitcraft = "" // named "SplitCraft", so Discord reads "Playing SplitCraft"
-	appRoblox     = "" // named "Roblox"; optional, falls back to the glow app
+	// Roblox's own public Discord application ("ROBLOX", from Discord's
+	// detectable games list), so the headline reads "Playing ROBLOX". Public,
+	// not a secret, so it lives here rather than in the release secrets.
+	appRoblox = "363445589247131668"
 )
 
 func orGlow(id string) string {
