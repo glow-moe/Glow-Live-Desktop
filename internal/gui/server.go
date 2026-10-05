@@ -40,6 +40,18 @@ type Server struct {
 	hideToTray func() // set by main: tuck the window into the tray
 	showWindow func() // set by main: bring the window back on screen
 	updateVer  string // latest release when this build is behind it, else ""
+	// peekWindow shows the hidden window without taking focus (main wires it;
+	// false when the user is busy: full screen, presenting, quiet hours).
+	peekWindow func() bool
+	prompted   string // the update prompt already shown this session ("tag|forced")
+	peeked     bool   // the window is on screen only because of that prompt
+}
+
+// SetPeekWindow registers the no-focus show the update prompt uses.
+func (s *Server) SetPeekWindow(fn func() bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.peekWindow = fn
 }
 
 // SetShowWindow registers the callback a second launch (or the tray) uses to
@@ -155,11 +167,61 @@ func (s *Server) watchUpdates() {
 		}
 	}
 	check()
+	go func() {
+		// Wait a little after boot so the prompt doesn't land on top of
+		// everything else that opens with the computer.
+		time.Sleep(90 * time.Second)
+		for {
+			s.maybePromptUpdate()
+			time.Sleep(time.Minute)
+		}
+	}()
 	t := time.NewTicker(6 * time.Hour)
 	defer t.Stop()
 	for range t.C {
 		check()
 	}
+}
+
+// maybePromptUpdate brings the window up in its corner (no focus taken) once
+// per release when an update is out, so a copy that lives in the tray still
+// hears about it. Never while a game or show is live; "Later" quiets that
+// release for a day unless the server has started turning this build away.
+func (s *Server) maybePromptUpdate() {
+	st := s.orch.Status()
+	s.mu.Lock()
+	ver, peek := s.updateVer, s.peekWindow
+	key := ver
+	if st.Outdated {
+		key += "|forced"
+	}
+	snoozed := !st.Outdated && s.cfg.UpdateLaterVer == ver && time.Now().UnixMilli() < s.cfg.UpdateLaterUntil
+	skip := ver == "" || peek == nil || s.prompted == key || snoozed || st.InGame
+	s.mu.Unlock()
+	if skip || !peek() {
+		return
+	}
+	s.mu.Lock()
+	s.prompted, s.peeked = key, true
+	s.mu.Unlock()
+}
+
+// hUpdateLater: "Later" on the prompt. Quiet for a day, and back to the tray if
+// the prompt is what brought the window up.
+func (s *Server) hUpdateLater(w http.ResponseWriter, _ *http.Request) {
+	s.mu.Lock()
+	s.cfg.UpdateLaterVer = s.updateVer
+	s.cfg.UpdateLaterUntil = time.Now().Add(24 * time.Hour).UnixMilli()
+	cfg := s.cfg
+	hide := s.peeked
+	s.peeked = false
+	fn := s.hideToTray
+	s.mu.Unlock()
+	_ = config.Save(cfg)
+	if hide && fn != nil {
+		fn()
+	}
+	writeJSON(w, map[string]any{"ok": true})
 }
 
 // hOpenDownload opens the releases page in the user's browser.
@@ -207,6 +269,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/show", s.hShow)
 	mux.HandleFunc("/api/open-download", s.hOpenDownload)
 	mux.HandleFunc("/api/update-apply", s.hUpdateApply)
+	mux.HandleFunc("/api/update-later", s.hUpdateLater)
 	// Local OBS overlay data: the overlay page (below, or the glow.moe page with
 	// ?src=local) reads the current masked League snapshot from here instead of
 	// polling glow.moe, so the ~2s live poll never touches our server.

@@ -87,7 +87,9 @@
         border-radius: 12px; font-size: 12px; font-weight: 700; color: #7a3d00;
         background: #fff5e6; border: 1px solid #ffd9a3;
       }
-      .update a { margin-left: auto; color: #b8620a; font-weight: 800; text-decoration: none; white-space: nowrap; }
+      .update a { color: #b8620a; font-weight: 800; text-decoration: none; white-space: nowrap; }
+      .update .acts { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+      .update .later { color: #a8875f; font-weight: 700; }
       .foot { margin-top: 12px; text-align: center; font-size: 10px; color: #bda6c8; }
       .foot a { color: #a24fc0; text-decoration: none; }
       .iconbtn {
@@ -121,7 +123,10 @@
     <!-- ── Update banner (shown only when a newer release is out) ── -->
     <div class="update hide" id="update-banner">
       <span id="update-text">A newer version is out.</span>
-      <a href="#" id="update-link">Update now →</a>
+      <span class="acts">
+        <a href="#" class="later" id="update-later">Later</a>
+        <a href="#" id="update-link">Update now →</a>
+      </span>
     </div>
 
     <!-- ── Not linked ── -->
@@ -258,6 +263,8 @@
         if (link.dataset.mode === "download") { api("open-download"); return; }
         $("update-text").textContent = "Updating…";
         link.classList.add("hide");
+        $("update-later").classList.add("hide");
+        updating = true;
         const r = await api("update-apply", {});
         if (r && r.ok) {
           $("update-text").textContent = "Installed, restarting…";
@@ -267,6 +274,16 @@
           link.dataset.mode = "download";
           link.classList.remove("hide");
         }
+      };
+
+      // "Later": quiet for a day; tucks the window away if the prompt opened it.
+      let updating = false;
+      let laterFor = "";
+      $("update-later").onclick = (e) => {
+        e.preventDefault();
+        laterFor = $("update-banner").dataset.ver || "";
+        $("update-banner").classList.add("hide");
+        api("update-later", {});
       };
 
       // ── Settings panel open/close. A single view flag drives visibility so the
@@ -365,8 +382,15 @@
       function render(s) {
         if (s.version) $("ver").textContent = s.version;
         const up = s.update || {};
-        if (up.version) {
-          $("update-text").textContent = up.version + " is out.";
+        const forced = !!(s.status && s.status.outdated);
+        if (up.version && (forced || laterFor !== up.version)) {
+          $("update-banner").dataset.ver = up.version;
+          if (!updating) {
+            $("update-text").textContent = forced
+              ? "Your profile is paused until you update to " + up.version + "."
+              : "New version " + up.version;
+            $("update-later").classList.toggle("hide", forced);
+          }
           $("update-banner").classList.remove("hide");
         } else {
           $("update-banner").classList.add("hide");

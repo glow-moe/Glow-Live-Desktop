@@ -148,6 +148,28 @@ static void glow_restore(HWND hwnd) {
     SetForegroundWindow(hwnd);
 }
 
+// glow_peek shows the hidden widget in its corner without activating it, so
+// whatever the user is typing into keeps the keyboard.
+static void glow_peek(void *win) {
+    if (!win) return;
+    HWND hwnd = (HWND)win;
+    if (IsWindowVisible(hwnd)) return;
+    ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+    if (g_pinned) {
+        SetWindowPos(hwnd, HWND_TOPMOST, g_pinX, g_pinY, 0, 0,
+            SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
+}
+
+// glow_busy: a full-screen app or game, presentation mode or Windows quiet
+// hours. Nothing should pop up then.
+static int glow_busy(void) {
+    QUERY_USER_NOTIFICATION_STATE st;
+    if (SHQueryUserNotificationState(&st) != S_OK) return 0;
+    return st == QUNS_BUSY || st == QUNS_RUNNING_D3D_FULL_SCREEN ||
+        st == QUNS_PRESENTATION_MODE || st == QUNS_QUIET_TIME;
+}
+
 // glow_hide_to_tray tucks the window into the system tray and pops the one-time
 // "still running here" balloon. Shared by the close button and the auto-hide
 // that fires once the collector starts pushing (see glow_hide / hideToTray).
@@ -322,6 +344,16 @@ func showWindow(win unsafe.Pointer) {
 	if win != nil {
 		C.glow_restore((C.HWND)(win))
 	}
+}
+
+// peekWindow shows the window for the update prompt without taking focus.
+func peekWindow(win unsafe.Pointer) {
+	C.glow_peek(win)
+}
+
+// userBusy reports a full-screen app, presentation mode or quiet hours.
+func userBusy() bool {
+	return C.glow_busy() != 0
 }
 
 // trayUpdate pushes the status line, tooltip and alert state to the tray.

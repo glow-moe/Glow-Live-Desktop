@@ -100,6 +100,15 @@ func main() {
 	// this (from an HTTP handler goroutine); marshal it onto the GUI thread.
 	srv.SetHideToTray(func() { w.Dispatch(func() { hideToTray(w.Window()) }) })
 	srv.SetShowWindow(func() { w.Dispatch(func() { showWindow(w.Window()) }) })
+	// The update prompt: up in the corner without stealing focus, and not at
+	// all while the user is in something full screen.
+	srv.SetPeekWindow(func() bool {
+		if userBusy() {
+			return false
+		}
+		w.Dispatch(func() { peekWindow(w.Window()) })
+		return true
+	})
 	// Tray status line / tooltip / alert icon, refreshed on the GUI thread.
 	watchTray(srv, w.Dispatch)
 	w.Run()

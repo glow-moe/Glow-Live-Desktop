@@ -51,6 +51,11 @@ type Config struct {
 	// HideOnGame tucks the window into the tray the moment a game goes live.
 	// A missing key stays true, which is the behavior the app always had.
 	HideOnGame bool `json:"hideOnGame"`
+	// "Later" on the update prompt: that release stays quiet until this time
+	// (unix ms). A newer release, or the server turning this build away, asks
+	// again.
+	UpdateLaterVer   string `json:"updateLaterVer,omitempty"`
+	UpdateLaterUntil int64  `json:"updateLaterUntil,omitempty"`
 	// SeenGames is every Steam game this app has watched run, so the settings can
 	// list them for the per-game toggle. Purely local; never sent to glow.
 	SeenGames []SeenGame `json:"seenGames"`

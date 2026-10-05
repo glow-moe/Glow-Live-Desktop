@@ -9,3 +9,9 @@ func showWindow(win unsafe.Pointer) {
 	trayWin = win
 	showFromTray()
 }
+
+// peekWindow is the update prompt's show; GTK has no portable no-focus show.
+func peekWindow(win unsafe.Pointer) { showWindow(win) }
+
+// userBusy: no portable full-screen check here.
+func userBusy() bool { return false }
