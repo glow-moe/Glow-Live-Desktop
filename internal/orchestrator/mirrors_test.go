@@ -28,7 +28,7 @@ func TestFetchMirrorsParsesBothSources(t *testing.T) {
 	if !ok {
 		t.Fatal("fetchMirrors failed against a 200 server")
 	}
-	if path != "/api/live/read?u=cuid123&games=anime,splitcraft" {
+	if path != "/api/live/read?u=cuid123&games=anime,manga,music,splitcraft" {
 		t.Fatalf("request path = %q", path)
 	}
 	if !m.animeOK || m.anime.Title != "Frieren" || m.anime.Episode != 7 {

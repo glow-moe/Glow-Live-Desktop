@@ -343,11 +343,13 @@ func (s *Server) hStatus(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
 		var body struct {
-			DelaySec      *int    `json:"delaySec"`
-			PollMs        *int    `json:"pollMs"`
-			Endpoint      *string `json:"endpoint"`
-			AnimePresence *bool   `json:"animePresence"`
-			SteamPresence *bool   `json:"steamPresence"`
+			DelaySec        *int    `json:"delaySec"`
+			PollMs          *int    `json:"pollMs"`
+			Endpoint        *string `json:"endpoint"`
+			AnimePresence   *bool   `json:"animePresence"`
+			ReadingPresence *bool   `json:"readingPresence"`
+			MusicPresence   *bool   `json:"musicPresence"`
+			SteamPresence   *bool   `json:"steamPresence"`
 			// SplitcraftPresence: the SplitCraft session on Discord.
 			SplitcraftPresence *bool `json:"splitcraftPresence"`
 			AutoStart          *bool `json:"autoStart"`
@@ -371,6 +373,12 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.AnimePresence != nil {
 			s.cfg.AnimePresence = *body.AnimePresence
+		}
+		if body.ReadingPresence != nil {
+			s.cfg.ReadingPresence = *body.ReadingPresence
+		}
+		if body.MusicPresence != nil {
+			s.cfg.MusicPresence = *body.MusicPresence
 		}
 		if body.SteamPresence != nil {
 			s.cfg.SteamPresence = *body.SteamPresence
@@ -407,6 +415,8 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 		"pollMs":             s.cfg.PollMs,
 		"endpoint":           s.cfg.Endpoint,
 		"animePresence":      s.cfg.AnimePresence,
+		"readingPresence":    s.cfg.ReadingPresence,
+		"musicPresence":      s.cfg.MusicPresence,
 		"steamPresence":      s.cfg.SteamPresence,
 		"splitcraftPresence": s.cfg.SplitcraftPresence,
 		"autoStart":          s.cfg.AutoStart,

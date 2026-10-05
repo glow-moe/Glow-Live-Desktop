@@ -27,6 +27,12 @@ type Config struct {
 	// AnimePresence mirrors what you're watching (fed by the browser extension
 	// through glow.moe) to Discord Rich Presence while no game is running.
 	AnimePresence bool `json:"animePresence"`
+	// ReadingPresence mirrors the manga or webtoon you're reading (browser
+	// extension 1.1) to Discord.
+	ReadingPresence bool `json:"readingPresence"`
+	// MusicPresence mirrors the song playing in a web player (browser
+	// extension 1.1) to Discord as "Listening to".
+	MusicPresence bool `json:"musicPresence"`
 	// SteamPresence mirrors the Steam game (and its Rich Presence line) to
 	// Discord when no richer source is running.
 	SteamPresence bool `json:"steamPresence"`
@@ -65,6 +71,8 @@ func Default() Config {
 		DelaySec:           0,
 		PollMs:             1500,
 		AnimePresence:      true,
+		ReadingPresence:    true,
+		MusicPresence:      true,
 		SteamPresence:      true,
 		SplitcraftPresence: true,
 		HideOnGame:         true,

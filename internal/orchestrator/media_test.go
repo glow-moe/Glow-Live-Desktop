@@ -1,0 +1,58 @@
+package orchestrator
+
+import (
+	"testing"
+	"time"
+)
+
+func TestProgressBar(t *testing.T) {
+	at := time.UnixMilli(1_800_000_000_000)
+	ts := progressBar(83, 213, false, at)
+	if ts == nil {
+		t.Fatal("expected a bar")
+	}
+	if ts.Start != at.Add(-83*time.Second).UnixMilli() || ts.End-ts.Start != 213_000 {
+		t.Fatalf("bar = %+v", ts)
+	}
+	for _, c := range []struct {
+		pos, length float64
+		paused      bool
+		at          time.Time
+	}{
+		{83, 213, true, at},           // paused: no bar
+		{83, 0, false, at},            // unknown length
+		{300, 213, false, at},         // past the end
+		{83, 213, false, time.Time{}}, // no frame time
+	} {
+		if progressBar(c.pos, c.length, c.paused, c.at) != nil {
+			t.Fatalf("expected no bar for %+v", c)
+		}
+	}
+}
+
+func TestMediaActivities(t *testing.T) {
+	at := time.Now()
+	a := animeActivityAt(animeSnap{Title: "Frieren", Episode: 12, CurrentTime: 600, Duration: 1440}, "sam", at)
+	if a.Type != 3 || a.State != "Episode 12" || a.Timestamps == nil || a.Timestamps.End == 0 {
+		t.Fatalf("anime = %+v", a)
+	}
+	p := animeActivityAt(animeSnap{Title: "Frieren", Episode: 12, CurrentTime: 600, Duration: 1440, Paused: true}, "sam", at)
+	if p.Timestamps != nil || p.State != "Episode 12 · paused" {
+		t.Fatalf("paused anime = %+v", p)
+	}
+	m := musicActivity(musicSnap{Title: "Idol", Artist: "YOASOBI", URL: "https://open.spotify.com/track/1", CurrentTime: 10, Duration: 200}, "sam", at)
+	if m.Type != 2 || m.Details != "Idol" || m.State != "YOASOBI" || m.Timestamps == nil || len(m.Buttons) != 2 {
+		t.Fatalf("music = %+v", m)
+	}
+	if bad := musicActivity(musicSnap{Title: "Idol", URL: "javascript:alert(1)"}, "", at); len(bad.Buttons) != 0 {
+		t.Fatalf("unsafe button kept: %+v", bad.Buttons)
+	}
+	since := at.Add(-5 * time.Minute)
+	r := readingActivity(mangaSnap{Title: "Frieren", Chapter: 128}, "sam", since)
+	if r.Details != "Reading Frieren" || r.State != "Chapter 128" || r.Timestamps == nil || r.Timestamps.Start != since.UnixMilli() {
+		t.Fatalf("reading = %+v", r)
+	}
+	if h := readingActivity(mangaSnap{Title: "Frieren", Chapter: 12.5}, "sam", since); h.State != "Chapter 12.5" {
+		t.Fatalf("half chapter = %q", h.State)
+	}
+}

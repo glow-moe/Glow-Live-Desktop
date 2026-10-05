@@ -181,6 +181,14 @@
         <input type="checkbox" id="anime-toggle" />
         <span class="sub">Show anime on Discord (needs the browser extension)</span>
       </label>
+      <label class="opt">
+        <input type="checkbox" id="reading-toggle" />
+        <span class="sub">Show manga and webtoons you read on Discord</span>
+      </label>
+      <label class="opt">
+        <input type="checkbox" id="music-toggle" />
+        <span class="sub">Show the song you're listening to on Discord</span>
+      </label>
 
       <div class="sechead">App</div>
       <label class="opt">
@@ -317,6 +325,8 @@
       // ── Settings values (all local; never sent to glow) ──
       api("config").then((c) => {
         $("anime-toggle").checked = c.animePresence !== false;
+        $("reading-toggle").checked = c.readingPresence !== false;
+        $("music-toggle").checked = c.musicPresence !== false;
         $("steam-toggle").checked = c.steamPresence !== false;
         $("splitcraft-toggle").checked = c.splitcraftPresence !== false;
         $("autostart-toggle").checked = c.autoStart === true;
@@ -326,6 +336,10 @@
       });
       $("anime-toggle").onchange = () =>
         api("config", { animePresence: $("anime-toggle").checked });
+      $("reading-toggle").onchange = () =>
+        api("config", { readingPresence: $("reading-toggle").checked });
+      $("music-toggle").onchange = () =>
+        api("config", { musicPresence: $("music-toggle").checked });
       $("steam-toggle").onchange = () =>
         api("config", { steamPresence: $("steam-toggle").checked });
       $("splitcraft-toggle").onchange = () =>
@@ -410,6 +424,15 @@
           $("st-sub").textContent = st.detail || "";
         } else if (st.inGame && st.game === "anime") {
           $("st-main").textContent = "Watching anime";
+          $("st-sub").textContent = st.detail || "";
+        } else if (st.inGame && st.game === "manga") {
+          $("st-main").textContent = "Reading";
+          $("st-sub").textContent = st.detail || "";
+        } else if (st.inGame && st.game === "music") {
+          $("st-main").textContent = "Listening";
+          $("st-sub").textContent = st.detail || "";
+        } else if (st.inGame && st.game === "roblox") {
+          $("st-main").textContent = "Playing Roblox";
           $("st-sub").textContent = st.detail || "";
         } else if (st.inGame) {
           $("st-main").textContent = "LIVE - " + (st.game === "forza" ? "Forza" : "League");

@@ -80,9 +80,33 @@ func fetchSettings(endpoint, token string) (liveSettings, bool) {
 // animeSnap is the "now watching" the browser extension pushes to glow.moe. The
 // extension owns detection; we only read it back and mirror it to Discord.
 type animeSnap struct {
-	Title   string `json:"title"`
-	Episode int    `json:"episode"`
-	Poster  string `json:"poster"`
+	Title       string  `json:"title"`
+	Episode     int     `json:"episode"`
+	Poster      string  `json:"poster"`
+	CurrentTime float64 `json:"currentTime"`
+	Duration    float64 `json:"duration"`
+	Paused      bool    `json:"paused"`
+}
+
+// mangaSnap is the "now reading" (manga, webtoons) from extension 1.1.
+type mangaSnap struct {
+	Title   string  `json:"title"`
+	Chapter float64 `json:"chapter"`
+	Poster  string  `json:"poster"`
+	Paused  bool    `json:"paused"` // the reader stepped away
+}
+
+// musicSnap is the "now listening" from extension 1.1 (web players).
+type musicSnap struct {
+	Title       string  `json:"title"`
+	Artist      string  `json:"artist"`
+	Album       string  `json:"album"`
+	Artwork     string  `json:"artwork"`
+	Service     string  `json:"service"`
+	URL         string  `json:"url"`
+	CurrentTime float64 `json:"currentTime"`
+	Duration    float64 `json:"duration"`
+	Paused      bool    `json:"paused"`
 }
 
 // splitSnap is this player's row in the roster the SplitCraft server plugin
@@ -118,6 +142,14 @@ type splitSnap struct {
 type mirrors struct {
 	anime   animeSnap
 	animeOK bool
+	// animeAt / musicAt: when the source's frame was taken (now minus its
+	// age), so the progress bar starts from the real position, not the read.
+	animeAt time.Time
+	manga   mangaSnap
+	mangaOK bool
+	music   musicSnap
+	musicOK bool
+	musicAt time.Time
 	split   splitSnap
 	splitOK bool
 }
@@ -136,7 +168,17 @@ func fetchMirrors(endpoint, userID string) (mirrors, bool) {
 			Anime struct {
 				Live     bool       `json:"live"`
 				Snapshot *animeSnap `json:"snapshot"`
+				AgeMs    int64      `json:"ageMs"`
 			} `json:"anime"`
+			Manga struct {
+				Live     bool       `json:"live"`
+				Snapshot *mangaSnap `json:"snapshot"`
+			} `json:"manga"`
+			Music struct {
+				Live     bool       `json:"live"`
+				Snapshot *musicSnap `json:"snapshot"`
+				AgeMs    int64      `json:"ageMs"`
+			} `json:"music"`
 			Splitcraft struct {
 				Live     bool       `json:"live"`
 				Snapshot *splitSnap `json:"snapshot"`
@@ -144,7 +186,7 @@ func fetchMirrors(endpoint, userID string) (mirrors, bool) {
 		} `json:"games"`
 	}
 	// userID is a cuid ([a-z0-9]), safe to place in the query without escaping.
-	u := pair.BaseFrom(endpoint) + "/api/live/read?u=" + userID + "&games=anime,splitcraft"
+	u := pair.BaseFrom(endpoint) + "/api/live/read?u=" + userID + "&games=anime,manga,music,splitcraft"
 	resp, err := (&http.Client{Timeout: 6 * time.Second}).Get(u)
 	if err != nil {
 		return mirrors{}, false
@@ -157,8 +199,17 @@ func fetchMirrors(endpoint, userID string) (mirrors, bool) {
 		return mirrors{}, false
 	}
 	var m mirrors
+	now := time.Now()
 	if a := out.Games.Anime; a.Live && a.Snapshot != nil && a.Snapshot.Title != "" {
 		m.anime, m.animeOK = *a.Snapshot, true
+		m.animeAt = now.Add(-time.Duration(a.AgeMs) * time.Millisecond)
+	}
+	if r := out.Games.Manga; r.Live && r.Snapshot != nil && r.Snapshot.Title != "" {
+		m.manga, m.mangaOK = *r.Snapshot, true
+	}
+	if r := out.Games.Music; r.Live && r.Snapshot != nil && r.Snapshot.Title != "" {
+		m.music, m.musicOK = *r.Snapshot, true
+		m.musicAt = now.Add(-time.Duration(r.AgeMs) * time.Millisecond)
 	}
 	if s := out.Games.Splitcraft; s.Live && s.Snapshot != nil {
 		m.split, m.splitOK = *s.Snapshot, true
@@ -198,9 +249,28 @@ func animeDetail(a animeSnap) string {
 // set the Watching type, and the site lacks the activities.write scope); the
 // title + episode land in the details/state lines.
 func animeActivity(a animeSnap, username string) discord.Activity {
+	return animeActivityAt(a, username, time.Time{})
+}
+
+// progressBar turns "this far into something this long, as of `at`" into the
+// start/end pair Discord draws as a bar with the time left. Paused, unknown
+// length or no frame time: no bar. Start is rounded to whole seconds so the
+// 10s re-read doesn't jitter it into a fresh update every time.
+func progressBar(pos, length float64, paused bool, at time.Time) *discord.Timestamps {
+	if paused || length <= 0 || at.IsZero() || pos < 0 || pos > length {
+		return nil
+	}
+	start := at.Add(-time.Duration(pos * float64(time.Second))).Truncate(time.Second)
+	return &discord.Timestamps{Start: start.UnixMilli(), End: start.Add(time.Duration(length * float64(time.Second))).UnixMilli()}
+}
+
+func animeActivityAt(a animeSnap, username string, at time.Time) discord.Activity {
 	state := ""
 	if a.Episode > 0 {
 		state = fmt.Sprintf("Episode %d", a.Episode)
+	}
+	if a.Paused {
+		state = joinDots(state, "paused")
 	}
 	large := glowIcon
 	if a.Poster != "" {
@@ -217,11 +287,74 @@ func animeActivity(a animeSnap, username string) discord.Activity {
 			SmallText:  "glow.moe",
 		},
 	}
+	act.Timestamps = progressBar(a.CurrentTime, a.Duration, a.Paused, at)
 	if username != "" {
 		act.Buttons = []discord.Button{
 			{Label: "Anime profile", URL: "https://glow.moe/" + username + "/anime"},
 			{Label: "View my Glow profile", URL: "https://glow.moe/" + username},
 		}
+	}
+	return act
+}
+
+// readingActivity: Discord has no "Reading" verb, so it's a plain activity
+// whose first line says it. A chapter has no length, so instead of a bar it
+// shows time spent on this series (from when this app first saw it).
+func readingActivity(r mangaSnap, username string, since time.Time) discord.Activity {
+	ch := ""
+	if r.Chapter > 0 {
+		ch = "Chapter " + strconv.FormatFloat(r.Chapter, 'f', -1, 64)
+	}
+	if r.Paused {
+		ch = joinDots(ch, "away")
+	}
+	large := glowIcon
+	if r.Poster != "" {
+		large = r.Poster
+	}
+	act := discord.Activity{
+		Details: atLeast2("Reading "+r.Title, "Reading manga"),
+		State:   atLeast2(ch, ""),
+		Assets:  &discord.Assets{LargeImage: large, LargeText: atLeast2(r.Title, "manga"), SmallImage: glowIcon, SmallText: "glow.moe"},
+	}
+	if !since.IsZero() && !r.Paused {
+		act.Timestamps = &discord.Timestamps{Start: since.UnixMilli()}
+	}
+	if username != "" {
+		act.Buttons = []discord.Button{
+			{Label: "Reading page", URL: "https://glow.moe/" + username + "/manga"},
+			{Label: "View my Glow profile", URL: "https://glow.moe/" + username},
+		}
+	}
+	return act
+}
+
+// musicActivity is "Listening to …" with the song's progress bar.
+func musicActivity(m musicSnap, username string, at time.Time) discord.Activity {
+	large := glowIcon
+	if m.Artwork != "" {
+		large = m.Artwork
+	}
+	state := m.Artist
+	if m.Paused {
+		state = joinDots(state, "paused")
+	}
+	act := discord.Activity{
+		Type:    2, // Listening
+		Details: atLeast2(m.Title, "Music"),
+		State:   atLeast2(state, ""),
+		Assets:  &discord.Assets{LargeImage: large, LargeText: atLeast2(m.Album, m.Title), SmallImage: glowIcon, SmallText: "glow.moe"},
+	}
+	act.Timestamps = progressBar(m.CurrentTime, m.Duration, m.Paused, at)
+	btns := []discord.Button{}
+	if strings.HasPrefix(m.URL, "https://") && len(m.URL) <= 512 {
+		btns = append(btns, discord.Button{Label: "Listen along", URL: m.URL})
+	}
+	if username != "" {
+		btns = append(btns, discord.Button{Label: "View my Glow profile", URL: "https://glow.moe/" + username})
+	}
+	if len(btns) > 0 {
+		act.Buttons = btns
 	}
 	return act
 }
@@ -639,6 +772,9 @@ type Orchestrator struct {
 	dcFailErr string
 	username  string
 	userID    string // profile cuid, for reading own anime "now watching"
+	// readingTitle / readingStart: the series on Discord and since when.
+	readingTitle string
+	readingStart time.Time
 	// The mirrors (anime, SplitCraft) as last read from glow.moe, and when.
 	mirrorsCache mirrors
 	mirrorsAt    time.Time
@@ -1045,7 +1181,7 @@ func (o *Orchestrator) tick() {
 	// (the SplitCraft plugin's roster, the browser extension's "now watching")
 	// to Discord. We only set the local Rich Presence here; those sources own
 	// detection and the push. One read covers both, refreshed every 10s.
-	if (cfg.SplitcraftPresence || cfg.AnimePresence) && cfg.Token != "" && uid != "" {
+	if (cfg.SplitcraftPresence || cfg.AnimePresence || cfg.ReadingPresence || cfg.MusicPresence) && cfg.Token != "" && uid != "" {
 		m := o.readMirrors(cfg.Endpoint, uid)
 		// A mirror exists only for Discord, so Discord being closed is not a
 		// problem to alarm about (the game branches ignore it too): the status
@@ -1060,7 +1196,25 @@ func (o *Orchestrator) tick() {
 		}
 		if cfg.AnimePresence && m.animeOK {
 			st := Status{Game: "anime", InGame: true, Detail: animeDetail(m.anime), Pushes: o.pushes, Delay: effDelay}
-			if err := o.presence(orGlow(""), animeActivity(m.anime, uname)); err != nil {
+			if err := o.presence(orGlow(""), animeActivityAt(m.anime, uname, m.animeAt)); err != nil {
+				st.Detail = joinDots(st.Detail, err.Error())
+			}
+			o.set(st)
+			return
+		}
+		// Watching beats listening beats reading: a song in a background tab
+		// is the soundtrack, the episode or the page is the thing itself.
+		if cfg.MusicPresence && m.musicOK && !m.music.Paused {
+			st := Status{Game: "music", InGame: true, Detail: joinDots(m.music.Title, m.music.Artist), Pushes: o.pushes, Delay: effDelay}
+			if err := o.presence(orGlow(""), musicActivity(m.music, uname, m.musicAt)); err != nil {
+				st.Detail = joinDots(st.Detail, err.Error())
+			}
+			o.set(st)
+			return
+		}
+		if cfg.ReadingPresence && m.mangaOK {
+			st := Status{Game: "manga", InGame: true, Detail: m.manga.Title, Pushes: o.pushes, Delay: effDelay}
+			if err := o.presence(orGlow(""), readingActivity(m.manga, uname, o.readingSince(m.manga.Title))); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)
@@ -1841,4 +1995,16 @@ func leagueDetail(champ, clock string) string {
 		return "In game · " + clock
 	}
 	return champ + " · " + clock
+}
+
+// readingSince is when this app first saw the member on this series, so the
+// Discord line can count time spent reading it. A different series restarts it.
+func (o *Orchestrator) readingSince(title string) time.Time {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.readingTitle != title {
+		o.readingTitle = title
+		o.readingStart = time.Now()
+	}
+	return o.readingStart
 }

@@ -80,7 +80,7 @@ func trayLine(info gui.TrayInfo, now time.Time) (line string, alert bool) {
 	// Mirrored sources (anime from the browser extension, SplitCraft from the
 	// server plugin) are shown on Discord but never pushed from here, so the
 	// push clock says nothing about them: no "not reaching glow.moe" alarm.
-	if st.InGame && (st.Game == "anime" || st.Game == "splitcraft") {
+	if st.InGame && (st.Game == "anime" || st.Game == "manga" || st.Game == "music" || st.Game == "splitcraft" || st.Game == "roblox") {
 		return "Live · on Discord", false
 	}
 	if st.LastPushAt > 0 {

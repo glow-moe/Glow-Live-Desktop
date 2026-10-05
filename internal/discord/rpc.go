@@ -29,6 +29,9 @@ type Activity struct {
 
 type Timestamps struct {
 	Start int64 `json:"start,omitempty"`
+	// End (unix ms) together with Start makes Discord draw a progress bar with
+	// the time left, for Watching and Listening activities.
+	End int64 `json:"end,omitempty"`
 }
 
 type Assets struct {
