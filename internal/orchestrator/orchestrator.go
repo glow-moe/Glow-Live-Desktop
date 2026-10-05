@@ -98,6 +98,13 @@ type mangaSnap struct {
 }
 
 // musicSnap is the "now listening" from extension 1.1 (web players).
+// musicOnDiscord: Spotify and YouTube Music songs stay off Discord (the site
+// still shows them). Discord shows Spotify itself for anyone who linked it, and
+// these two are left to their own presence.
+func musicOnDiscord(service string) bool {
+	return service != "spotify" && service != "ytmusic"
+}
+
 type musicSnap struct {
 	Title       string  `json:"title"`
 	Artist      string  `json:"artist"`
@@ -1224,7 +1231,7 @@ func (o *Orchestrator) tick() {
 		}
 		// Watching beats listening beats reading: a song in a background tab
 		// is the soundtrack, the episode or the page is the thing itself.
-		if cfg.MusicPresence && m.musicOK && !m.music.Paused {
+		if cfg.MusicPresence && m.musicOK && !m.music.Paused && musicOnDiscord(m.music.Service) {
 			st := Status{Game: "music", InGame: true, Detail: joinDots(m.music.Title, m.music.Artist), Pushes: o.pushes, Delay: effDelay}
 			if err := o.presence(orGlow(""), musicActivity(m.music, uname, m.musicAt)); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())

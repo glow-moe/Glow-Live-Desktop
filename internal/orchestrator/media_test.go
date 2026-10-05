@@ -85,3 +85,11 @@ func TestRobloxPayloadKeepsTheServerPrivate(t *testing.T) {
 		t.Fatalf("payload %s", s)
 	}
 }
+
+func TestMusicOnDiscordSkipsSpotifyAndYouTubeMusic(t *testing.T) {
+	for svc, want := range map[string]bool{"spotify": false, "ytmusic": false, "youtube": true, "applemusic": true, "soundcloud": true, "": true} {
+		if got := musicOnDiscord(svc); got != want {
+			t.Errorf("%q: got %v, want %v", svc, got, want)
+		}
+	}
+}
