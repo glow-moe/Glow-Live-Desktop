@@ -1180,11 +1180,12 @@ func (o *Orchestrator) tick() {
 	}
 
 	// Roblox: read from the client's own log (which experience you joined),
-	// named through Roblox's public API. Discord only; the site has no Roblox
-	// card, so nothing is pushed.
+	// named through Roblox's public API. Goes to the profile chip (with the
+	// stream delay, like any game) and to Discord.
 	if cfg.RobloxPresence {
 		if g, ok := roblox.Current(); ok {
 			st := Status{Game: "roblox", InGame: true, Detail: g.Name, GameName: g.Name, Pushes: o.pushes, Delay: effDelay}
+			o.push(cfg, effDelay, robloxPayload(g), &st)
 			if err := o.presence(orGlow(appRoblox), robloxActivity(g, uname, appRoblox != "")); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
@@ -1999,6 +2000,26 @@ func steamActivity(s steam.Snap, username, large string, named bool) discord.Act
 		}
 	}
 	return a
+}
+
+// robloxPayload is the profile chip's frame: the experience and when you
+// joined. The server (job) id never leaves this PC.
+type robloxSnap struct {
+	Game      string `json:"game"`
+	PlaceID   int64  `json:"placeId"`
+	Name      string `json:"name,omitempty"`
+	Creator   string `json:"creator,omitempty"`
+	Icon      string `json:"icon,omitempty"`
+	StartedAt int64  `json:"startedAt,omitempty"`
+	UpdatedAt int64  `json:"updatedAt"`
+}
+
+func robloxPayload(g roblox.Game) robloxSnap {
+	p := robloxSnap{Game: "roblox", PlaceID: g.PlaceID, Name: g.Name, Creator: g.Creator, Icon: g.Icon, UpdatedAt: time.Now().UnixMilli()}
+	if !g.JoinedAt.IsZero() {
+		p.StartedAt = g.JoinedAt.UnixMilli()
+	}
+	return p
 }
 
 // robloxActivity: under the Roblox app the headline already reads "Playing

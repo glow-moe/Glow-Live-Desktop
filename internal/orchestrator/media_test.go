@@ -1,6 +1,9 @@
 package orchestrator
 
 import (
+	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -71,5 +74,14 @@ func TestRobloxActivity(t *testing.T) {
 	}
 	if b := robloxActivity(roblox.Game{Name: "Adopt Me!"}, "", false); b.State != "on Roblox" || len(b.Buttons) != 0 || b.Timestamps != nil || b.Assets.LargeImage != glowIcon {
 		t.Fatalf("glow app: %+v", b)
+	}
+}
+
+func TestRobloxPayloadKeepsTheServerPrivate(t *testing.T) {
+	at := time.Now().Add(-time.Minute)
+	b, _ := json.Marshal(robloxPayload(roblox.Game{PlaceID: 13822889, Name: "Lumber Tycoon 2", Creator: "Defaultio", JoinedAt: at}))
+	s := string(b)
+	if !strings.Contains(s, `"game":"roblox"`) || !strings.Contains(s, `"placeId":13822889`) || !strings.Contains(s, fmt.Sprintf(`"startedAt":%d`, at.UnixMilli())) {
+		t.Fatalf("payload %s", s)
 	}
 }

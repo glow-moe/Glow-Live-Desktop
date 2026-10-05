@@ -33,7 +33,7 @@ type Config struct {
 	// MusicPresence mirrors the song playing in a web player (browser
 	// extension 1.1) to Discord as "Listening to".
 	MusicPresence bool `json:"musicPresence"`
-	// RobloxPresence shows the Roblox experience you're in on Discord (read
+	// RobloxPresence shows the Roblox experience you're in on the profile and Discord (read
 	// from Roblox's own log on this PC).
 	RobloxPresence bool `json:"robloxPresence"`
 	// SteamPresence mirrors the Steam game (and its Rich Presence line) to
