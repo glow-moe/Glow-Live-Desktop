@@ -18,9 +18,6 @@ type Config struct {
 	DelaySec int `json:"delaySec"`
 	// PollMs is how often the live game is polled, in milliseconds.
 	PollMs int `json:"pollMs"`
-	// DiscordClientID is the Discord application id for Rich Presence. Empty
-	// disables it. One shared glow app id works for everyone.
-	DiscordClientID string `json:"discordClientId"`
 	// LeaguePath optionally points at the League install dir (for the client
 	// lockfile) when it isn't in a standard location.
 	LeaguePath string `json:"leaguePath"`

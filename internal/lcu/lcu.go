@@ -917,13 +917,14 @@ func cleanDiv(d string) string {
 	return d
 }
 
-// titleCase turns "GOLD" into "Gold".
+// titleCase turns "GOLD" into "Gold" and "ONE FOR ALL" into "One For All".
+// Ranks and game modes are plain ASCII words.
 func titleCase(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
+	words := strings.Fields(strings.ToLower(s))
+	for i, w := range words {
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
 	}
-	return strings.ToUpper(s[:1]) + strings.ToLower(s[1:])
+	return strings.Join(words, " ")
 }
 
 // availabilityLabel maps an LCU chat availability to a friendly word.
@@ -960,7 +961,7 @@ func modeLabel(q int, mode string) string {
 		return "ARAM"
 	}
 	if mode != "" {
-		return strings.Title(strings.ToLower(mode))
+		return titleCase(mode)
 	}
 	return ""
 }

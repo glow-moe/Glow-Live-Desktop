@@ -252,14 +252,6 @@ func animeDetail(a animeSnap) string {
 	return a.Title
 }
 
-// animeActivity builds the Discord Rich Presence for anime. It runs under the
-// shared glow app, so Discord's headline reads "glow.moe" (the local IPC can't
-// set the Watching type, and the site lacks the activities.write scope); the
-// title + episode land in the details/state lines.
-func animeActivity(a animeSnap, username string) discord.Activity {
-	return animeActivityAt(a, username, time.Time{})
-}
-
 // progressBar turns "this far into something this long, as of `at`" into the
 // start/end pair Discord draws as a bar with the time left. Paused, unknown
 // length or no frame time: no bar. Start is rounded to whole seconds so the

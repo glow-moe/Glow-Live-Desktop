@@ -69,13 +69,6 @@ func (j *joinState) feed(r io.Reader) {
 	}
 }
 
-// lastJoin scans a log for the newest join that wasn't followed by a leave.
-func lastJoin(r io.Reader) (placeID int64, at time.Time, ok bool) {
-	var j joinState
-	j.feed(r)
-	return j.placeID, j.at, j.ok
-}
-
 // newestLog is the most recently written client log across the folders, if
 // it's recent.
 func newestLog(dirs []string) (string, bool) {
