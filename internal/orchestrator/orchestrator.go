@@ -25,6 +25,7 @@ import (
 	"github.com/glow-moe/glow-collector/internal/live"
 	"github.com/glow-moe/glow-collector/internal/pair"
 	"github.com/glow-moe/glow-collector/internal/poster"
+	"github.com/glow-moe/glow-collector/internal/roblox"
 	"github.com/glow-moe/glow-collector/internal/snapshot"
 	"github.com/glow-moe/glow-collector/internal/steam"
 )
@@ -673,6 +674,7 @@ var (
 	appForzaH6    = ""
 	appForzaH5    = ""
 	appSplitcraft = "" // named "SplitCraft", so Discord reads "Playing SplitCraft"
+	appRoblox     = "" // named "Roblox"; optional, falls back to the glow app
 )
 
 func orGlow(id string) string {
@@ -1171,6 +1173,20 @@ func (o *Orchestrator) tick() {
 				o.set(st)
 				return
 			}
+		}
+	}
+
+	// Roblox: read from the client's own log (which experience you joined),
+	// named through Roblox's public API. Discord only; the site has no Roblox
+	// card, so nothing is pushed.
+	if cfg.RobloxPresence {
+		if g, ok := roblox.Current(); ok {
+			st := Status{Game: "roblox", InGame: true, Detail: g.Name, GameName: g.Name, Pushes: o.pushes, Delay: effDelay}
+			if err := o.presence(orGlow(appRoblox), robloxActivity(g, uname, appRoblox != "")); err != nil {
+				st.Detail = joinDots(st.Detail, err.Error())
+			}
+			o.set(st)
+			return
 		}
 	}
 
@@ -1978,6 +1994,36 @@ func steamActivity(s steam.Snap, username, large string, named bool) discord.Act
 		a.Buttons = []discord.Button{
 			{Label: "View my Glow profile", URL: "https://glow.moe/" + username},
 		}
+	}
+	return a
+}
+
+// robloxActivity: under the Roblox app the headline already reads "Playing
+// Roblox", so the experience is the details line; under the glow app it has to
+// say Roblox too. The server (job) id is never shown: it would let anyone join
+// the same server.
+func robloxActivity(g roblox.Game, username string, named bool) discord.Activity {
+	name := atLeast2(g.Name, "Roblox")
+	a := discord.Activity{Details: name}
+	if !named && name != "Roblox" {
+		a.State = "on Roblox"
+	}
+	if g.Creator != "" && named {
+		a.State = "by " + g.Creator
+	}
+	if !g.JoinedAt.IsZero() && time.Since(g.JoinedAt) >= 0 && time.Since(g.JoinedAt) < 24*time.Hour {
+		a.Timestamps = &discord.Timestamps{Start: g.JoinedAt.UnixMilli()}
+	}
+	large := g.Icon
+	if large == "" {
+		large = glowIcon
+	}
+	a.Assets = &discord.Assets{LargeImage: large, LargeText: name, SmallImage: glowIcon, SmallText: "glow.moe"}
+	if g.PlaceID > 0 {
+		a.Buttons = append(a.Buttons, discord.Button{Label: "Open game", URL: fmt.Sprintf("https://www.roblox.com/games/%d", g.PlaceID)})
+	}
+	if username != "" {
+		a.Buttons = append(a.Buttons, discord.Button{Label: "View my Glow profile", URL: "https://glow.moe/" + username})
 	}
 	return a
 }

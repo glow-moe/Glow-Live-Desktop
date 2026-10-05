@@ -3,6 +3,8 @@ package orchestrator
 import (
 	"testing"
 	"time"
+
+	"github.com/glow-moe/glow-collector/internal/roblox"
 )
 
 func TestProgressBar(t *testing.T) {
@@ -54,5 +56,20 @@ func TestMediaActivities(t *testing.T) {
 	}
 	if h := readingActivity(mangaSnap{Title: "Frieren", Chapter: 12.5}, "sam", since); h.State != "Chapter 12.5" {
 		t.Fatalf("half chapter = %q", h.State)
+	}
+}
+
+func TestRobloxActivity(t *testing.T) {
+	at := time.Now().Add(-5 * time.Minute)
+	g := roblox.Game{PlaceID: 920587237, Name: "Adopt Me!", Creator: "Uplift Games", Icon: "https://tr.rbxcdn.com/x.png", JoinedAt: at}
+	a := robloxActivity(g, "melocet", true)
+	if a.Details != "Adopt Me!" || a.State != "by Uplift Games" || a.Timestamps == nil || a.Timestamps.Start != at.UnixMilli() {
+		t.Fatalf("named: %+v", a)
+	}
+	if a.Assets.LargeImage != g.Icon || len(a.Buttons) != 2 || a.Buttons[0].URL != "https://www.roblox.com/games/920587237" {
+		t.Fatalf("assets/buttons: %+v %+v", a.Assets, a.Buttons)
+	}
+	if b := robloxActivity(roblox.Game{Name: "Adopt Me!"}, "", false); b.State != "on Roblox" || len(b.Buttons) != 0 || b.Timestamps != nil || b.Assets.LargeImage != glowIcon {
+		t.Fatalf("glow app: %+v", b)
 	}
 }

@@ -349,6 +349,7 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 			AnimePresence   *bool   `json:"animePresence"`
 			ReadingPresence *bool   `json:"readingPresence"`
 			MusicPresence   *bool   `json:"musicPresence"`
+			RobloxPresence  *bool   `json:"robloxPresence"`
 			SteamPresence   *bool   `json:"steamPresence"`
 			// SplitcraftPresence: the SplitCraft session on Discord.
 			SplitcraftPresence *bool `json:"splitcraftPresence"`
@@ -379,6 +380,9 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		if body.MusicPresence != nil {
 			s.cfg.MusicPresence = *body.MusicPresence
+		}
+		if body.RobloxPresence != nil {
+			s.cfg.RobloxPresence = *body.RobloxPresence
 		}
 		if body.SteamPresence != nil {
 			s.cfg.SteamPresence = *body.SteamPresence
@@ -417,6 +421,7 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 		"animePresence":      s.cfg.AnimePresence,
 		"readingPresence":    s.cfg.ReadingPresence,
 		"musicPresence":      s.cfg.MusicPresence,
+		"robloxPresence":     s.cfg.RobloxPresence,
 		"steamPresence":      s.cfg.SteamPresence,
 		"splitcraftPresence": s.cfg.SplitcraftPresence,
 		"autoStart":          s.cfg.AutoStart,

@@ -189,6 +189,10 @@
         <input type="checkbox" id="music-toggle" />
         <span class="sub">Show the song you're listening to on Discord</span>
       </label>
+      <label class="opt">
+        <input type="checkbox" id="roblox-toggle" />
+        <span class="sub">Show the Roblox game you're in on Discord</span>
+      </label>
 
       <div class="sechead">App</div>
       <label class="opt">
@@ -327,6 +331,7 @@
         $("anime-toggle").checked = c.animePresence !== false;
         $("reading-toggle").checked = c.readingPresence !== false;
         $("music-toggle").checked = c.musicPresence !== false;
+        $("roblox-toggle").checked = c.robloxPresence !== false;
         $("steam-toggle").checked = c.steamPresence !== false;
         $("splitcraft-toggle").checked = c.splitcraftPresence !== false;
         $("autostart-toggle").checked = c.autoStart === true;
@@ -340,6 +345,8 @@
         api("config", { readingPresence: $("reading-toggle").checked });
       $("music-toggle").onchange = () =>
         api("config", { musicPresence: $("music-toggle").checked });
+      $("roblox-toggle").onchange = () =>
+        api("config", { robloxPresence: $("roblox-toggle").checked });
       $("steam-toggle").onchange = () =>
         api("config", { steamPresence: $("steam-toggle").checked });
       $("splitcraft-toggle").onchange = () =>

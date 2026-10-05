@@ -33,6 +33,9 @@ type Config struct {
 	// MusicPresence mirrors the song playing in a web player (browser
 	// extension 1.1) to Discord as "Listening to".
 	MusicPresence bool `json:"musicPresence"`
+	// RobloxPresence shows the Roblox experience you're in on Discord (read
+	// from Roblox's own log on this PC).
+	RobloxPresence bool `json:"robloxPresence"`
 	// SteamPresence mirrors the Steam game (and its Rich Presence line) to
 	// Discord when no richer source is running.
 	SteamPresence bool `json:"steamPresence"`
@@ -73,6 +76,7 @@ func Default() Config {
 		AnimePresence:      true,
 		ReadingPresence:    true,
 		MusicPresence:      true,
+		RobloxPresence:     true,
 		SteamPresence:      true,
 		SplitcraftPresence: true,
 		HideOnGame:         true,
