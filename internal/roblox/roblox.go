@@ -62,10 +62,16 @@ func lastJoin(r io.Reader) (placeID int64, at time.Time, ok bool) {
 	return placeID, at, ok
 }
 
-// newestLog is the most recently written client log, if it's recent.
-func newestLog(dir string) (string, bool) {
-	files, err := filepath.Glob(filepath.Join(dir, "*.log"))
-	if err != nil || len(files) == 0 {
+// newestLog is the most recently written client log across the folders, if
+// it's recent.
+func newestLog(dirs []string) (string, bool) {
+	var files []string
+	for _, dir := range dirs {
+		if m, err := filepath.Glob(filepath.Join(dir, "*.log")); err == nil {
+			files = append(files, m...)
+		}
+	}
+	if len(files) == 0 {
 		return "", false
 	}
 	type f struct {
@@ -75,7 +81,8 @@ func newestLog(dir string) (string, bool) {
 	var all []f
 	for _, p := range files {
 		// Studio writes its own logs next to the player's; only the player counts.
-		if strings.Contains(strings.ToLower(filepath.Base(p)), "studio") {
+		// The crash handler keeps a small log of its own beside the player's.
+		if b := strings.ToLower(filepath.Base(p)); strings.Contains(b, "studio") || strings.Contains(b, "crashhandler") {
 			continue
 		}
 		if st, err := os.Stat(p); err == nil {
@@ -125,11 +132,7 @@ func Current() (Game, bool) {
 	if !playerRunning() {
 		return Game{}, false
 	}
-	dir := logDir()
-	if dir == "" {
-		return Game{}, false
-	}
-	p, ok := newestLog(dir)
+	p, ok := newestLog(logDirs())
 	if !ok {
 		return Game{}, false
 	}

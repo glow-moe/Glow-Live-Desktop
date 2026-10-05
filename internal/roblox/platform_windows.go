@@ -11,12 +11,14 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func logDir() string {
+// logDirs: the website installer's client logs to Roblox\logs, the Microsoft
+// Store build to RobloxPCGDK\logs. Same log format in both.
+func logDirs() []string {
 	base := os.Getenv("LOCALAPPDATA")
 	if base == "" {
-		return ""
+		return nil
 	}
-	return filepath.Join(base, "Roblox", "logs")
+	return []string{filepath.Join(base, "Roblox", "logs"), filepath.Join(base, "RobloxPCGDK", "logs")}
 }
 
 // playerRunning: is the Roblox game client (not the website, not Studio) open?

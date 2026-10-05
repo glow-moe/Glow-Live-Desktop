@@ -1,8 +1,11 @@
 package roblox
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLastJoin(t *testing.T) {
@@ -22,5 +25,22 @@ func TestLastJoin(t *testing.T) {
 	}
 	if _, _, ok := lastJoin(strings.NewReader("nothing here")); ok {
 		t.Fatal("no join line")
+	}
+}
+
+func TestNewestLogSkipsCrashHandler(t *testing.T) {
+	a, b := t.TempDir(), t.TempDir()
+	player := filepath.Join(b, "2.741_Player_3F309_last.log")
+	crash := filepath.Join(a, "2.741_Player_52EB4_CrashHandler_last.log")
+	if err := os.WriteFile(player, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(crash, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Minute)
+	_ = os.Chtimes(crash, later, later) // newer, but not the player's log
+	if p, ok := newestLog([]string{a, b}); !ok || p != player {
+		t.Fatalf("got %q %v", p, ok)
 	}
 }
