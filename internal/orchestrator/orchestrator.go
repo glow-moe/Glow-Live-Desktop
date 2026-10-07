@@ -1221,19 +1221,20 @@ func (o *Orchestrator) tick() {
 			o.set(st)
 			return
 		}
-		// Watching beats listening beats reading: a song in a background tab
-		// is the soundtrack, the episode or the page is the thing itself.
-		if cfg.MusicPresence && m.musicOK && !m.music.Paused && musicOnDiscord(m.music.Service) {
-			st := Status{Game: "music", InGame: true, Detail: joinDots(m.music.Title, m.music.Artist), Pushes: o.pushes, Delay: effDelay}
-			if err := o.presence(orGlow(""), musicActivity(m.music, uname, m.musicAt)); err != nil {
+		// Watching beats reading beats listening, the same order glow.moe uses:
+		// a song in a background tab is the soundtrack, the episode or the
+		// page is the thing itself.
+		if cfg.ReadingPresence && m.mangaOK {
+			st := Status{Game: "manga", InGame: true, Detail: m.manga.Title, Pushes: o.pushes, Delay: effDelay}
+			if err := o.presence(orGlow(""), readingActivity(m.manga, uname, o.readingSince(m.manga.Title))); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)
 			return
 		}
-		if cfg.ReadingPresence && m.mangaOK {
-			st := Status{Game: "manga", InGame: true, Detail: m.manga.Title, Pushes: o.pushes, Delay: effDelay}
-			if err := o.presence(orGlow(""), readingActivity(m.manga, uname, o.readingSince(m.manga.Title))); err != nil {
+		if cfg.MusicPresence && m.musicOK && !m.music.Paused && musicOnDiscord(m.music.Service) {
+			st := Status{Game: "music", InGame: true, Detail: joinDots(m.music.Title, m.music.Artist), Pushes: o.pushes, Delay: effDelay}
+			if err := o.presence(orGlow(""), musicActivity(m.music, uname, m.musicAt)); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)
