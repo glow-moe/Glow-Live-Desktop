@@ -184,6 +184,21 @@ type conn struct {
 	http *http.Client
 }
 
+// lcuClient is shared by every poll. A fresh Transport per dial (up to 26.8)
+// left each tick's keep-alive sockets open forever: after an hour in the client
+// the app held 100+ connections and the LCU began refusing new ones, which read
+// as "client closed" and dropped the Discord status and the profile card in
+// lobby and champ select. One pool, a few idle sockets, closed when unused.
+var lcuClient = &http.Client{
+	Timeout: 5 * time.Second,
+	Transport: &http.Transport{
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true}, // #nosec G402 - localhost LCU cert
+		MaxIdleConnsPerHost: 4,
+		MaxConnsPerHost:     8,
+		IdleConnTimeout:     30 * time.Second,
+	},
+}
+
 func dial(override string) (*conn, error) {
 	lf, ok := findLockfile(override)
 	if !ok {
@@ -203,10 +218,7 @@ func dial(override string) (*conn, error) {
 	return &conn{
 		base: "https://127.0.0.1:" + port,
 		auth: "Basic " + base64.StdEncoding.EncodeToString([]byte("riot:"+password)),
-		http: &http.Client{
-			Timeout:   5 * time.Second,
-			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, // #nosec G402 - localhost LCU cert
-		},
+		http: lcuClient,
 	}, nil
 }
 
