@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -43,6 +44,67 @@ type liveSettings struct {
 	OverlayAccent string      `json:"overlayAccent"`
 	OverlayScale  float64     `json:"overlayScale"`
 	OverlayShow   overlayShow `json:"overlayShow"`
+	// LcuReads are the League client paths glow.moe wants read raw (lcu.ReadRaw
+	// keeps them to its read-only allowlist).
+	LcuReads []lcuRead `json:"lcuReads"`
+}
+
+// lcuRead is one raw client read: send it under Key, re-read every Every seconds.
+type lcuRead struct {
+	Key   string `json:"key"`
+	Path  string `json:"path"`
+	Every int    `json:"every"`
+}
+
+type rawEntry struct {
+	at   time.Time
+	data json.RawMessage
+}
+
+var rawKeyRE = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
+
+// lcuRaw returns the site's raw client reads, each re-read only when its
+// interval is up; a failed read keeps the last good body. At most 8 reads.
+func (o *Orchestrator) lcuRaw(leaguePath string, reads []lcuRead) map[string]json.RawMessage {
+	if len(reads) == 0 {
+		return nil
+	}
+	out := map[string]json.RawMessage{}
+	for i, r := range reads {
+		if i >= 8 || !rawKeyRE.MatchString(r.Key) || !lcu.RawAllowed(r.Path) {
+			continue
+		}
+		every := time.Duration(r.Every) * time.Second
+		if every < 2*time.Second {
+			every = 2 * time.Second
+		}
+		o.mu.Lock()
+		e, ok := o.rawCache[r.Key]
+		o.mu.Unlock()
+		if !ok || time.Since(e.at) >= every {
+			if b, err := lcu.ReadRaw(leaguePath, r.Path); err == nil {
+				e = rawEntry{at: time.Now(), data: b}
+				ok = true
+			} else if ok {
+				e.at = time.Now() // keep the last good body, try again next interval
+			}
+			if ok {
+				o.mu.Lock()
+				if o.rawCache == nil {
+					o.rawCache = map[string]rawEntry{}
+				}
+				o.rawCache[r.Key] = e
+				o.mu.Unlock()
+			}
+		}
+		if ok && len(e.data) > 0 {
+			out[r.Key] = e.data
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // overlayShow mirrors OverlayShow on the site: which blocks the in-game card
@@ -781,6 +843,7 @@ type Orchestrator struct {
 	readingStart time.Time
 	// The mirrors (anime, SplitCraft) as last read from glow.moe, and when.
 	mirrorsCache mirrors
+	rawCache     map[string]rawEntry
 	mirrorsAt    time.Time
 	steamID      uint32 // Steam account id signed in on this machine (0 = none)
 	steamIDAt    time.Time
@@ -1115,7 +1178,10 @@ func (o *Orchestrator) tick() {
 	if lerr == nil && lob != nil {
 		snap := snapshot.FromLobby(lob, ddragon.Version(), time.Now().UnixMilli())
 		st := Status{Game: "league", InGame: false, Detail: lob.Label, Pushes: o.pushes, Delay: effDelay}
-		o.push(cfg, effDelay, snap, &st)
+		// The raw reads ride the push only, not the local overlay feed.
+		pushed := snap
+		pushed.Raw = o.lcuRaw(cfg.LeaguePath, settings.LcuReads)
+		o.push(cfg, effDelay, pushed, &st)
 		o.cacheOverlay(snap)
 		leagueOverlay = true
 		o.mu.Lock()

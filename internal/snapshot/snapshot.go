@@ -5,6 +5,7 @@
 package snapshot
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -233,6 +234,9 @@ type Snapshot struct {
 	Feed      []FeedEvent `json:"feed"`
 	// Lobby is set instead of the match fields when out of game.
 	Lobby *Lobby `json:"lobby,omitempty"`
+	// Raw holds the League client reads glow.moe asked for (its settings'
+	// lcuReads), keyed by the site's names and sent back untouched.
+	Raw map[string]json.RawMessage `json:"raw,omitempty"`
 }
 
 // FromLobby builds an out-of-game snapshot from the client (LCU) state.
