@@ -33,3 +33,14 @@ func TestRawAllowed(t *testing.T) {
 		}
 	}
 }
+
+// Pick keeps only the asked-for fields, so account ids don't ride along.
+func TestPickFields(t *testing.T) {
+	got := string(PickFields([]byte(`{"puuid":"x","bannerId":"9","title":{"name":"Jungle Diff"}}`), []string{"bannerId", "title"}))
+	if got != `{"bannerId":"9","title":{"name":"Jungle Diff"}}` {
+		t.Fatalf("got %s", got)
+	}
+	if string(PickFields([]byte(`[1]`), []string{"a"})) != `[1]` {
+		t.Fatal("non-object should pass through")
+	}
+}

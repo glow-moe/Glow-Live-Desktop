@@ -29,6 +29,8 @@ type Member struct {
 	Leader bool     `json:"leader"`
 	You    bool     `json:"you"`
 	Roles  []string `json:"roles"`
+	// Puuid stays in the app: it only fills the site's per-member raw reads.
+	Puuid string `json:"-"`
 }
 
 // Draftee is one cell in champ select (either team).
@@ -614,6 +616,7 @@ func fetchLobby(c *conn, lob *Lobby, puuid string, sumID int64) {
 			Leader: m.IsLeader,
 			You:    (puuid != "" && m.Puuid == puuid) || (sumID != 0 && m.SummonerID == sumID),
 			Roles:  roles(m.FirstPosition, m.SecondPos),
+			Puuid:  m.Puuid,
 		})
 	}
 }

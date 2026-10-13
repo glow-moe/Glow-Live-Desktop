@@ -49,6 +49,29 @@ func RawAllowed(path string) bool {
 	return false
 }
 
+// PickFields keeps only the named top-level keys of a JSON object (the site
+// says which it needs, so pushes stay small); anything else comes back as is.
+func PickFields(body json.RawMessage, keys []string) json.RawMessage {
+	if len(keys) == 0 {
+		return body
+	}
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(body, &obj) != nil {
+		return body
+	}
+	out := make(map[string]json.RawMessage, len(keys))
+	for _, k := range keys {
+		if v, ok := obj[k]; ok {
+			out[k] = v
+		}
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return body
+	}
+	return b
+}
+
 // ReadRaw GETs one allowed client path and returns its JSON body unchanged.
 func ReadRaw(leaguePath, path string) (json.RawMessage, error) {
 	if !RawAllowed(path) {

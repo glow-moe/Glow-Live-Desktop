@@ -49,11 +49,16 @@ type liveSettings struct {
 	LcuReads []lcuRead `json:"lcuReads"`
 }
 
-// lcuRead is one raw client read: send it under Key, re-read every Every seconds.
+// lcuRead is one raw client read: send it under Key, re-read every Every
+// seconds. Each "member" reads Path once per lobby member with {puuid} filled
+// in and sends a list in member order (null where a read failed). Pick keeps
+// only those top-level fields of each body.
 type lcuRead struct {
-	Key   string `json:"key"`
-	Path  string `json:"path"`
-	Every int    `json:"every"`
+	Key   string   `json:"key"`
+	Path  string   `json:"path"`
+	Every int      `json:"every"`
+	Each  string   `json:"each"`
+	Pick  []string `json:"pick"`
 }
 
 type rawEntry struct {
@@ -61,48 +66,106 @@ type rawEntry struct {
 	data json.RawMessage
 }
 
-var rawKeyRE = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
+var (
+	rawKeyRE   = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
+	rawFieldRE = regexp.MustCompile(`^[A-Za-z0-9_]{1,48}$`)
+	puuidRE    = regexp.MustCompile(`^[a-z0-9-]{8,100}$`)
+)
 
-// lcuRaw returns the site's raw client reads, each re-read only when its
-// interval is up; a failed read keeps the last good body. At most 8 reads.
-func (o *Orchestrator) lcuRaw(leaguePath string, reads []lcuRead) map[string]json.RawMessage {
+// rawRead returns one cached raw body, re-reading it when its interval is up;
+// a failed read keeps the last good body.
+func (o *Orchestrator) rawRead(leaguePath, cacheKey, path string, every time.Duration, pick []string) (json.RawMessage, bool) {
+	o.mu.Lock()
+	e, ok := o.rawCache[cacheKey]
+	o.mu.Unlock()
+	if !ok || time.Since(e.at) >= every {
+		if b, err := lcu.ReadRaw(leaguePath, path); err == nil {
+			e = rawEntry{at: time.Now(), data: lcu.PickFields(b, pick)}
+			ok = true
+		} else if ok {
+			e.at = time.Now() // keep the last good body, try again next interval
+		}
+		if ok {
+			o.mu.Lock()
+			if o.rawCache == nil {
+				o.rawCache = map[string]rawEntry{}
+			}
+			o.rawCache[cacheKey] = e
+			o.mu.Unlock()
+		}
+	}
+	return e.data, ok && len(e.data) > 0
+}
+
+// lcuRaw returns the site's raw client reads (at most 8, each member read for
+// at most 10 members). puuids are the lobby members in snapshot order.
+func (o *Orchestrator) lcuRaw(leaguePath string, reads []lcuRead, puuids []string) map[string]json.RawMessage {
 	if len(reads) == 0 {
 		return nil
 	}
+	o.mu.Lock()
+	if len(o.rawCache) > 64 { // players from old lobbies
+		for k, e := range o.rawCache {
+			if time.Since(e.at) > 10*time.Minute {
+				delete(o.rawCache, k)
+			}
+		}
+	}
+	o.mu.Unlock()
 	out := map[string]json.RawMessage{}
 	for i, r := range reads {
-		if i >= 8 || !rawKeyRE.MatchString(r.Key) || !lcu.RawAllowed(r.Path) {
+		if i >= 8 || !rawKeyRE.MatchString(r.Key) {
 			continue
 		}
 		every := time.Duration(r.Every) * time.Second
 		if every < 2*time.Second {
 			every = 2 * time.Second
 		}
-		o.mu.Lock()
-		e, ok := o.rawCache[r.Key]
-		o.mu.Unlock()
-		if !ok || time.Since(e.at) >= every {
-			if b, err := lcu.ReadRaw(leaguePath, r.Path); err == nil {
-				e = rawEntry{at: time.Now(), data: b}
-				ok = true
-			} else if ok {
-				e.at = time.Now() // keep the last good body, try again next interval
-			}
-			if ok {
-				o.mu.Lock()
-				if o.rawCache == nil {
-					o.rawCache = map[string]rawEntry{}
-				}
-				o.rawCache[r.Key] = e
-				o.mu.Unlock()
+		pick := make([]string, 0, len(r.Pick))
+		for _, f := range r.Pick {
+			if rawFieldRE.MatchString(f) && len(pick) < 32 {
+				pick = append(pick, f)
 			}
 		}
-		if ok && len(e.data) > 0 {
-			out[r.Key] = e.data
+		if r.Each == "member" {
+			if strings.Count(r.Path, "{puuid}") != 1 || len(puuids) == 0 {
+				continue
+			}
+			list := make([]json.RawMessage, 0, len(puuids))
+			got := false
+			for j, p := range puuids {
+				body := json.RawMessage("null")
+				path := strings.Replace(r.Path, "{puuid}", p, 1)
+				if j < 10 && puuidRE.MatchString(p) && lcu.RawAllowed(path) {
+					if b, ok := o.rawRead(leaguePath, r.Key+"|"+p, path, every, pick); ok {
+						body, got = b, true
+					}
+				}
+				list = append(list, body)
+			}
+			if b, err := json.Marshal(list); err == nil && got {
+				out[r.Key] = b
+			}
+			continue
+		}
+		if !lcu.RawAllowed(r.Path) {
+			continue
+		}
+		if b, ok := o.rawRead(leaguePath, r.Key, r.Path, every, pick); ok {
+			out[r.Key] = b
 		}
 	}
 	if len(out) == 0 {
 		return nil
+	}
+	return out
+}
+
+// memberPuuids lists the lobby members' puuids in snapshot order.
+func memberPuuids(l *lcu.Lobby) []string {
+	out := make([]string, len(l.Members))
+	for i, m := range l.Members {
+		out[i] = m.Puuid
 	}
 	return out
 }
@@ -1180,7 +1243,7 @@ func (o *Orchestrator) tick() {
 		st := Status{Game: "league", InGame: false, Detail: lob.Label, Pushes: o.pushes, Delay: effDelay}
 		// The raw reads ride the push only, not the local overlay feed.
 		pushed := snap
-		pushed.Raw = o.lcuRaw(cfg.LeaguePath, settings.LcuReads)
+		pushed.Raw = o.lcuRaw(cfg.LeaguePath, settings.LcuReads, memberPuuids(lob))
 		o.push(cfg, effDelay, pushed, &st)
 		o.cacheOverlay(snap)
 		leagueOverlay = true
