@@ -950,6 +950,7 @@ type Orchestrator struct {
 	// The mirrors (anime, SplitCraft) as last read from glow.moe, and when.
 	mirrorsCache mirrors
 	rawCache     map[string]rawEntry
+	pushGate     pushGate
 	dotaRecv     *dota.Receiver
 	dotaTriedAt  time.Time
 	mirrorsAt    time.Time
@@ -1500,12 +1501,20 @@ func (o *Orchestrator) drainDelayed(cfg config.Config, delaySec int) {
 	snap := o.delayQ[due].snap
 	o.delayQ = o.delayQ[due+1:]
 	o.mu.Unlock()
-	var st Status
+	st := Status{InGame: true} // the match's tail: not held back like a lobby frame
 	o.post(cfg, delaySec, snap, &st)
 }
 
 func (o *Orchestrator) post(cfg config.Config, delaySec int, snap any, st *Status) {
-	if err := poster.Post(cfg.Endpoint, cfg.Token, delaySec, snap); err != nil {
+	now := time.Now()
+	b, ok := o.gate(snap, st.InGame, now) // push_gate.go: skip repeats, trim raw reads
+	if !ok {
+		st.Pushes = o.pushes
+		st.Pushing = true
+		return
+	}
+	if err := poster.Post(cfg.Endpoint, cfg.Token, delaySec, json.RawMessage(b)); err != nil {
+		o.failed()
 		if errors.Is(err, poster.ErrOutdated) {
 			st.Err = "Update required: this version is no longer supported. Get the latest from glow.moe."
 			o.mu.Lock()
@@ -1519,6 +1528,7 @@ func (o *Orchestrator) post(cfg config.Config, delaySec int, snap any, st *Statu
 		}
 		return
 	}
+	o.sent(b, now)
 	o.pushes++
 	st.Pushes = o.pushes
 	st.Pushing = true
