@@ -12,3 +12,4 @@ and gets cleared.
 - The app no longer writes League client dumps (lcu-*.json) next to itself; you can delete any old ones.
 - The app's local page only answers its own window now, so other websites can't reach it.
 - Much lighter on glow.moe: when nothing changed (sitting in a lobby, the client, a Steam game) the app stays quiet and checks in every 10 seconds; outside a match it sends at most every 3 seconds, and League client details only when they change. Matches still update live.
+- VALORANT (early): menus, agent select and your match (map, mode, score, rank, level) on glow.moe/<you>/valorant and in Discord, read from the Riot Client on your PC only.

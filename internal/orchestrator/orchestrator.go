@@ -30,6 +30,7 @@ import (
 	"github.com/glow-moe/glow-collector/internal/roblox"
 	"github.com/glow-moe/glow-collector/internal/snapshot"
 	"github.com/glow-moe/glow-collector/internal/steam"
+	"github.com/glow-moe/glow-collector/internal/valorant"
 )
 
 // liveSettings mirrors the L!VE preferences the user sets on the site (the
@@ -56,6 +57,10 @@ type liveSettings struct {
 		Modes  map[string]string `json:"modes"`
 		Maps   map[string]string `json:"maps"`
 	} `json:"lolNames"`
+	// ValorantNames name maps and modes for the Discord status; ValorantPick
+	// trims the presence blob sent to the site (empty = all of it).
+	ValorantNames *valorantNames `json:"valorantNames"`
+	ValorantPick  []string       `json:"valorantPick"`
 }
 
 // lcuRead is one raw client read: send it under Key, re-read every Every
@@ -951,6 +956,8 @@ type Orchestrator struct {
 	mirrorsCache mirrors
 	rawCache     map[string]rawEntry
 	pushGate     pushGate
+	valLast      *valorant.State
+	valAt        time.Time
 	dotaRecv     *dota.Receiver
 	dotaTriedAt  time.Time
 	mirrorsAt    time.Time
@@ -1272,6 +1279,18 @@ func (o *Orchestrator) tick() {
 				return
 			}
 		}
+	}
+
+	// VALORANT: your own presence from the Riot Client (menus, agent select,
+	// the match). Checked before League: when League is up instead, the Riot
+	// Client presence says so and this is skipped.
+	if v := o.valorantState(); v != nil {
+		inMatch := v.Phase == "INGAME" || v.Phase == "PREGAME"
+		st := Status{Game: "valorant", InGame: inMatch, Detail: valorantDetail(v, settings.ValorantNames), GameName: "VALORANT", Pushes: o.pushes, Delay: effDelay}
+		o.push(cfg, effDelay, valorantFrame(v, settings.ValorantPick), &st)
+		o.presence(orGlow(appValorant), o.styled("valorant", valorantActivity(v, settings.ValorantNames, uname), valorantVars(v, settings.ValorantNames)))
+		o.set(st)
+		return
 	}
 
 	// League: in a live game. (Windows only; see leagueSupported.)
