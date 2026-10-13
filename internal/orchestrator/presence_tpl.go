@@ -161,3 +161,17 @@ func yes(b bool) string {
 	}
 	return ""
 }
+
+var discordIDRE = regexp.MustCompile(`^[0-9]{17,20}$`)
+
+// appFor is the Discord application for a status kind: the site's pick when it
+// sent a valid one, else the built-in.
+func (o *Orchestrator) appFor(kind, builtin string) string {
+	o.mu.Lock()
+	id := o.settings.DiscordApps[kind]
+	o.mu.Unlock()
+	if discordIDRE.MatchString(id) {
+		return id
+	}
+	return builtin
+}

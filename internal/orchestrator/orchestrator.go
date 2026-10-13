@@ -61,6 +61,9 @@ type liveSettings struct {
 	// trims the presence blob sent to the site (empty = all of it).
 	ValorantNames *valorantNames `json:"valorantNames"`
 	ValorantPick  []string       `json:"valorantPick"`
+	// DiscordApps swaps the Discord application a status kind runs under
+	// ("valorant", "lol-lobby", ...), e.g. when a game gets its own.
+	DiscordApps map[string]string `json:"discordApps"`
 }
 
 // lcuRead is one raw client read: send it under Key, re-read every Every
@@ -1260,7 +1263,7 @@ func (o *Orchestrator) tick() {
 		fs.UpdatedAt = time.Now().UnixMilli()
 		st := Status{Game: "forza", InGame: true, Detail: forzaDetail(fs), Pushes: o.pushes, Delay: effDelay}
 		o.push(cfg, effDelay, fs, &st)
-		o.presence(forzaAppID(o.forzaGame), o.styled("forza", forzaActivity(fs, o.forzaGame, uname, start), forzaVars(fs, o.forzaGame)))
+		o.presence(o.appFor("forza", forzaAppID(o.forzaGame)), o.styled("forza", forzaActivity(fs, o.forzaGame, uname, start), forzaVars(fs, o.forzaGame)))
 		o.set(st)
 		return
 	}
@@ -1274,7 +1277,7 @@ func (o *Orchestrator) tick() {
 				st := Status{Game: "dota2", InGame: true, Detail: dotaDetail(sum), AppID: dota.AppID, GameName: "Dota 2", Pushes: o.pushes, Delay: effDelay}
 				o.push(cfg, effDelay, dotaPush{Game: "dota2", Live: true, UpdatedAt: time.Now().UnixMilli(), Raw: frame}, &st)
 				app, named := steamApp(dota.AppID)
-				o.presence(app, o.styled("dota", dotaActivity(sum, uname, named), dotaVars(sum)))
+				o.presence(o.appFor("dota", app), o.styled("dota", dotaActivity(sum, uname, named), dotaVars(sum)))
 				o.set(st)
 				return
 			}
@@ -1288,7 +1291,7 @@ func (o *Orchestrator) tick() {
 		inMatch := v.Phase == "INGAME" || v.Phase == "PREGAME"
 		st := Status{Game: "valorant", InGame: inMatch, Detail: valorantDetail(v, settings.ValorantNames), GameName: "VALORANT", Pushes: o.pushes, Delay: effDelay}
 		o.push(cfg, effDelay, valorantFrame(v, settings.ValorantPick), &st)
-		o.presence(orGlow(appValorant), o.styled("valorant", valorantActivity(v, settings.ValorantNames, uname), valorantVars(v, settings.ValorantNames)))
+		o.presence(o.appFor("valorant", orGlow(appValorant)), o.styled("valorant", valorantActivity(v, settings.ValorantNames, uname), valorantVars(v, settings.ValorantNames)))
 		o.set(st)
 		return
 	}
@@ -1302,7 +1305,7 @@ func (o *Orchestrator) tick() {
 		o.push(cfg, effDelay, snap, &st)
 		o.cacheOverlay(snap)
 		leagueOverlay = true
-		o.presence(orGlow(appLoL), o.styled("lol-game", leagueActivity(snap, data.GameData.GameTime, uname), leagueVars(snap)))
+		o.presence(o.appFor("lol-game", orGlow(appLoL)), o.styled("lol-game", leagueActivity(snap, data.GameData.GameTime, uname), leagueVars(snap)))
 		o.set(st)
 		return
 	}
@@ -1331,7 +1334,7 @@ func (o *Orchestrator) tick() {
 		o.mu.Lock()
 		o.lobbyAt, o.lobbyLabel = time.Now(), lob.Label
 		o.mu.Unlock()
-		o.presence(orGlow(appLoL), o.styled("lol-lobby", leagueLobbyActivity(snap.Lobby, uname), lobbyVars(snap.Lobby)))
+		o.presence(o.appFor("lol-lobby", orGlow(appLoL)), o.styled("lol-lobby", leagueLobbyActivity(snap.Lobby, uname), lobbyVars(snap.Lobby)))
 		o.set(st)
 		return
 	}
@@ -1377,7 +1380,7 @@ func (o *Orchestrator) tick() {
 					// that slot so we do not fight it; the site still gets the
 					// status above.
 					o.clearPresence()
-				} else if err := o.presence(app, o.styled("steam", steamActivity(s, uname, hints.Icon, named), steamVars(s, hints.Icon, named))); err != nil {
+				} else if err := o.presence(o.appFor("steam", app), o.styled("steam", steamActivity(s, uname, hints.Icon, named), steamVars(s, hints.Icon, named))); err != nil {
 					// The push to glow.moe is the job here; Discord being closed
 					// is a note, not a problem state.
 					st.Detail = joinDots(st.Detail, err.Error())
@@ -1395,7 +1398,7 @@ func (o *Orchestrator) tick() {
 		if g, ok := roblox.Current(); ok {
 			st := Status{Game: "roblox", InGame: true, Detail: g.Name, GameName: g.Name, Pushes: o.pushes, Delay: effDelay}
 			o.push(cfg, effDelay, robloxPayload(g), &st)
-			if err := o.presence(orGlow(appRoblox), o.styled("roblox", robloxActivity(g, uname, appRoblox != ""), robloxVars(g, appRoblox != ""))); err != nil {
+			if err := o.presence(o.appFor("roblox", orGlow(appRoblox)), o.styled("roblox", robloxActivity(g, uname, appRoblox != ""), robloxVars(g, appRoblox != ""))); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)
@@ -1417,7 +1420,7 @@ func (o *Orchestrator) tick() {
 		// line says so and the app stays green.
 		if cfg.SplitcraftPresence && m.splitOK {
 			st := Status{Game: "splitcraft", InGame: true, Detail: splitcraftDetail(m.split), Pushes: o.pushes, Delay: effDelay}
-			if err := o.presence(orGlow(appSplitcraft), o.styled("splitcraft", splitcraftActivity(m.split, uname), splitVars(m.split))); err != nil {
+			if err := o.presence(o.appFor("splitcraft", orGlow(appSplitcraft)), o.styled("splitcraft", splitcraftActivity(m.split, uname), splitVars(m.split))); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)
@@ -1425,7 +1428,7 @@ func (o *Orchestrator) tick() {
 		}
 		if cfg.AnimePresence && m.animeOK {
 			st := Status{Game: "anime", InGame: true, Detail: animeDetail(m.anime), Pushes: o.pushes, Delay: effDelay}
-			if err := o.presence(orGlow(""), o.styled("anime", animeActivityAt(m.anime, uname, m.animeAt), animeVars(m.anime))); err != nil {
+			if err := o.presence(o.appFor("anime", orGlow("")), o.styled("anime", animeActivityAt(m.anime, uname, m.animeAt), animeVars(m.anime))); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)
@@ -1436,7 +1439,7 @@ func (o *Orchestrator) tick() {
 		// page is the thing itself.
 		if cfg.ReadingPresence && m.mangaOK {
 			st := Status{Game: "manga", InGame: true, Detail: m.manga.Title, Pushes: o.pushes, Delay: effDelay}
-			if err := o.presence(orGlow(""), o.styled("reading", readingActivity(m.manga, uname, o.readingSince(m.manga.Title)), readingVars(m.manga))); err != nil {
+			if err := o.presence(o.appFor("reading", orGlow("")), o.styled("reading", readingActivity(m.manga, uname, o.readingSince(m.manga.Title)), readingVars(m.manga))); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)
@@ -1444,7 +1447,7 @@ func (o *Orchestrator) tick() {
 		}
 		if cfg.MusicPresence && m.musicOK && !m.music.Paused && musicOnDiscord(m.music.Service) {
 			st := Status{Game: "music", InGame: true, Detail: joinDots(m.music.Title, m.music.Artist), Pushes: o.pushes, Delay: effDelay}
-			if err := o.presence(orGlow(""), o.styled("music", musicActivity(m.music, uname, m.musicAt), musicVars(m.music))); err != nil {
+			if err := o.presence(o.appFor("music", orGlow("")), o.styled("music", musicActivity(m.music, uname, m.musicAt), musicVars(m.music))); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)

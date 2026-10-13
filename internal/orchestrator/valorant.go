@@ -11,9 +11,10 @@ import (
 	"github.com/glow-moe/glow-collector/internal/valorant"
 )
 
-// appValorant is a Discord app named "VALORANT" (build-time, like the others);
-// unset means the glow app carries the status.
-var appValorant = ""
+// appValorant is VALORANT's own Discord application (from Discord's detectable
+// games list, like the Steam table), so the headline reads "Playing VALORANT".
+// A build can override it; so can glow.moe (settings.discordApps).
+var appValorant = "700136079562375258"
 
 // valorantNames come with the L!VE settings: map code -> name + splash, queue
 // id -> mode. The site owns these tables; the app only uses them for Discord.
