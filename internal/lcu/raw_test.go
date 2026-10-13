@@ -9,6 +9,9 @@ func TestRawAllowed(t *testing.T) {
 		"/lol-lobby/v2/lobby",
 		"/lol-champ-select/v1/session",
 		"/lol-ranked/v1/current-ranked-stats",
+		"/lol-chat/v1/me",
+		"/lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=5",
+		"/lol-summoner/v1/summoner-profile?puuid=0a1b2c3d-0000-1111-2222-333344445555",
 	}
 	for _, p := range ok {
 		if !RawAllowed(p) {
@@ -16,12 +19,15 @@ func TestRawAllowed(t *testing.T) {
 		}
 	}
 	bad := []string{
-		"/lol-chat/v1/me",
+		"/lol-chat/v1/friends",
+		"/lol-chat/v1/conversations",
+		"/lol-chat/v1/me/x",
 		"/lol-login/v1/session",
+		"/lol-lobby/v2/lobby?x=1;y",
+		"/lol-lobby/v2/lobby?x=a b",
 		"/lol-store/v1/catalog",
 		"/riotclient/kill-and-restart-ux",
 		"/lol-lobby/../lol-chat/v1/me",
-		"/lol-lobby/v2/lobby?x=1",
 		"/lol-lobby//v2",
 		"lol-lobby/v2/lobby",
 		"/LOL-LOBBY/v2/lobby",
@@ -42,5 +48,17 @@ func TestPickFields(t *testing.T) {
 	}
 	if string(PickFields([]byte(`[1]`), []string{"a"})) != `[1]` {
 		t.Fatal("non-object should pass through")
+	}
+}
+
+func TestPickPaths(t *testing.T) {
+	body := []byte(`{"puuid":"x","games":{"games":[{"queueId":420,"gameId":1,"participants":[{"championId":7,"stats":{"win":true,"kills":3,"gold":9}}]}]},"timer":{"phase":"BAN_PICK","x":1}}`)
+	got := string(PickFields(body, []string{"games.games.queueId", "games.games.participants.championId", "games.games.participants.stats.win", "timer"}))
+	want := `{"games":{"games":[{"participants":[{"championId":7,"stats":{"win":true}}],"queueId":420}]},"timer":{"phase":"BAN_PICK","x":1}}`
+	if got != want {
+		t.Fatalf("got  %s, want %s", got, want)
+	}
+	if string(PickFields([]byte(`[{"a":1,"b":2}]`), []string{"a"})) != `[{"a":1}]` {
+		t.Fatal("top-level arrays are walked too")
 	}
 }

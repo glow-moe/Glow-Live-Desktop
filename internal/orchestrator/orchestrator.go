@@ -21,6 +21,7 @@ import (
 	"github.com/glow-moe/glow-collector/internal/config"
 	"github.com/glow-moe/glow-collector/internal/ddragon"
 	"github.com/glow-moe/glow-collector/internal/discord"
+	"github.com/glow-moe/glow-collector/internal/dota"
 	"github.com/glow-moe/glow-collector/internal/forza"
 	"github.com/glow-moe/glow-collector/internal/lcu"
 	"github.com/glow-moe/glow-collector/internal/live"
@@ -47,28 +48,39 @@ type liveSettings struct {
 	// LcuReads are the League client paths glow.moe wants read raw (lcu.ReadRaw
 	// keeps them to its read-only allowlist).
 	LcuReads []lcuRead `json:"lcuReads"`
+	// Presence re-words the Discord status per kind (presence_tpl.go).
+	Presence map[string]presenceTpl `json:"presence"`
+	// LolNames name League queues, modes and maps ahead of the app's tables.
+	LolNames *struct {
+		Queues map[string]string `json:"queues"`
+		Modes  map[string]string `json:"modes"`
+		Maps   map[string]string `json:"maps"`
+	} `json:"lolNames"`
 }
 
 // lcuRead is one raw client read: send it under Key, re-read every Every
 // seconds. Each "member" reads Path once per lobby member with {puuid} filled
-// in and sends a list in member order (null where a read failed). Pick keeps
-// only those top-level fields of each body.
+// in and sends a list in member order (null where a read failed). {me} is your
+// own puuid. Pick keeps only those top-level fields of each body. Phases, when
+// set, limits the read to those gameflow phases ("None" = in the client).
 type lcuRead struct {
-	Key   string   `json:"key"`
-	Path  string   `json:"path"`
-	Every int      `json:"every"`
-	Each  string   `json:"each"`
-	Pick  []string `json:"pick"`
+	Key    string   `json:"key"`
+	Path   string   `json:"path"`
+	Every  int      `json:"every"`
+	Each   string   `json:"each"`
+	Pick   []string `json:"pick"`
+	Phases []string `json:"phases"`
 }
 
 type rawEntry struct {
-	at   time.Time
+	at   time.Time // last attempt
+	good time.Time // last good read
 	data json.RawMessage
 }
 
 var (
 	rawKeyRE   = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
-	rawFieldRE = regexp.MustCompile(`^[A-Za-z0-9_]{1,48}$`)
+	rawFieldRE = regexp.MustCompile(`^[A-Za-z0-9_.]{1,96}$`)
 	puuidRE    = regexp.MustCompile(`^[a-z0-9-]{8,100}$`)
 )
 
@@ -80,10 +92,15 @@ func (o *Orchestrator) rawRead(leaguePath, cacheKey, path string, every time.Dur
 	o.mu.Unlock()
 	if !ok || time.Since(e.at) >= every {
 		if b, err := lcu.ReadRaw(leaguePath, path); err == nil {
-			e = rawEntry{at: time.Now(), data: lcu.PickFields(b, pick)}
+			e = rawEntry{at: time.Now(), good: time.Now(), data: lcu.PickFields(b, pick)}
 			ok = true
-		} else if ok {
-			e.at = time.Now() // keep the last good body, try again next interval
+		} else if ok && time.Since(e.good) < 2*every {
+			e.at = time.Now() // a blip: keep the last good body, try again next interval
+		} else {
+			ok = false // gone (left champ select...): drop it, never send stale state
+			o.mu.Lock()
+			delete(o.rawCache, cacheKey)
+			o.mu.Unlock()
 		}
 		if ok {
 			o.mu.Lock()
@@ -97,9 +114,9 @@ func (o *Orchestrator) rawRead(leaguePath, cacheKey, path string, every time.Dur
 	return e.data, ok && len(e.data) > 0
 }
 
-// lcuRaw returns the site's raw client reads (at most 8, each member read for
+// lcuRaw returns the site's raw client reads (at most 16, each member read for
 // at most 10 members). puuids are the lobby members in snapshot order.
-func (o *Orchestrator) lcuRaw(leaguePath string, reads []lcuRead, puuids []string) map[string]json.RawMessage {
+func (o *Orchestrator) lcuRaw(leaguePath string, reads []lcuRead, phase, self string, puuids []string) map[string]json.RawMessage {
 	if len(reads) == 0 {
 		return nil
 	}
@@ -114,8 +131,15 @@ func (o *Orchestrator) lcuRaw(leaguePath string, reads []lcuRead, puuids []strin
 	o.mu.Unlock()
 	out := map[string]json.RawMessage{}
 	for i, r := range reads {
-		if i >= 8 || !rawKeyRE.MatchString(r.Key) {
+		if i >= 16 || !rawKeyRE.MatchString(r.Key) || !inPhase(r.Phases, phase) {
 			continue
+		}
+		path := r.Path
+		if strings.Contains(path, "{me}") {
+			if !puuidRE.MatchString(self) {
+				continue
+			}
+			path = strings.Replace(path, "{me}", self, 1)
 		}
 		every := time.Duration(r.Every) * time.Second
 		if every < 2*time.Second {
@@ -123,21 +147,21 @@ func (o *Orchestrator) lcuRaw(leaguePath string, reads []lcuRead, puuids []strin
 		}
 		pick := make([]string, 0, len(r.Pick))
 		for _, f := range r.Pick {
-			if rawFieldRE.MatchString(f) && len(pick) < 32 {
+			if rawFieldRE.MatchString(f) && len(pick) < 64 {
 				pick = append(pick, f)
 			}
 		}
 		if r.Each == "member" {
-			if strings.Count(r.Path, "{puuid}") != 1 || len(puuids) == 0 {
+			if strings.Count(path, "{puuid}") != 1 || len(puuids) == 0 {
 				continue
 			}
 			list := make([]json.RawMessage, 0, len(puuids))
 			got := false
 			for j, p := range puuids {
 				body := json.RawMessage("null")
-				path := strings.Replace(r.Path, "{puuid}", p, 1)
-				if j < 10 && puuidRE.MatchString(p) && lcu.RawAllowed(path) {
-					if b, ok := o.rawRead(leaguePath, r.Key+"|"+p, path, every, pick); ok {
+				one := strings.Replace(path, "{puuid}", p, 1)
+				if j < 10 && puuidRE.MatchString(p) && lcu.RawAllowed(one) {
+					if b, ok := o.rawRead(leaguePath, r.Key+"|"+p, one, every, pick); ok {
 						body, got = b, true
 					}
 				}
@@ -148,10 +172,10 @@ func (o *Orchestrator) lcuRaw(leaguePath string, reads []lcuRead, puuids []strin
 			}
 			continue
 		}
-		if !lcu.RawAllowed(r.Path) {
+		if !lcu.RawAllowed(path) {
 			continue
 		}
-		if b, ok := o.rawRead(leaguePath, r.Key, r.Path, every, pick); ok {
+		if b, ok := o.rawRead(leaguePath, r.Key, path, every, pick); ok {
 			out[r.Key] = b
 		}
 	}
@@ -159,6 +183,22 @@ func (o *Orchestrator) lcuRaw(leaguePath string, reads []lcuRead, puuids []strin
 		return nil
 	}
 	return out
+}
+
+// inPhase: no phase list means every phase; "None" also covers an empty phase.
+func inPhase(phases []string, phase string) bool {
+	if len(phases) == 0 {
+		return true
+	}
+	if phase == "" {
+		phase = "None"
+	}
+	for _, p := range phases {
+		if p == phase {
+			return true
+		}
+	}
+	return false
 }
 
 // memberPuuids lists the lobby members' puuids in snapshot order.
@@ -199,6 +239,9 @@ func fetchSettings(endpoint, token string) (liveSettings, bool) {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
 		return s, false
+	}
+	if s.LolNames != nil {
+		lcu.SetNames(s.LolNames.Queues, s.LolNames.Modes, s.LolNames.Maps)
 	}
 	return s, true
 }
@@ -907,6 +950,8 @@ type Orchestrator struct {
 	// The mirrors (anime, SplitCraft) as last read from glow.moe, and when.
 	mirrorsCache mirrors
 	rawCache     map[string]rawEntry
+	dotaRecv     *dota.Receiver
+	dotaTriedAt  time.Time
 	mirrorsAt    time.Time
 	steamID      uint32 // Steam account id signed in on this machine (0 = none)
 	steamIDAt    time.Time
@@ -1207,9 +1252,25 @@ func (o *Orchestrator) tick() {
 		fs.UpdatedAt = time.Now().UnixMilli()
 		st := Status{Game: "forza", InGame: true, Detail: forzaDetail(fs), Pushes: o.pushes, Delay: effDelay}
 		o.push(cfg, effDelay, fs, &st)
-		o.presence(forzaAppID(o.forzaGame), forzaActivity(fs, o.forzaGame, uname, start))
+		o.presence(forzaAppID(o.forzaGame), o.styled("forza", forzaActivity(fs, o.forzaGame, uname, start), forzaVars(fs, o.forzaGame)))
 		o.set(st)
 		return
+	}
+
+	// Dota 2: the game's GSI frames, while you play a match (not in menus or
+	// spectating). Same Steam switches as any Steam game: off with Steam
+	// presence, or when Dota is hidden in the app's game list.
+	if cfg.SteamPresence && !o.gameHidden(dota.AppID) {
+		if frame, ok := o.ensureDota().Latest(15 * time.Second); ok {
+			if sum := dota.Summarize(frame); sum.Playing {
+				st := Status{Game: "dota2", InGame: true, Detail: dotaDetail(sum), AppID: dota.AppID, GameName: "Dota 2", Pushes: o.pushes, Delay: effDelay}
+				o.push(cfg, effDelay, dotaPush{Game: "dota2", Live: true, UpdatedAt: time.Now().UnixMilli(), Raw: frame}, &st)
+				app, named := steamApp(dota.AppID)
+				o.presence(app, o.styled("dota", dotaActivity(sum, uname, named), dotaVars(sum)))
+				o.set(st)
+				return
+			}
+		}
 	}
 
 	// League: in a live game. (Windows only; see leagueSupported.)
@@ -1221,7 +1282,7 @@ func (o *Orchestrator) tick() {
 		o.push(cfg, effDelay, snap, &st)
 		o.cacheOverlay(snap)
 		leagueOverlay = true
-		o.presence(orGlow(appLoL), leagueActivity(snap, data.GameData.GameTime, uname))
+		o.presence(orGlow(appLoL), o.styled("lol-game", leagueActivity(snap, data.GameData.GameTime, uname), leagueVars(snap)))
 		o.set(st)
 		return
 	}
@@ -1243,14 +1304,14 @@ func (o *Orchestrator) tick() {
 		st := Status{Game: "league", InGame: false, Detail: lob.Label, Pushes: o.pushes, Delay: effDelay}
 		// The raw reads ride the push only, not the local overlay feed.
 		pushed := snap
-		pushed.Raw = o.lcuRaw(cfg.LeaguePath, settings.LcuReads, memberPuuids(lob))
+		pushed.Raw = o.lcuRaw(cfg.LeaguePath, settings.LcuReads, lob.Phase, lob.SelfPuuid, memberPuuids(lob))
 		o.push(cfg, effDelay, pushed, &st)
 		o.cacheOverlay(snap)
 		leagueOverlay = true
 		o.mu.Lock()
 		o.lobbyAt, o.lobbyLabel = time.Now(), lob.Label
 		o.mu.Unlock()
-		o.presence(orGlow(appLoL), leagueLobbyActivity(snap.Lobby, uname))
+		o.presence(orGlow(appLoL), o.styled("lol-lobby", leagueLobbyActivity(snap.Lobby, uname), lobbyVars(snap.Lobby)))
 		o.set(st)
 		return
 	}
@@ -1296,7 +1357,7 @@ func (o *Orchestrator) tick() {
 					// that slot so we do not fight it; the site still gets the
 					// status above.
 					o.clearPresence()
-				} else if err := o.presence(app, steamActivity(s, uname, hints.Icon, named)); err != nil {
+				} else if err := o.presence(app, o.styled("steam", steamActivity(s, uname, hints.Icon, named), steamVars(s, hints.Icon, named))); err != nil {
 					// The push to glow.moe is the job here; Discord being closed
 					// is a note, not a problem state.
 					st.Detail = joinDots(st.Detail, err.Error())
@@ -1314,7 +1375,7 @@ func (o *Orchestrator) tick() {
 		if g, ok := roblox.Current(); ok {
 			st := Status{Game: "roblox", InGame: true, Detail: g.Name, GameName: g.Name, Pushes: o.pushes, Delay: effDelay}
 			o.push(cfg, effDelay, robloxPayload(g), &st)
-			if err := o.presence(orGlow(appRoblox), robloxActivity(g, uname, appRoblox != "")); err != nil {
+			if err := o.presence(orGlow(appRoblox), o.styled("roblox", robloxActivity(g, uname, appRoblox != ""), robloxVars(g, appRoblox != ""))); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)
@@ -1336,7 +1397,7 @@ func (o *Orchestrator) tick() {
 		// line says so and the app stays green.
 		if cfg.SplitcraftPresence && m.splitOK {
 			st := Status{Game: "splitcraft", InGame: true, Detail: splitcraftDetail(m.split), Pushes: o.pushes, Delay: effDelay}
-			if err := o.presence(orGlow(appSplitcraft), splitcraftActivity(m.split, uname)); err != nil {
+			if err := o.presence(orGlow(appSplitcraft), o.styled("splitcraft", splitcraftActivity(m.split, uname), splitVars(m.split))); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)
@@ -1344,7 +1405,7 @@ func (o *Orchestrator) tick() {
 		}
 		if cfg.AnimePresence && m.animeOK {
 			st := Status{Game: "anime", InGame: true, Detail: animeDetail(m.anime), Pushes: o.pushes, Delay: effDelay}
-			if err := o.presence(orGlow(""), animeActivityAt(m.anime, uname, m.animeAt)); err != nil {
+			if err := o.presence(orGlow(""), o.styled("anime", animeActivityAt(m.anime, uname, m.animeAt), animeVars(m.anime))); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)
@@ -1355,7 +1416,7 @@ func (o *Orchestrator) tick() {
 		// page is the thing itself.
 		if cfg.ReadingPresence && m.mangaOK {
 			st := Status{Game: "manga", InGame: true, Detail: m.manga.Title, Pushes: o.pushes, Delay: effDelay}
-			if err := o.presence(orGlow(""), readingActivity(m.manga, uname, o.readingSince(m.manga.Title))); err != nil {
+			if err := o.presence(orGlow(""), o.styled("reading", readingActivity(m.manga, uname, o.readingSince(m.manga.Title)), readingVars(m.manga))); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)
@@ -1363,7 +1424,7 @@ func (o *Orchestrator) tick() {
 		}
 		if cfg.MusicPresence && m.musicOK && !m.music.Paused && musicOnDiscord(m.music.Service) {
 			st := Status{Game: "music", InGame: true, Detail: joinDots(m.music.Title, m.music.Artist), Pushes: o.pushes, Delay: effDelay}
-			if err := o.presence(orGlow(""), musicActivity(m.music, uname, m.musicAt)); err != nil {
+			if err := o.presence(orGlow(""), o.styled("music", musicActivity(m.music, uname, m.musicAt), musicVars(m.music))); err != nil {
 				st.Detail = joinDots(st.Detail, err.Error())
 			}
 			o.set(st)

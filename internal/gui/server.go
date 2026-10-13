@@ -279,7 +279,7 @@ func (s *Server) Handler() http.Handler {
 	// /live.json on this loopback server, so nothing touches glow.moe (works
 	// offline). Rank crests + fonts are bundled; ddragon art is Riot's CDN.
 	mux.HandleFunc("/overlay", s.hOverlay)
-	return mux
+	return localOnly(mux)
 }
 
 // hOpenSettings opens the site's L!VE settings (glow.moe/dashboard/live) in the
@@ -311,13 +311,20 @@ func (s *Server) hLive(w http.ResponseWriter, r *http.Request) {
 // renders the League snapshot entirely offline (no glow.moe). Served from an
 // explicit route so the OBS URL is a clean /overlay with no trailing slash.
 func (s *Server) hOverlay(w http.ResponseWriter, _ *http.Request) {
-	b, err := webFS.ReadFile("web/overlay.html")
-	if err != nil {
-		http.Error(w, "overlay not found", http.StatusInternalServerError)
-		return
+	s.mu.Lock()
+	endpoint := s.cfg.Endpoint
+	s.mu.Unlock()
+	b := remoteOverlay(endpoint) // glow.moe's current page (overlay.go)
+	if b == nil {
+		var err error
+		if b, err = webFS.ReadFile("web/overlay.html"); err != nil {
+			http.Error(w, "overlay not found", http.StatusInternalServerError)
+			return
+		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Security-Policy", "sandbox allow-scripts")
 	_, _ = w.Write(b)
 }
 

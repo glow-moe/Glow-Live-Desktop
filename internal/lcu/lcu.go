@@ -73,6 +73,9 @@ type Lobby struct {
 
 	// in the client (phase "None"): the rich profile card
 	Client *ClientProfile `json:"client,omitempty"`
+
+	// SelfPuuid stays in the app: it only fills {me} in the site's raw reads.
+	SelfPuuid string `json:"-"`
 }
 
 // Rank is one ranked queue's standing (raw ids; the snapshot/web derive colors).
@@ -156,9 +159,10 @@ var commonPaths = []string{
 // ErrNoClient means the League client isn't running (no readable lockfile).
 var ErrNoClient = errors.New("league client not running")
 
-// SaveRaw, when set, writes raw /lol-lobby + /lol-champ-select responses here so
-// the mapping can be finalized against real data.
-var SaveRaw = "."
+// SaveRaw, when set, writes raw LCU responses into that folder so a mapping can
+// be checked against real data. Off in builds: up to 26.8.1 it defaulted to "."
+// and every poll rewrote a dozen dumps (one 3.5 MB) next to the exe.
+var SaveRaw = ""
 
 // profCache caches the heavy "in the client" profile so we don't refetch its ~8
 // LCU endpoints every poll (see Fetch's "None" case).
@@ -285,6 +289,7 @@ func Fetch(leaguePath string) (*Lobby, error) {
 	_ = c.get("/lol-summoner/v1/current-summoner", &sum)
 	lob.Summoner = firstNonEmpty(sum.GameName, sum.DisplayName)
 	lob.Level, lob.IconID = sum.Level, sum.IconID
+	lob.SelfPuuid = sum.Puuid
 
 	switch phase {
 	case "Lobby":
@@ -901,6 +906,49 @@ var queueNames = map[int]string{
 	4320: "Classic Co-op vs. AI",
 }
 
+// Names glow.moe sends with the L!VE settings (lolNames). They win over the
+// tables here, so a new Riot mode gets its name from a site update.
+var (
+	siteNamesMu sync.RWMutex
+	siteQueues  map[string]string
+	siteModes   map[string]string
+	siteMaps    map[string]string
+)
+
+// SetNames installs the site's name tables (nil leaves a table as it is).
+func SetNames(queues, modes, maps map[string]string) {
+	clean := func(in map[string]string) map[string]string {
+		if in == nil {
+			return nil
+		}
+		out := make(map[string]string, len(in))
+		for k, v := range in {
+			v = strings.TrimSpace(v)
+			if len(out) < 500 && k != "" && len(k) <= 32 && v != "" && len(v) <= 48 {
+				out[k] = v
+			}
+		}
+		return out
+	}
+	siteNamesMu.Lock()
+	defer siteNamesMu.Unlock()
+	if queues != nil {
+		siteQueues = clean(queues)
+	}
+	if modes != nil {
+		siteModes = clean(modes)
+	}
+	if maps != nil {
+		siteMaps = clean(maps)
+	}
+}
+
+func siteName(table map[string]string, key string) string {
+	siteNamesMu.RLock()
+	defer siteNamesMu.RUnlock()
+	return table[key]
+}
+
 // queueCache holds names the client told us for queue ids the table above
 // doesn't know (Riot adds modes often: ARAM: Mayhem, Classic Rift...).
 var (
@@ -911,6 +959,9 @@ var (
 // queueLabel names a queue: the table first, then the client's own queue list
 // (asked once per id), so a new mode never shows up as "Custom".
 func (c *conn) queueLabel(id int) string {
+	if n := siteName(siteQueues, fmt.Sprint(id)); n != "" {
+		return n
+	}
 	if n, ok := queueNames[id]; ok {
 		return n
 	}
@@ -995,6 +1046,9 @@ func availabilityLabel(a string) string {
 var mapNames = map[int]string{11: "Summoner's Rift", 12: "Howling Abyss", 30: "Arena", 453: "Summoner's Rift"}
 
 func mapName(id int) string {
+	if n := siteName(siteMaps, fmt.Sprint(id)); n != "" {
+		return n
+	}
 	if n, ok := mapNames[id]; ok {
 		return n
 	}
@@ -1002,6 +1056,13 @@ func mapName(id int) string {
 }
 
 func modeLabel(q int, mode string) string {
+	// The site's table: a queue id or a mode code ("KIWI").
+	if n := siteName(siteModes, fmt.Sprint(q)); n != "" {
+		return n
+	}
+	if n := siteName(siteModes, strings.ToUpper(mode)); n != "" {
+		return n
+	}
 	switch q {
 	case 420, 440, 400:
 		return "Draft Pick"

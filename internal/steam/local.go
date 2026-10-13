@@ -164,3 +164,25 @@ func libraryRoots() []string {
 	}
 	return roots
 }
+
+// InstallDir is where a Steam game is installed (from its appmanifest's
+// installdir), or "" when it isn't.
+func InstallDir(appID int) string {
+	file := "appmanifest_" + strconv.Itoa(appID) + ".acf"
+	for _, root := range libraryRoots() {
+		b, err := os.ReadFile(filepath.Join(root, "steamapps", file))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			f := splitQuoted(strings.TrimSpace(line))
+			if len(f) >= 2 && strings.EqualFold(f[0], "installdir") && f[1] != "" && !strings.ContainsAny(f[1], `/\`) && f[1] != ".." {
+				dir := filepath.Join(root, "steamapps", "common", f[1])
+				if st, err := os.Stat(dir); err == nil && st.IsDir() {
+					return dir
+				}
+			}
+		}
+	}
+	return ""
+}
