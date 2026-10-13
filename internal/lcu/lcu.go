@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -600,7 +601,7 @@ func fetchLobby(c *conn, lob *Lobby, puuid string, sumID int64) {
 	gc := lb.GameConfig
 	lob.PartyID = lb.PartyID
 	lob.MaxSize = orDefault(gc.MaxLobbySize, 5)
-	lob.QueueName = queueName(gc.QueueID)
+	lob.QueueName = c.queueLabel(gc.QueueID)
 	lob.MapName = mapName(gc.MapID)
 	lob.ModeLabel = modeLabel(gc.QueueID, gc.GameMode)
 	lob.IsRanked = gc.IsRanked || rankedQueue(gc.QueueID)
@@ -652,7 +653,7 @@ func fetchLoading(c *conn, lob *Lobby, selfPuuid string) {
 		return
 	}
 	lob.PhaseLabel = "Loading into game"
-	lob.QueueName = queueName(s.GameData.Queue.ID)
+	lob.QueueName = c.queueLabel(s.GameData.Queue.ID)
 	lob.MapName = mapName(s.GameData.Queue.MapID)
 	// Champs may live on the team entries or in playerChampionSelections - index
 	// the selections by internal name and fall back to them.
@@ -887,15 +888,49 @@ var queueNames = map[int]string{
 	490:  "Quickplay",
 	700:  "Clash",
 	1700: "Arena",
+	1750: "Arena",
 	1900: "URF",
 	900:  "ARURF",
+	480:  "Swiftplay",
+	2400: "ARAM: Mayhem",
+	3270: "ARAM: Mayhem",
+	4310: "Classic Rift",
+	4320: "Classic Co-op vs. AI",
 }
 
-func queueName(q int) string {
-	if n, ok := queueNames[q]; ok {
+// queueCache holds names the client told us for queue ids the table above
+// doesn't know (Riot adds modes often: ARAM: Mayhem, Classic Rift...).
+var (
+	queueCacheMu sync.Mutex
+	queueCache   = map[int]string{}
+)
+
+// queueLabel names a queue: the table first, then the client's own queue list
+// (asked once per id), so a new mode never shows up as "Custom".
+func (c *conn) queueLabel(id int) string {
+	if n, ok := queueNames[id]; ok {
 		return n
 	}
-	return "Custom"
+	queueCacheMu.Lock()
+	n, ok := queueCache[id]
+	queueCacheMu.Unlock()
+	if ok {
+		return n
+	}
+	var q struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	n = "Custom"
+	if id > 0 && c.get(fmt.Sprintf("/lol-game-queues/v1/queues/%d", id), &q) == nil {
+		if v := firstNonEmpty(strings.TrimSpace(q.Name), strings.TrimSpace(q.Description)); v != "" {
+			n = v
+		}
+	}
+	queueCacheMu.Lock()
+	queueCache[id] = n
+	queueCacheMu.Unlock()
+	return n
 }
 
 // matchQueue is a short queue label for the recent-match rows.
@@ -954,7 +989,7 @@ func availabilityLabel(a string) string {
 	return "Online"
 }
 
-var mapNames = map[int]string{11: "Summoner's Rift", 12: "Howling Abyss", 30: "Arena"}
+var mapNames = map[int]string{11: "Summoner's Rift", 12: "Howling Abyss", 30: "Arena", 453: "Summoner's Rift"}
 
 func mapName(id int) string {
 	if n, ok := mapNames[id]; ok {
@@ -971,6 +1006,17 @@ func modeLabel(q int, mode string) string {
 		return "Blind Pick"
 	case 450, 900:
 		return "ARAM"
+	}
+	// Riot's internal mode codes for the newer queues.
+	switch strings.ToUpper(mode) {
+	case "KIWI":
+		return "Mayhem"
+	case "JADE":
+		return "Classic"
+	case "SWIFTPLAY":
+		return "Swiftplay"
+	case "CHERRY":
+		return "Arena"
 	}
 	if mode != "" {
 		return titleCase(mode)
