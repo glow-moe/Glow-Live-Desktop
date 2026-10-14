@@ -84,13 +84,14 @@ func Apply(tag string) error {
 
 // Relaunch starts the freshly-swapped binary and exits this process. The new
 // copy gets --relaunch so it waits for this one to release the single-instance
-// lock (see cmd/gui/main.go). Does not return on success.
-func Relaunch() {
+// lock (see cmd/gui/main.go), plus any extra flags (--hidden for an automatic
+// update, so it comes back in the tray). Does not return on success.
+func Relaunch(extra ...string) {
 	exe, err := os.Executable()
 	if err != nil {
 		return
 	}
-	if err := exec.Command(exe, "--relaunch").Start(); err != nil {
+	if err := exec.Command(exe, append([]string{"--relaunch"}, extra...)...).Start(); err != nil {
 		return
 	}
 	os.Exit(0)

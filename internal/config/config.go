@@ -48,6 +48,10 @@ type Config struct {
 	// HideOnGame tucks the window into the tray the moment a game goes live.
 	// A missing key stays true, which is the behavior the app always had.
 	HideOnGame bool `json:"hideOnGame"`
+	// AutoUpdate installs a new release on its own once it has been out a day
+	// (time to pull a bad one), never while a game is being read. A missing key
+	// stays true.
+	AutoUpdate bool `json:"autoUpdate"`
 	// "Later" on the update prompt: that release stays quiet until this time
 	// (unix ms). A newer release, or the server turning this build away, asks
 	// again.
@@ -82,6 +86,7 @@ func Default() Config {
 		SteamPresence:      true,
 		SplitcraftPresence: true,
 		HideOnGame:         true,
+		AutoUpdate:         true,
 		AutoStart:          true, // launch with the computer, straight into the tray
 	}
 }

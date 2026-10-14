@@ -36,10 +36,12 @@ type Server struct {
 	avatar     string
 	version    string
 	linking    bool
-	refreshing bool   // a whoami refresh is in flight (avatar/username recovery)
-	hideToTray func() // set by main: tuck the window into the tray
-	showWindow func() // set by main: bring the window back on screen
-	updateVer  string // latest release when this build is behind it, else ""
+	refreshing bool      // a whoami refresh is in flight (avatar/username recovery)
+	hideToTray func()    // set by main: tuck the window into the tray
+	showWindow func()    // set by main: bring the window back on screen
+	updateVer  string    // latest release when this build is behind it, else ""
+	updateAt   time.Time // when updateVer was published
+	autoFailed string    // a release the automatic update couldn't install this session
 	// peekWindow shows the hidden window without taking focus (main wires it;
 	// false when the user is busy: full screen, presenting, quiet hours).
 	peekWindow func() bool
@@ -159,19 +161,13 @@ func NewServer(cfg config.Config, version string) *Server {
 // watchUpdates checks for a newer release on startup and every few hours after,
 // from the user's own machine. A dev build never reports an update.
 func (s *Server) watchUpdates() {
-	check := func() {
-		if v, ok := update.Check(s.version); ok {
-			s.mu.Lock()
-			s.updateVer = v
-			s.mu.Unlock()
-		}
-	}
-	check()
+	s.checkUpdate()
 	go func() {
 		// Wait a little after boot so the prompt doesn't land on top of
 		// everything else that opens with the computer.
 		time.Sleep(90 * time.Second)
 		for {
+			s.maybeAutoUpdate()
 			s.maybePromptUpdate()
 			time.Sleep(time.Minute)
 		}
@@ -179,8 +175,79 @@ func (s *Server) watchUpdates() {
 	t := time.NewTicker(6 * time.Hour)
 	defer t.Stop()
 	for range t.C {
-		check()
+		s.checkUpdate()
 	}
+}
+
+// checkUpdate asks GitHub for the latest release and remembers it when this
+// build is behind. It returns that latest tag ("" when the check failed).
+func (s *Server) checkUpdate() string {
+	v, at, ok := update.Check(s.version)
+	if ok {
+		s.mu.Lock()
+		s.updateVer, s.updateAt = v, at
+		s.mu.Unlock()
+	}
+	return v
+}
+
+// autoUpdateAfter is how long a release must have been out before the app
+// installs it on its own, so a bad one can be pulled before it spreads. The
+// "Check for updates" button and "Update now" don't wait.
+const autoUpdateAfter = 24 * time.Hour
+
+// maybeAutoUpdate installs a waiting release in the background when the user
+// left automatic updates on: only once it has been out autoUpdateAfter, never
+// while a game is being read, and one try per release per session. The new
+// copy comes back in the tray.
+func (s *Server) maybeAutoUpdate() {
+	st := s.orch.Status()
+	s.mu.Lock()
+	ver := s.updateVer
+	due := autoUpdateDue(s.cfg.AutoUpdate, ver, s.autoFailed, s.updateAt, time.Now(), st.InGame)
+	if due {
+		s.autoFailed = ver // set before trying: a failure must not retry every minute
+	}
+	s.mu.Unlock()
+	if !due {
+		return
+	}
+	if err := update.Apply(ver); err != nil {
+		return
+	}
+	update.Relaunch("--hidden")
+}
+
+// autoUpdateDue decides whether the automatic update should install `ver` now.
+func autoUpdateDue(on bool, ver, failed string, published, now time.Time, inGame bool) bool {
+	return on && ver != "" && ver != failed && !inGame &&
+		!published.IsZero() && now.Sub(published) >= autoUpdateAfter
+}
+
+// hUpdateCheck: the "Check for updates" button. Asks GitHub right now and says
+// whether this build is current; when it isn't, the update banner shows up
+// (any "Later" is dropped).
+func (s *Server) hUpdateCheck(w http.ResponseWriter, _ *http.Request) {
+	if !update.IsRelease(s.version) {
+		writeJSON(w, map[string]any{"ok": true, "dev": true, "current": s.version})
+		return
+	}
+	latest := s.checkUpdate()
+	if latest == "" {
+		writeJSON(w, map[string]any{"ok": false, "current": s.version})
+		return
+	}
+	s.mu.Lock()
+	available := s.updateVer != ""
+	if available {
+		s.cfg.UpdateLaterVer, s.cfg.UpdateLaterUntil = "", 0
+	}
+	cfg := s.cfg
+	s.mu.Unlock()
+	if available {
+		_ = config.Save(cfg)
+	}
+	writeJSON(w, map[string]any{"ok": true, "current": s.version, "latest": latest, "available": available})
 }
 
 // maybePromptUpdate brings the window up in its corner (no focus taken) once
@@ -196,6 +263,11 @@ func (s *Server) maybePromptUpdate() {
 		key += "|forced"
 	}
 	snoozed := !st.Outdated && s.cfg.UpdateLaterVer == ver && time.Now().UnixMilli() < s.cfg.UpdateLaterUntil
+	// With automatic updates on, the app installs it itself; no pop-up, unless
+	// the server is turning this build away.
+	if s.cfg.AutoUpdate && !st.Outdated {
+		snoozed = true
+	}
 	skip := ver == "" || peek == nil || s.prompted == key || snoozed || st.InGame
 	s.mu.Unlock()
 	if skip || !peek() {
@@ -270,6 +342,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/open-download", s.hOpenDownload)
 	mux.HandleFunc("/api/update-apply", s.hUpdateApply)
 	mux.HandleFunc("/api/update-later", s.hUpdateLater)
+	mux.HandleFunc("/api/update-check", s.hUpdateCheck)
 	// Local OBS overlay data: the overlay page (below, or the glow.moe page with
 	// ?src=local) reads the current masked League snapshot from here instead of
 	// polling glow.moe, so the ~2s live poll never touches our server.
@@ -426,6 +499,7 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 			AutoStart          *bool `json:"autoStart"`
 			StartHidden        *bool `json:"startHidden"`
 			HideOnGame         *bool `json:"hideOnGame"`
+			AutoUpdate         *bool `json:"autoUpdate"`
 			HideGame           *struct {
 				AppID  int  `json:"appId"`
 				Hidden bool `json:"hidden"`
@@ -473,6 +547,9 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 		if body.HideOnGame != nil {
 			s.cfg.HideOnGame = *body.HideOnGame
 		}
+		if body.AutoUpdate != nil {
+			s.cfg.AutoUpdate = *body.AutoUpdate
+		}
 		// Per-game hide: one appid on/off. Purely local, never sent to glow.
 		if body.HideGame != nil {
 			s.setGameHiddenLocked(body.HideGame.AppID, body.HideGame.Hidden)
@@ -497,6 +574,7 @@ func (s *Server) hConfig(w http.ResponseWriter, r *http.Request) {
 		"autoStart":          s.cfg.AutoStart,
 		"startHidden":        s.cfg.StartHidden,
 		"hideOnGame":         s.cfg.HideOnGame,
+		"autoUpdate":         s.cfg.AutoUpdate,
 		"seenGames":          s.cfg.SeenGames,
 		"hiddenGames":        s.cfg.HiddenGames,
 	}

@@ -18,29 +18,35 @@ const (
 	ReleasesPage = "https://github.com/glow-moe/Glow-Live-Desktop/releases/latest"
 )
 
-// Check reports the latest published release and whether `current` is behind it.
-// A dev build (anything not starting with "v") returns available=false: those
-// are test builds and must not nag the person running them.
-func Check(current string) (latest string, available bool) {
-	if !strings.HasPrefix(current, "v") {
-		return "", false
+// Check reports the latest published release, when it was published, and
+// whether `current` is behind it. A dev build (anything not starting with "v")
+// returns available=false: those are test builds and must not nag the person
+// running them.
+func Check(current string) (latest string, published time.Time, available bool) {
+	if !IsRelease(current) {
+		return "", time.Time{}, false
 	}
 	resp, err := (&http.Client{Timeout: 8 * time.Second}).Get(releasesAPI)
 	if err != nil {
-		return "", false
+		return "", time.Time{}, false
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", false
+		return "", time.Time{}, false
 	}
 	var body struct {
-		TagName string `json:"tag_name"`
+		TagName     string    `json:"tag_name"`
+		PublishedAt time.Time `json:"published_at"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil || body.TagName == "" {
-		return "", false
+		return "", time.Time{}, false
 	}
-	return body.TagName, cmpVer(current, body.TagName) < 0
+	return body.TagName, body.PublishedAt, cmpVer(current, body.TagName) < 0
 }
+
+// IsRelease reports whether a build label is a numbered release ("v26.9"),
+// as opposed to a dev or test build, which never updates itself.
+func IsRelease(version string) bool { return strings.HasPrefix(version, "v") }
 
 // cmpVer compares dotted versions ("v1.2" vs "v1.3"), ignoring a leading "v".
 func cmpVer(a, b string) int {

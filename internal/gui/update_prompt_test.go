@@ -9,7 +9,9 @@ import (
 )
 
 func TestUpdatePromptOncePerRelease(t *testing.T) {
-	s := &Server{cfg: config.Default(), orch: orchestrator.New(config.Default())}
+	cfg := config.Default()
+	cfg.AutoUpdate = false // the pop-up is for people who update by hand
+	s := &Server{cfg: cfg, orch: orchestrator.New(cfg)}
 	peeks, busy := 0, false
 	s.SetPeekWindow(func() bool {
 		if busy {
@@ -45,5 +47,18 @@ func TestUpdatePromptOncePerRelease(t *testing.T) {
 	s.maybePromptUpdate()
 	if peeks != 2 {
 		t.Fatalf("peeks = %d, want 2", peeks)
+	}
+}
+
+// With automatic updates on the app installs the release itself, so it doesn't
+// pop the window for it.
+func TestUpdatePromptQuietWithAutoUpdate(t *testing.T) {
+	s := &Server{cfg: config.Default(), orch: orchestrator.New(config.Default())}
+	peeks := 0
+	s.SetPeekWindow(func() bool { peeks++; return true })
+	s.updateVer = "v26.10"
+	s.maybePromptUpdate()
+	if peeks != 0 {
+		t.Fatal("prompted although automatic updates are on")
 	}
 }

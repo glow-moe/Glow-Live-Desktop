@@ -196,6 +196,14 @@
         <input type="checkbox" id="hidegame-toggle" />
         <span class="sub">Tuck into the tray when a game starts</span>
       </label>
+      <label class="opt">
+        <input type="checkbox" id="autoupdate-toggle" />
+        <span class="sub">Update on its own (a day after a release, never mid-game)</span>
+      </label>
+      <div class="row" style="margin-top:10px; gap:10px; flex-wrap:wrap">
+        <button class="btn ghost" id="btn-check-update" style="margin-top:0; flex:0 0 auto; width:auto; padding:8px 14px">Check for updates</button>
+        <span class="muted" id="check-update-msg"></span>
+      </div>
 
       <div class="sechead">Games</div>
       <div class="muted" style="margin-bottom:8px">
@@ -338,6 +346,7 @@
         $("autostart-toggle").checked = c.autoStart === true;
         $("hidden-toggle").checked = c.startHidden === true;
         $("hidegame-toggle").checked = c.hideOnGame !== false;
+        $("autoupdate-toggle").checked = c.autoUpdate !== false;
         renderGames(c);
       });
       $("anime-toggle").onchange = () =>
@@ -361,6 +370,25 @@
         api("config", { startHidden: $("hidden-toggle").checked });
       $("hidegame-toggle").onchange = () =>
         api("config", { hideOnGame: $("hidegame-toggle").checked });
+      $("autoupdate-toggle").onchange = () =>
+        api("config", { autoUpdate: $("autoupdate-toggle").checked });
+
+      // ── Check for updates: asks GitHub now. When a newer version is out the
+      // update banner up top takes over (its "Update now" installs it). ──
+      $("btn-check-update").onclick = async () => {
+        const btn = $("btn-check-update");
+        const msg = $("check-update-msg");
+        btn.disabled = true;
+        msg.textContent = "Checking…";
+        const r = await api("update-check", {});
+        btn.disabled = false;
+        if (r.dev) msg.textContent = "Test build, updates are off.";
+        else if (!r.ok) msg.textContent = "Couldn't reach GitHub, try again in a bit.";
+        else if (r.available) {
+          laterFor = "";
+          msg.textContent = r.latest + " is out, hit Update now up top.";
+        } else msg.textContent = "You're on the latest (" + r.current + ").";
+      };
 
       // ── Poll status ──
       function render(s) {
