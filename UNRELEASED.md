@@ -15,3 +15,4 @@ and gets cleared.
 - VALORANT (early): menus, agent select and your match (map, mode, score, rank, level) on glow.moe/<you>/valorant and in Discord, read from the Riot Client on your PC only.
 - VALORANT: Discord reads "Playing VALORANT" (its own Discord app), and glow.moe can pick which Discord app each status runs under.
 - Windows: the app now lives in one place, %LOCALAPPDATA%\Programs\glow L!VE, and shows up as "glow L!VE.exe" in Startup apps instead of whatever name your browser gave the download. Running a downloaded copy moves it there on its own; you can delete the old one from Downloads.
+- Steam: the built-in game table refreshed (19710 games) so new releases get their own "Playing <game>" headline offline too.
