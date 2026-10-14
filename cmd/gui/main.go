@@ -18,6 +18,7 @@ import (
 	"github.com/glow-moe/glow-collector/internal/autostart"
 	"github.com/glow-moe/glow-collector/internal/config"
 	"github.com/glow-moe/glow-collector/internal/gui"
+	"github.com/glow-moe/glow-collector/internal/install"
 	"github.com/glow-moe/glow-collector/internal/single"
 )
 
@@ -44,6 +45,12 @@ func main() {
 	// running copy is asked to show its window, and this one leaves.
 	if !single.Acquire() {
 		wakeRunningCopy()
+		return
+	}
+
+	// Windows: a copy run from Downloads moves into its fixed home and hands
+	// off to it, so Startup apps and the updater see one clean "glow L!VE.exe".
+	if install.Relocate() {
 		return
 	}
 
