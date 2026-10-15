@@ -34,6 +34,8 @@ import (
 	"os"
 	"unicode/utf16"
 	"unsafe"
+
+	"github.com/glow-moe/glow-collector/internal/install"
 )
 
 // Set writes or removes the registry Run value.
@@ -44,9 +46,15 @@ func Set(on bool) error {
 		}
 		return nil
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return err
+	// Always the installed copy when there is one: a stray copy run from
+	// Downloads (an old or test build) would otherwise point the entry at a
+	// file that later gets deleted, and the app silently stops starting with
+	// the computer.
+	exe := install.Target()
+	if fi, err := os.Stat(exe); exe == "" || err != nil || fi.IsDir() {
+		if exe, err = os.Executable(); err != nil {
+			return err
+		}
 	}
 	// The path goes in quoted, so spaces in the install dir survive. The
 	// --hidden flag makes the boot launch start straight into the tray (a
