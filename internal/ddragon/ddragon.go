@@ -140,6 +140,33 @@ func ChampKeyByID(id int) string {
 	return champByID[id]
 }
 
+// IsChampKey reports whether key is a champion ddragon knows ("Seraphine",
+// "MonkeyKing"). False until champion.json has loaded, and for anything else.
+func IsChampKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	champMu.Lock()
+	defer champMu.Unlock()
+	if champByID == nil {
+		champByID = map[int]string{}
+		loadChampions()
+	}
+	for _, k := range champByID {
+		if k == key {
+			return true
+		}
+	}
+	return false
+}
+
+// SetChampionsForTest seeds the champion table so tests stay off the network.
+func SetChampionsForTest(byID map[int]string) {
+	champMu.Lock()
+	defer champMu.Unlock()
+	champByID = byID
+}
+
 func loadChampions() {
 	url := fmt.Sprintf("https://ddragon.leagueoflegends.com/cdn/%s/data/en_US/champion.json", Version())
 	resp, err := httpClient.Get(url)

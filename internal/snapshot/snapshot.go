@@ -738,15 +738,31 @@ func dragon(t string) string {
 }
 
 // champKey derives the ddragon champion key from rawChampionName
-// ("game_character_displayname_LeeSin" -> "LeeSin"), falling back to the display
-// name with spaces/punctuation stripped.
+// ("game_character_displayname_LeeSin" -> "LeeSin"). The raw name is taken
+// after the known prefix as a whole, then checked against ddragon's champion
+// list; a raw name of an unexpected shape (Seraphine's came through as
+// "...Name", which the old last-underscore split turned into "Name") falls
+// back to the display name with spaces/punctuation stripped, checked the same
+// way. Only when neither is a known champion does the raw guess go out as-is.
 func champKey(raw, display string) string {
-	if i := strings.LastIndex(raw, "_"); i >= 0 && i+1 < len(raw) {
-		if k := raw[i+1:]; k != "" {
-			return k
+	fromDisplay := strings.NewReplacer(" ", "", "'", "", ".", "").Replace(display)
+	cand := strings.TrimPrefix(raw, "game_character_displayname_")
+	if cand == raw {
+		cand = ""
+		if i := strings.LastIndex(raw, "_"); i >= 0 && i+1 < len(raw) {
+			cand = raw[i+1:]
 		}
 	}
-	return strings.NewReplacer(" ", "", "'", "", ".", "").Replace(display)
+	if cand != "" && ddragon.IsChampKey(cand) {
+		return cand
+	}
+	if fromDisplay != "" && ddragon.IsChampKey(fromDisplay) {
+		return fromDisplay
+	}
+	if cand != "" {
+		return cand
+	}
+	return fromDisplay
 }
 
 func champName(champKeyVal string, d *live.AllGameData) string {
