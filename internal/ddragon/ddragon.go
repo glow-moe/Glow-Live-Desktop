@@ -124,19 +124,32 @@ func ProfileIconURL(id int) string {
 }
 
 var (
-	champMu   sync.Mutex
-	champByID map[int]string // numeric champion id -> ddragon key
+	champMu      sync.Mutex
+	champByID    map[int]string // numeric champion id -> ddragon key
+	champsFailAt time.Time      // last load that came back empty
 )
+
+// ensureChampionsLocked loads champion.json (champMu held). A load that comes
+// back empty (no network yet when the app starts with Windows) is retried a
+// couple of minutes later instead of being kept for the whole session, which
+// left chroma skins unmapped and their Discord art 404ing.
+func ensureChampionsLocked() {
+	if len(champByID) > 0 || time.Since(champsFailAt) < 2*time.Minute {
+		return
+	}
+	champByID = map[int]string{}
+	loadChampions()
+	if len(champByID) == 0 {
+		champsFailAt = time.Now()
+	}
+}
 
 // ChampKeyByID maps a numeric champion id (from the client / champ select) to
 // its ddragon key, loading champion.json once. Empty on miss.
 func ChampKeyByID(id int) string {
 	champMu.Lock()
 	defer champMu.Unlock()
-	if champByID == nil {
-		champByID = map[int]string{}
-		loadChampions()
-	}
+	ensureChampionsLocked()
 	return champByID[id]
 }
 
@@ -148,10 +161,7 @@ func IsChampKey(key string) bool {
 	}
 	champMu.Lock()
 	defer champMu.Unlock()
-	if champByID == nil {
-		champByID = map[int]string{}
-		loadChampions()
-	}
+	ensureChampionsLocked()
 	for _, k := range champByID {
 		if k == key {
 			return true
@@ -205,17 +215,15 @@ var (
 
 // champIDLocked resolves a ddragon key to the numeric champion id (skinVidMu held).
 func champIDLocked(champKey string) int {
-	if champIDByKey == nil {
+	// Rebuilt until the champion table has loaded (an empty one is retried).
+	if len(champIDByKey) == 0 {
 		champMu.Lock()
-		if champByID == nil {
-			champByID = map[int]string{}
-			loadChampions()
-		}
-		champMu.Unlock()
-		champIDByKey = map[string]int{}
+		ensureChampionsLocked()
+		champIDByKey = make(map[string]int, len(champByID))
 		for id, k := range champByID {
 			champIDByKey[k] = id
 		}
+		champMu.Unlock()
 	}
 	return champIDByKey[champKey]
 }
@@ -298,19 +306,7 @@ func SkinID(champKey string, skin int) int {
 	}
 	skinVidMu.Lock()
 	defer skinVidMu.Unlock()
-	if champIDByKey == nil {
-		champMu.Lock()
-		if champByID == nil {
-			champByID = map[int]string{}
-			loadChampions()
-		}
-		champMu.Unlock()
-		champIDByKey = map[string]int{}
-		for id, k := range champByID {
-			champIDByKey[k] = id
-		}
-	}
-	id := champIDByKey[champKey]
+	id := champIDLocked(champKey)
 	if id == 0 {
 		return 0
 	}
