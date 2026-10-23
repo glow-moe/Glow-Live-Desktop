@@ -113,4 +113,11 @@ with `curl -fsS https://glow.moe/api/steam-map -o internal/steam/steam-apps.bin.
 
 ## License
 
-Mozilla Public License 2.0. See [LICENSE](LICENSE).
+PolyForm Shield 1.0.0. See [LICENSE](LICENSE).
+
+The source is public so anyone can read what the app does on their computer,
+build it themselves and send fixes. You can use, change and share it for
+anything except a product that competes with Glow or Glow L!VE.
+
+Versions released before 26.9.2 were published under the Mozilla Public
+License 2.0 and stay available under it.
