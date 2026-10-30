@@ -187,9 +187,10 @@ func logPath() string {
 }
 
 var (
-	mu    sync.Mutex
-	tail  logtail.Follower
-	state State
+	mu       sync.Mutex
+	tail     logtail.Follower
+	state    State
+	headRead bool
 )
 
 // Current is Fortnite's state, or ok=false when the game isn't open.
@@ -205,12 +206,33 @@ func Current() (State, bool) {
 	defer mu.Unlock()
 	err := tail.Read(p, func(lines io.Reader, fresh bool) {
 		if fresh {
-			state = State{}
+			state, headRead = State{}, false
 		}
 		state.feed(lines)
 	})
 	if err != nil {
 		return State{}, false
 	}
+	// The name is written once, at startup: when the first look started
+	// further in, read it from the head of the log (once per log).
+	if state.Name == "" && !headRead {
+		headRead = true
+		state.Name = nameFromHead(p)
+	}
 	return state, true
+}
+
+// nameFromHead finds the Epic display name in the first few MB of the log.
+func nameFromHead(path string) string {
+	fh, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer fh.Close()
+	buf := make([]byte, 8<<20)
+	n, _ := io.ReadFull(fh, buf)
+	if m := nameRe.FindSubmatch(buf[:n]); m != nil {
+		return string(m[1])
+	}
+	return ""
 }
