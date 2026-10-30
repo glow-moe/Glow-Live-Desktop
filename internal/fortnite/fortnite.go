@@ -30,6 +30,24 @@ type State struct {
 	Island   string    // the selected experience or island code
 	JoinedAt time.Time // when the match loaded
 	Last     *Final    // the match before, once you're back in the lobby
+	Loadout  Loadout   // what you have equipped
+
+	// a loadout block being read ("--- [LoadoutSlot.X]=..." lines under a
+	// "Local Player ... loadout changed" line)
+	inBlock bool
+	slot    string
+}
+
+// Loadout is the local player's equipped cosmetics, as Fortnite item ids
+// ("character_hammervice"); the site names them.
+type Loadout struct {
+	Character string
+	Backpack  string
+	Pickaxe   string
+	Glider    string
+	Contrail  string
+	Pet       string
+	PetName   string // the name you gave your sidekick
 }
 
 // Final is a finished match: the mode and the last status line it had (which
@@ -50,6 +68,8 @@ var (
 	statusRe   = regexp.MustCompile(`LogEOSPresence: Updating Presence to \[[A-Za-z]+\].*RichText=\[([^\]]*)\]`)
 	islandRe   = regexp.MustCompile(`Link id changing from .* to \[Mnemonic=\[([^\]]+)\]`)
 	leftRe     = regexp.MustCompile(`(\d+) Left\s*$`)
+	slotRe     = regexp.MustCompile(`^--- \[LoadoutSlot\.([A-Za-z.]+)\]=[A-Za-z]+:([a-z0-9_]{2,80})`)
+	petNameRe  = regexp.MustCompile(`^\s*\{Channel: CustomName - Variant: Text - Data: ([^}]{1,32})\}`)
 )
 
 // feed moves the state along the given log lines.
@@ -58,6 +78,26 @@ func (s *State) feed(r io.Reader) {
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	for sc.Scan() {
 		line := sc.Text()
+		if s.inBlock {
+			if m := slotRe.FindStringSubmatch(line); m != nil {
+				s.slot = m[1]
+				s.equip(m[1], m[2])
+				continue
+			}
+			if m := petNameRe.FindStringSubmatch(line); m != nil && s.slot == "Mimosa.Main" {
+				s.Loadout.PetName = strings.TrimSpace(m[1])
+				continue
+			}
+			if strings.HasPrefix(line, "[") {
+				s.inBlock = false
+			} else {
+				continue
+			}
+		}
+		if strings.Contains(line, "LogFortPlayerLoadout:") && strings.Contains(line, "Local Player") && strings.Contains(line, "loadout changed") {
+			s.inBlock, s.slot, s.Loadout = true, "", Loadout{}
+			continue
+		}
 		if m := loadMapRe.FindStringSubmatch(line); m != nil {
 			path := m[1]
 			if i := strings.IndexByte(path, '?'); i >= 0 {
@@ -98,6 +138,24 @@ func (s *State) feed(r io.Reader) {
 		if m := islandRe.FindStringSubmatch(line); m != nil {
 			s.Island = m[1]
 		}
+	}
+}
+
+// equip puts one slot's item in the loadout (other slots are not shown).
+func (s *State) equip(slot, id string) {
+	switch slot {
+	case "Character":
+		s.Loadout.Character = id
+	case "Backpack":
+		s.Loadout.Backpack = id
+	case "Pickaxe":
+		s.Loadout.Pickaxe = id
+	case "Glider":
+		s.Loadout.Glider = id
+	case "Contrails":
+		s.Loadout.Contrail = id
+	case "Mimosa.Main":
+		s.Loadout.Pet = id
 	}
 }
 

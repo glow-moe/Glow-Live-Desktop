@@ -45,3 +45,33 @@ func TestStartupLobbyIsNotAMatch(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 }
+
+const loadout = `[2026.10.30-19.13.34:242][665]LogFortPlayerLoadout: [FORT-1129229] Local Player PlayerPawn_Athena_C_2147482646 loadout changed (bHasChanged=1, bCosmeticLoadoutSet=1)
+--- [LoadoutSlot.Contrails]=AthenaSkyDiveContrail:trails_id_009_hearts
+
+--- [LoadoutSlot.Glider]=AthenaGlider:glider_id_067_psburnout
+
+--- [LoadoutSlot.Pickaxe]=AthenaPickaxe:halloweenscythe
+
+--- [LoadoutSlot.Character]=AthenaCharacter:character_hammervice
+		{Channel: Outfit - Variant: Stage1}
+
+--- [LoadoutSlot.Backpack]=AthenaBackpack:bid_847_punkkoi
+--- [LoadoutSlot.ExtraPart]=empty/null (desired item = none)
+
+--- [LoadoutSlot.Mimosa.Main]=CosmeticMimosa:companion_carriershade
+		{Channel: CustomName - Variant: Text - Data: Empress}
+		{Channel: Outfit - Variant: Stage3}
+--- [LoadoutSlot.LoadingScreen]=empty/null (desired item = none)
+[2026.10.30-19.13.34:300][665]LogFort: something else
+--- [LoadoutSlot.Character]=AthenaCharacter:not_mine
+`
+
+func TestLoadout(t *testing.T) {
+	var s State
+	s.feed(strings.NewReader(loadout))
+	want := Loadout{Character: "character_hammervice", Backpack: "bid_847_punkkoi", Pickaxe: "halloweenscythe", Glider: "glider_id_067_psburnout", Contrail: "trails_id_009_hearts", Pet: "companion_carriershade", PetName: "Empress"}
+	if s.Loadout != want {
+		t.Fatalf("loadout %+v", s.Loadout)
+	}
+}

@@ -19,7 +19,19 @@ type fortniteSnap struct {
 	Island    string         `json:"island,omitempty"`
 	StartedAt int64          `json:"startedAt,omitempty"`
 	Last      *fortniteFinal `json:"last,omitempty"`
+	Loadout   *fortniteGear  `json:"loadout,omitempty"`
 	UpdatedAt int64          `json:"updatedAt"`
+}
+
+// fortniteGear is what you have equipped, as Fortnite item ids.
+type fortniteGear struct {
+	Character string `json:"character,omitempty"`
+	Backpack  string `json:"backpack,omitempty"`
+	Pickaxe   string `json:"pickaxe,omitempty"`
+	Glider    string `json:"glider,omitempty"`
+	Contrail  string `json:"contrail,omitempty"`
+	Pet       string `json:"pet,omitempty"`
+	PetName   string `json:"petName,omitempty"`
 }
 
 type fortniteFinal struct {
@@ -39,6 +51,9 @@ func ms(t time.Time) int64 {
 
 func fortnitePayload(f fortnite.State) fortniteSnap {
 	p := fortniteSnap{Game: "fortnite", InMatch: f.InMatch, Map: f.Map, Playlist: f.Playlist, Phase: f.Phase, Status: f.Status, Island: f.Island, StartedAt: ms(f.JoinedAt), UpdatedAt: time.Now().UnixMilli()}
+	if g := f.Loadout; g.Character != "" {
+		p.Loadout = &fortniteGear{g.Character, g.Backpack, g.Pickaxe, g.Glider, g.Contrail, g.Pet, g.PetName}
+	}
 	if l := f.Last; l != nil {
 		p.Last = &fortniteFinal{Playlist: l.Playlist, Status: l.Status, Left: l.Left, StartedAt: ms(l.JoinedAt), EndedAt: ms(l.EndedAt)}
 	}
