@@ -90,11 +90,6 @@ func fortniteDetail(f fortnite.State) string {
 	return joinDots(mode, left)
 }
 
-// appFortnite is Fortnite's own Discord application (Discord's detectable
-// games list), so the card reads "Playing Fortnite". glow.moe can swap it
-// (settings.discordApps); members who don't want a status turn it off in L!VE.
-var appFortnite = "1402418703554842694"
-
 // fortniteOutfit is the outfit's picture on fortnite-api.com, by item id.
 func fortniteOutfit(id string) string {
 	if id == "" || strings.ContainsAny(id, "/?#") {
@@ -111,12 +106,18 @@ var fortnitePhases = map[string]string{
 	"EndGame":   "Endgame",
 }
 
-// fortniteActivity: the outfit as the big picture with glow in the corner,
-// the mode on top, players left (or the phase) under it, the match clock,
-// and buttons to the lobby page and the profile.
+// fortniteActivity: Fortnite sets its own "Playing Fortnite" card, and
+// Discord shows one Playing card at a time (the game's wins, even under the
+// same app id), so ours is a "Competing in" card under the glow app, which
+// sits beside it: the outfit as the big picture with glow in the corner,
+// "Fortnite · <mode>" on top, players left (or the phase) under it, the match
+// clock, and buttons to the lobby page and the profile.
 func fortniteActivity(f fortnite.State, username string) discord.Activity {
 	mode, left := fortniteMode(f.Status)
-	a := discord.Activity{Details: atLeast2(mode, "Fortnite")}
+	if !strings.HasPrefix(mode, "Fortnite") {
+		mode = joinDots("Fortnite", mode)
+	}
+	a := discord.Activity{Type: 5, Details: mode}
 	switch {
 	case !f.InMatch:
 		a.State = "In the lobby"
@@ -136,7 +137,11 @@ func fortniteActivity(f fortnite.State, username string) discord.Activity {
 	if large == "" {
 		large = glowIcon
 	}
-	a.Assets = &discord.Assets{LargeImage: large, LargeText: atLeast2(mode, "Fortnite"), SmallImage: glowIcon, SmallText: "glow.moe"}
+	place := "glow.moe"
+	if username != "" {
+		place = "glow.moe/" + username
+	}
+	a.Assets = &discord.Assets{LargeImage: large, LargeText: place, SmallImage: glowIcon, SmallText: "glow.moe"}
 	if username != "" {
 		a.Buttons = []discord.Button{
 			{Label: "View my lobby", URL: "https://glow.moe/" + username + "/fortnite"},
