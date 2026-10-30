@@ -106,18 +106,20 @@ var fortnitePhases = map[string]string{
 	"EndGame":   "Endgame",
 }
 
-// fortniteActivity: Fortnite sets its own "Playing Fortnite" card, and
-// Discord shows one Playing card at a time (the game's wins, even under the
-// same app id), so ours is a "Competing in" card under the glow app, which
-// sits beside it: the outfit as the big picture with glow in the corner,
-// "Fortnite · <mode>" on top, players left (or the phase) under it, the match
-// clock, and buttons to the lobby page and the profile.
+// appFortnite is Fortnite's own Discord application (Discord's detectable
+// games list), so the card reads "Competing in Fortnite". glow.moe can swap
+// it (settings.discordApps); members who don't want a status turn it off in L!VE.
+var appFortnite = "1402418703554842694"
+
+// fortniteActivity: Fortnite sets its own "Playing Fortnite" card and Discord
+// shows one Playing card at a time (the game's wins, even under the same app
+// id), so ours is a "Competing in Fortnite" card, which sits beside it: the
+// outfit as the big picture with glow in the corner, the mode on top,
+// players left (or the phase) under it, the match clock, and buttons to the
+// lobby page and the profile.
 func fortniteActivity(f fortnite.State, username string) discord.Activity {
 	mode, left := fortniteMode(f.Status)
-	if !strings.HasPrefix(mode, "Fortnite") {
-		mode = joinDots("Fortnite", mode)
-	}
-	a := discord.Activity{Type: 5, Details: mode}
+	a := discord.Activity{Type: 5, Details: atLeast2(mode, "Fortnite")}
 	switch {
 	case !f.InMatch:
 		a.State = "In the lobby"

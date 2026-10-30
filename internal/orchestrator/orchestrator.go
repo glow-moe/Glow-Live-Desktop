@@ -1316,7 +1316,7 @@ func (o *Orchestrator) tick() {
 		if f, ok := fortnite.Current(); ok {
 			st := Status{Game: "fortnite", InGame: f.InMatch, Detail: fortniteDetail(f), GameName: "Fortnite", Pushes: o.pushes, Delay: effDelay}
 			o.push(cfg, effDelay, fortnitePayload(f), &st)
-			o.presence(o.appFor("fortnite", orGlow("")), o.styled("fortnite", fortniteActivity(f, uname), fortniteVars(f)))
+			o.presence(o.appFor("fortnite", orGlow(appFortnite)), o.styled("fortnite", fortniteActivity(f, uname), fortniteVars(f)))
 			o.set(st)
 			return
 		}
