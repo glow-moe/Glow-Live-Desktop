@@ -24,7 +24,8 @@ type valorantNames struct {
 }
 
 // valPush is the frame glow.moe gets: your Riot ID and the presence blob
-// (trimmed to the site's valorantPick), mapped on the site.
+// (trimmed to the site's valorantPick), mapped on the site, plus the match
+// and the last scoreboard when the site turned those reads on.
 type valPush struct {
 	Game      string `json:"game"`
 	Running   bool   `json:"running"`
@@ -33,6 +34,8 @@ type valPush struct {
 		Name    string          `json:"name"`
 		Tag     string          `json:"tag"`
 		Private json.RawMessage `json:"private"`
+		Match   *valorant.Match `json:"match,omitempty"`
+		Final   *valorant.Final `json:"final,omitempty"`
 	} `json:"raw"`
 }
 

@@ -4,9 +4,10 @@
 // as is; glow.moe names the map, mode and rank (src/lib/valorant/presence.ts
 // there), so the app stays a thin pipe.
 //
-// Presence only, all local and read-only: no Riot servers, nothing about the
-// match beyond what your friends list already sees. Friends' presences are in
-// the same list and are never read past the puuid check.
+// The presence is local and read-only; friends' presences are in the same list
+// and are never read past the puuid check. The match itself (who's in it, the
+// server, the scoreboard after) comes from remote.go, only when glow.moe
+// switches it on.
 package valorant
 
 import (
@@ -40,6 +41,10 @@ type State struct {
 	FoeScore  int
 	Tier      int
 	Level     int
+
+	// The local Riot Client the presence came from, for the match reads
+	// (remote.go).
+	port, password, puuid string
 }
 
 func lockfilePath() string {
@@ -121,7 +126,7 @@ func Fetch() (*State, error) {
 		if err != nil || !json.Valid(dec) || len(dec) > 64<<10 {
 			continue
 		}
-		st := &State{Name: sess.GameName, Tag: sess.GameTag, Private: dec}
+		st := &State{Name: sess.GameName, Tag: sess.GameTag, Private: dec, port: port, password: password, puuid: sess.PUUID}
 		st.read(dec)
 		return st, nil
 	}

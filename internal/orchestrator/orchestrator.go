@@ -61,6 +61,9 @@ type liveSettings struct {
 	// trims the presence blob sent to the site (empty = all of it).
 	ValorantNames *valorantNames `json:"valorantNames"`
 	ValorantPick  []string       `json:"valorantPick"`
+	// ValorantMatch turns on the match reads (valorant/remote.go): who's in
+	// agent select and the match, the server, the scoreboard after.
+	ValorantMatch bool `json:"valorantMatch"`
 	// DiscordApps swaps the Discord application a status kind runs under
 	// ("valorant", "lol-lobby", ...), e.g. when a game gets its own.
 	DiscordApps map[string]string `json:"discordApps"`
@@ -961,6 +964,7 @@ type Orchestrator struct {
 	pushGate     pushGate
 	valLast      *valorant.State
 	valAt        time.Time
+	valMatch     valorant.Tracker
 	dotaRecv     *dota.Receiver
 	dotaTriedAt  time.Time
 	mirrorsAt    time.Time
@@ -1290,7 +1294,12 @@ func (o *Orchestrator) tick() {
 	if v := o.valorantState(); v != nil {
 		inMatch := v.Phase == "INGAME" || v.Phase == "PREGAME"
 		st := Status{Game: "valorant", InGame: inMatch, Detail: valorantDetail(v, settings.ValorantNames), GameName: "VALORANT", Pushes: o.pushes, Delay: effDelay}
-		o.push(cfg, effDelay, valorantFrame(v, settings.ValorantPick), &st)
+		frame := valorantFrame(v, settings.ValorantPick)
+		if settings.ValorantMatch {
+			o.valMatch.Tick(v)
+			frame.Raw.Match, frame.Raw.Final = o.valMatch.Latest()
+		}
+		o.push(cfg, effDelay, frame, &st)
 		o.presence(o.appFor("valorant", orGlow(appValorant)), o.styled("valorant", valorantActivity(v, settings.ValorantNames, uname), valorantVars(v, settings.ValorantNames)))
 		o.set(st)
 		return
