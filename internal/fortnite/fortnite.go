@@ -32,6 +32,7 @@ type State struct {
 	Last     *Final    // the match before, once you're back in the lobby
 	Loadout  Loadout   // what you have equipped
 	Name     string    // your Epic display name (glow.moe looks up public stats by it)
+	Party    []string  // everyone in your lobby by display name, you included, in join order
 
 	// a loadout block being read ("--- [LoadoutSlot.X]=..." lines under a
 	// "Local Player ... loadout changed" line)
@@ -71,6 +72,8 @@ var (
 	leftRe     = regexp.MustCompile(`(\d+) Left\s*$`)
 	slotRe     = regexp.MustCompile(`^--- \[LoadoutSlot\.([A-Za-z.]+)\]=[A-Za-z]+:([a-z0-9_]{2,80})`)
 	nameRe     = regexp.MustCompile(`MatchmakingLog: \[[0-9a-f]+\] (.{3,32}?) is now Eligible for matchmaking`)
+	joinRe     = regexp.MustCompile(`LogParty: Verbose: Adding \[(.{1,32}?)\] Id \[MCP:[0-9a-f.]+\] as a new member`)
+	partRe     = regexp.MustCompile(`LogParty: Verbose: Removing \[(.{1,32}?)\] Id \[MCP:[0-9a-f.]+\] from`)
 	petNameRe  = regexp.MustCompile(`^\s*\{Channel: CustomName - Variant: Text - Data: ([^}]{1,32})\}`)
 )
 
@@ -143,8 +146,31 @@ func (s *State) feed(r io.Reader) {
 		}
 		if m := nameRe.FindStringSubmatch(line); m != nil {
 			s.Name = m[1]
+			continue
+		}
+		if m := joinRe.FindStringSubmatch(line); m != nil {
+			s.Party = append(without(s.Party, m[1]), m[1])
+			continue
+		}
+		if m := partRe.FindStringSubmatch(line); m != nil {
+			s.Party = without(s.Party, m[1])
 		}
 	}
+}
+
+func without(list []string, name string) []string {
+	out := list[:0:0]
+	for _, x := range list {
+		if x != name {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+// Others is the lobby minus you.
+func (s State) Others() []string {
+	return without(s.Party, s.Name)
 }
 
 // equip puts one slot's item in the loadout (other slots are not shown).

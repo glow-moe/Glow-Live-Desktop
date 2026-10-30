@@ -75,3 +75,18 @@ func TestLoadout(t *testing.T) {
 		t.Fatalf("loadout %+v", s.Loadout)
 	}
 }
+
+func TestParty(t *testing.T) {
+	var s State
+	s.feed(strings.NewReader(`[2026.10.30-19.13.15:020][233]LogParty: Verbose: Adding [Melocet] Id [MCP:5cea7bb9ccf2494a9633a45241e145f2] as a new member to [MCP:5cea7bb9ccf2494a9633a45241e145f2]'s party via an existing UITeamMember in [Melocet]'s game.
+[2026.10.30-19.13.19:289][353]LogParty: Verbose: Removing [Melocet] Id [MCP:5cea7bb9ccf2494a9633a45241e145f2] from [Melocet]'s team.
+[2026.10.30-19.13.19:289][353]LogParty: Verbose: Adding [Melocet] Id [MCP:5cea7bb9ccf2494a9633a45241e145f2] as a new member to [MCP:5cea7bb9ccf2494a9633a45241e145f2]'s party via an existing UITeamMember in [Melocet]'s game.
+[2026.10.30-19.16.50:630][792]MatchmakingLog: [3ed0] Melocet is now Eligible for matchmaking
+[2026.10.30-20.54.25:519][531]LogParty: Verbose: Adding [megecet42] Id [MCP:7dbbe...f57b3] as a new member to [MCP:5cea7bb9ccf2494a9633a45241e145f2]'s party via an existing UITeamMember in [Melocet]'s game.
+[2026.10.30-20.54.25:600][531]LogParty: Verbose: Adding [friend two] Id [MCP:1a2b...9f9f9] as a new member to [MCP:5cea7bb9ccf2494a9633a45241e145f2]'s party via an existing UITeamMember in [Melocet]'s game.
+[2026.10.30-20.59.00:000][531]LogParty: Verbose: Removing [friend two] Id [MCP:1a2b...9f9f9] from [Melocet]'s team.
+`))
+	if got := s.Others(); len(got) != 1 || got[0] != "megecet42" {
+		t.Fatalf("others %v (party %v)", got, s.Party)
+	}
+}
