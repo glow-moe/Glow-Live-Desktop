@@ -86,7 +86,11 @@ func TestParty(t *testing.T) {
 [2026.10.30-20.54.25:600][531]LogParty: Verbose: Adding [friend two] Id [MCP:1a2b...9f9f9] as a new member to [MCP:5cea7bb9ccf2494a9633a45241e145f2]'s party via an existing UITeamMember in [Melocet]'s game.
 [2026.10.30-20.59.00:000][531]LogParty: Verbose: Removing [friend two] Id [MCP:1a2b...9f9f9] from [Melocet]'s team.
 `))
-	if got := s.Others(); len(got) != 1 || got[0] != "megecet42" {
+	if got := s.Others(); len(got) != 1 || got[0].Name != "megecet42" || got[0].ID != "" {
 		t.Fatalf("others %v (party %v)", got, s.Party)
+	}
+	s.feed(strings.NewReader(`[2026.10.30-20.54.25:608][542]LogNativeEpicPartyEOS: [member_state_updated_broadcast] LocalAccountId=[5cea7bb9ccf2494a9633a45241e145f2], TargetAccountId=[7dbbe96e0ce245118e3315caf63f57b3], PartyId=[f097]` + "\n"))
+	if got := s.Others(); len(got) != 1 || got[0].ID != "7dbbe96e0ce245118e3315caf63f57b3" || s.ID != "5cea7bb9ccf2494a9633a45241e145f2" {
+		t.Fatalf("ids: others %v, me %q", got, s.ID)
 	}
 }

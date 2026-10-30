@@ -21,8 +21,15 @@ type fortniteSnap struct {
 	Last      *fortniteFinal `json:"last,omitempty"`
 	Loadout   *fortniteGear  `json:"loadout,omitempty"`
 	Name      string         `json:"name,omitempty"`
-	Party     []string       `json:"party,omitempty"`
+	ID        string         `json:"id,omitempty"`
+	Party     []fortniteMate `json:"party,omitempty"`
 	UpdatedAt int64          `json:"updatedAt"`
+}
+
+// fortniteMate is someone else in the lobby; the site names them by id.
+type fortniteMate struct {
+	Name string `json:"name"`
+	ID   string `json:"id,omitempty"`
 }
 
 // fortniteGear is what you have equipped, as Fortnite item ids.
@@ -52,7 +59,10 @@ func ms(t time.Time) int64 {
 }
 
 func fortnitePayload(f fortnite.State) fortniteSnap {
-	p := fortniteSnap{Game: "fortnite", InMatch: f.InMatch, Map: f.Map, Playlist: f.Playlist, Phase: f.Phase, Status: f.Status, Island: f.Island, StartedAt: ms(f.JoinedAt), Name: f.Name, Party: f.Others(), UpdatedAt: time.Now().UnixMilli()}
+	p := fortniteSnap{Game: "fortnite", InMatch: f.InMatch, Map: f.Map, Playlist: f.Playlist, Phase: f.Phase, Status: f.Status, Island: f.Island, StartedAt: ms(f.JoinedAt), Name: f.Name, ID: f.ID, UpdatedAt: time.Now().UnixMilli()}
+	for _, m := range f.Others() {
+		p.Party = append(p.Party, fortniteMate{m.Name, m.ID})
+	}
 	if g := f.Loadout; g.Character != "" {
 		p.Loadout = &fortniteGear{g.Character, g.Backpack, g.Pickaxe, g.Glider, g.Contrail, g.Pet, g.PetName}
 	}

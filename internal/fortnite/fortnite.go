@@ -32,12 +32,22 @@ type State struct {
 	Last     *Final    // the match before, once you're back in the lobby
 	Loadout  Loadout   // what you have equipped
 	Name     string    // your Epic display name (glow.moe looks up public stats by it)
-	Party    []string  // everyone in your lobby by display name, you included, in join order
+	ID       string    // your Epic account id
+	Party    []Member  // everyone in your lobby, you included, in join order
+
+	ids map[string]bool // full Epic account ids the log has named
 
 	// a loadout block being read ("--- [LoadoutSlot.X]=..." lines under a
 	// "Local Player ... loadout changed" line)
 	inBlock bool
 	slot    string
+}
+
+// Member is someone in the lobby: the name Fortnite shows (a console name
+// for console players) and their Epic account id, which names them for sure.
+type Member struct {
+	Name string
+	ID   string // full id when the log had it, else the short "7dbbe...f57b3"
 }
 
 // Loadout is the local player's equipped cosmetics, as Fortnite item ids
@@ -72,7 +82,9 @@ var (
 	leftRe     = regexp.MustCompile(`(\d+) Left\s*$`)
 	slotRe     = regexp.MustCompile(`^--- \[LoadoutSlot\.([A-Za-z.]+)\]=[A-Za-z]+:([a-z0-9_]{2,80})`)
 	nameRe     = regexp.MustCompile(`MatchmakingLog: \[[0-9a-f]+\] (.{3,32}?) is now Eligible for matchmaking`)
-	joinRe     = regexp.MustCompile(`LogParty: Verbose: Adding \[(.{1,32}?)\] Id \[MCP:[0-9a-f.]+\] as a new member`)
+	joinRe     = regexp.MustCompile(`LogParty: Verbose: Adding \[(.{1,32}?)\] Id \[MCP:([0-9a-f.]+)\] as a new member`)
+	idRe       = regexp.MustCompile(`(?:TargetAccountId|LocalAccountId)=\[([0-9a-f]{32})\]`)
+	localIDRe  = regexp.MustCompile(`LocalAccountId=\[([0-9a-f]{32})\]`)
 	partRe     = regexp.MustCompile(`LogParty: Verbose: Removing \[(.{1,32}?)\] Id \[MCP:[0-9a-f.]+\] from`)
 	petNameRe  = regexp.MustCompile(`^\s*\{Channel: CustomName - Variant: Text - Data: ([^}]{1,32})\}`)
 )
@@ -149,28 +161,69 @@ func (s *State) feed(r io.Reader) {
 			continue
 		}
 		if m := joinRe.FindStringSubmatch(line); m != nil {
-			s.Party = append(without(s.Party, m[1]), m[1])
+			s.Party = append(without(s.Party, m[1]), Member{Name: m[1], ID: m[2]})
 			continue
 		}
 		if m := partRe.FindStringSubmatch(line); m != nil {
 			s.Party = without(s.Party, m[1])
+			continue
+		}
+		if strings.Contains(line, "AccountId=[") {
+			if m := localIDRe.FindStringSubmatch(line); m != nil {
+				s.ID = m[1]
+			}
+			for _, m := range idRe.FindAllStringSubmatch(line, -1) {
+				if s.ids == nil {
+					s.ids = map[string]bool{}
+				}
+				if len(s.ids) < 200 {
+					s.ids[m[1]] = true
+				}
+			}
 		}
 	}
 }
 
-func without(list []string, name string) []string {
+func without(list []Member, name string) []Member {
 	out := list[:0:0]
 	for _, x := range list {
-		if x != name {
+		if x.Name != name {
 			out = append(out, x)
 		}
 	}
 	return out
 }
 
-// Others is the lobby minus you.
-func (s State) Others() []string {
-	return without(s.Party, s.Name)
+// Others is the lobby minus you, each with their full account id when the
+// log named it ("7dbbe...f57b3" matched against the full ids it has seen).
+func (s State) Others() []Member {
+	var out []Member
+	for _, m := range s.Party {
+		if m.Name == s.Name || (s.ID != "" && full(m.ID, s.ID)) {
+			continue
+		}
+		if len(m.ID) != 32 {
+			id := ""
+			for f := range s.ids {
+				if full(m.ID, f) {
+					id = f
+					break
+				}
+			}
+			m.ID = id
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// full: does the short id ("7dbbe...f57b3") stand for this full one?
+func full(short, id string) bool {
+	if short == id {
+		return true
+	}
+	head, tail, ok := strings.Cut(short, "...")
+	return ok && head != "" && tail != "" && strings.HasPrefix(id, head) && strings.HasSuffix(id, tail)
 }
 
 // equip puts one slot's item in the loadout (other slots are not shown).
