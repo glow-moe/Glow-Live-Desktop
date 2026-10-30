@@ -1310,12 +1310,13 @@ func (o *Orchestrator) tick() {
 	}
 
 	// Fortnite: from the game's own log (mode, match phase, its status line),
-	// while glow.moe has it on for this account.
+	// while glow.moe has it on for this account. Profile only: Fortnite sets
+	// its own Discord status, so ours steps aside.
 	if settings.Fortnite {
 		if f, ok := fortnite.Current(); ok {
 			st := Status{Game: "fortnite", InGame: f.InMatch, Detail: fortniteDetail(f), GameName: "Fortnite", Pushes: o.pushes, Delay: effDelay}
 			o.push(cfg, effDelay, fortnitePayload(f), &st)
-			o.presence(o.appFor("fortnite", orGlow(appFortnite)), o.styled("fortnite", fortniteActivity(f, uname), fortniteVars(f)))
+			o.clearPresence()
 			o.set(st)
 			return
 		}
