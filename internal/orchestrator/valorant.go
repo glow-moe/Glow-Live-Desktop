@@ -36,6 +36,7 @@ type valPush struct {
 		Private json.RawMessage `json:"private"`
 		Match   *valorant.Match `json:"match,omitempty"`
 		Final   *valorant.Final `json:"final,omitempty"`
+		Party   *valorant.Party `json:"party,omitempty"`
 	} `json:"raw"`
 }
 

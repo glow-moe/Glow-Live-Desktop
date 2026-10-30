@@ -36,6 +36,9 @@ type Player struct {
 	Name   string `json:"name,omitempty"`
 	Tag    string `json:"tag,omitempty"`
 	Self   bool   `json:"self,omitempty"`
+	// Party only: ready to queue, and who leads.
+	Ready bool `json:"ready,omitempty"`
+	Owner bool `json:"owner,omitempty"`
 
 	puuid  string
 	hidden bool
@@ -52,6 +55,13 @@ type Match struct {
 
 	id   string
 	live bool // the match itself, not agent select
+}
+
+// Party is the lobby you're in: who's with you and whether it's open.
+type Party struct {
+	Open    bool     `json:"open,omitempty"`
+	Queue   string   `json:"queue,omitempty"`
+	Members []Player `json:"members"`
 }
 
 // FinalPlayer is one line of the scoreboard.
@@ -102,6 +112,9 @@ type Tracker struct {
 	tryAt   time.Time // next scoreboard try
 	names   map[string][2]string
 	hidden  map[string]bool
+	party   *Party
+	partyAt time.Time
+	pnames  map[string][2]string // party members' names, kept across matches
 }
 
 // Latest returns the match (nil outside one) and the last scoreboard.
@@ -109,6 +122,13 @@ func (t *Tracker) Latest() (*Match, *Final) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.match, t.final
+}
+
+// LatestParty is the lobby (nil outside the menus).
+func (t *Tracker) LatestParty() *Party {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.party
 }
 
 // Tick reads what's due for this presence, in the background.
@@ -131,10 +151,13 @@ func (t *Tracker) Tick(st *State) {
 			t.pending, t.endAt, t.tryAt = t.match.id, now, now.Add(15*time.Second)
 		}
 		t.match = nil
-		due = t.pending != "" && !now.Before(t.tryAt)
 		if t.pending != "" && now.Sub(t.endAt) > 10*time.Minute {
-			t.pending, due = "", false
+			t.pending = ""
 		}
+		due = (t.pending != "" && !now.Before(t.tryAt)) || now.Sub(t.partyAt) >= 10*time.Second
+	}
+	if st.Phase == "PREGAME" || st.Phase == "INGAME" {
+		t.party = nil
 	}
 	if !due {
 		t.mu.Unlock()
@@ -204,7 +227,18 @@ func (t *Tracker) read(st *State) {
 	t.mu.Lock()
 	id := t.pending
 	hidden := t.hidden
+	wantFinal := id != "" && !time.Now().Before(t.tryAt)
+	wantParty := time.Since(t.partyAt) >= 10*time.Second
+	if wantParty {
+		t.partyAt = time.Now()
+	}
 	t.mu.Unlock()
+	if wantParty {
+		t.readParty(s)
+	}
+	if !wantFinal {
+		return
+	}
 	f, done := s.details(id, hidden)
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -216,6 +250,43 @@ func (t *Tracker) read(st *State) {
 	} else {
 		t.tryAt = time.Now().Add(20 * time.Second)
 	}
+}
+
+func (t *Tracker) readParty(s *session) {
+	p, err := s.party()
+	if err != nil {
+		t.mu.Lock()
+		t.party = nil
+		t.mu.Unlock()
+		return
+	}
+	t.mu.Lock()
+	if t.pnames == nil {
+		t.pnames = map[string][2]string{}
+	}
+	var ask []string
+	for _, m := range p.Members {
+		if _, ok := t.pnames[m.puuid]; !ok && (!m.hidden || m.Self) {
+			ask = append(ask, m.puuid)
+		}
+	}
+	t.mu.Unlock()
+	got := map[string][2]string{}
+	if len(ask) > 0 {
+		got = s.names(ask)
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for id, n := range got {
+		t.pnames[id] = n
+	}
+	for i := range p.Members {
+		m := &p.Members[i]
+		if n, ok := t.pnames[m.puuid]; ok && (!m.hidden || m.Self) {
+			m.Name, m.Tag = n[0], n[1]
+		}
+	}
+	t.party = p
 }
 
 // ── the session ─────────────────────────────────────────────────────────────
@@ -425,6 +496,43 @@ func (s *session) coreGame() (*Match, error) {
 		}
 	}
 	return m, nil
+}
+
+func (s *session) party() (*Party, error) {
+	var who struct {
+		CurrentPartyID string `json:"CurrentPartyID"`
+	}
+	if err := s.do(http.MethodGet, s.glz+"/parties/v1/players/"+s.puuid, nil, 64<<10, &who); err != nil || who.CurrentPartyID == "" {
+		return nil, errors.New("no party")
+	}
+	var r struct {
+		Accessibility   string `json:"Accessibility"`
+		MatchmakingData *struct {
+			QueueID string `json:"QueueID"`
+		} `json:"MatchmakingData"`
+		Members []struct {
+			Subject        string   `json:"Subject"`
+			IsOwner        bool     `json:"IsOwner"`
+			IsReady        bool     `json:"IsReady"`
+			PlayerIdentity identity `json:"PlayerIdentity"`
+		} `json:"Members"`
+	}
+	if err := s.do(http.MethodGet, s.glz+"/parties/v1/parties/"+who.CurrentPartyID, nil, 1<<20, &r); err != nil {
+		return nil, err
+	}
+	p := &Party{Open: r.Accessibility == "OPEN"}
+	if r.MatchmakingData != nil {
+		p.Queue = r.MatchmakingData.QueueID
+	}
+	for _, m := range r.Members {
+		pl := s.player(m.Subject, "", "", false, m.PlayerIdentity)
+		pl.Ready, pl.Owner = m.IsReady, m.IsOwner
+		p.Members = append(p.Members, pl)
+	}
+	if len(p.Members) > 5 {
+		p.Members = p.Members[:5]
+	}
+	return p, nil
 }
 
 // names looks up Riot IDs (only ever asked for players who don't hide theirs).

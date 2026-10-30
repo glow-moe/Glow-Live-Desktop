@@ -22,6 +22,7 @@ import (
 	"github.com/glow-moe/glow-collector/internal/ddragon"
 	"github.com/glow-moe/glow-collector/internal/discord"
 	"github.com/glow-moe/glow-collector/internal/dota"
+	"github.com/glow-moe/glow-collector/internal/fortnite"
 	"github.com/glow-moe/glow-collector/internal/forza"
 	"github.com/glow-moe/glow-collector/internal/lcu"
 	"github.com/glow-moe/glow-collector/internal/live"
@@ -64,6 +65,8 @@ type liveSettings struct {
 	// ValorantMatch turns on the match reads (valorant/remote.go): who's in
 	// agent select and the match, the server, the scoreboard after.
 	ValorantMatch bool `json:"valorantMatch"`
+	// Fortnite turns on the Fortnite reader (internal/fortnite).
+	Fortnite bool `json:"fortnite"`
 	// DiscordApps swaps the Discord application a status kind runs under
 	// ("valorant", "lol-lobby", ...), e.g. when a game gets its own.
 	DiscordApps map[string]string `json:"discordApps"`
@@ -1298,11 +1301,24 @@ func (o *Orchestrator) tick() {
 		if settings.ValorantMatch {
 			o.valMatch.Tick(v)
 			frame.Raw.Match, frame.Raw.Final = o.valMatch.Latest()
+			frame.Raw.Party = o.valMatch.LatestParty()
 		}
 		o.push(cfg, effDelay, frame, &st)
 		o.presence(o.appFor("valorant", orGlow(appValorant)), o.styled("valorant", valorantActivity(v, settings.ValorantNames, uname), valorantVars(v, settings.ValorantNames)))
 		o.set(st)
 		return
+	}
+
+	// Fortnite: from the game's own log (mode, match phase, its status line),
+	// while glow.moe has it on for this account.
+	if settings.Fortnite {
+		if f, ok := fortnite.Current(); ok {
+			st := Status{Game: "fortnite", InGame: f.InMatch, Detail: fortniteDetail(f), GameName: "Fortnite", Pushes: o.pushes, Delay: effDelay}
+			o.push(cfg, effDelay, fortnitePayload(f), &st)
+			o.presence(o.appFor("fortnite", orGlow(appFortnite)), o.styled("fortnite", fortniteActivity(f, uname), fortniteVars(f)))
+			o.set(st)
+			return
+		}
 	}
 
 	// League: in a live game. (Windows only; see leagueSupported.)

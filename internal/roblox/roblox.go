@@ -7,7 +7,6 @@ package roblox
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/glow-moe/glow-collector/internal/logtail"
 )
 
 // Game is the experience being played right now.
@@ -106,52 +107,20 @@ func newestLog(dirs []string) (string, bool) {
 	return all[0].p, true
 }
 
-// logReader follows one log file: the first look reads its last few MB (logs
-// grow to tens of MB), after that only the lines added since, so a tick every
-// second or so costs a few KB, not a re-read.
+// logReader follows the newest client log (logtail) and keeps what it said.
 type logReader struct {
-	path   string
-	offset int64
-	state  joinState
+	tail  logtail.Follower
+	state joinState
 }
 
-const (
-	firstLook = 4 << 20
-	maxStep   = 8 << 20
-)
-
 func (l *logReader) read(path string) (joinState, error) {
-	fh, err := os.Open(path)
-	if err != nil {
-		return joinState{}, err
-	}
-	defer fh.Close()
-	st, err := fh.Stat()
-	if err != nil {
-		return joinState{}, err
-	}
-	size := st.Size()
-	if path != l.path || size < l.offset {
-		// A new session's log (or one that was cut short): start over.
-		*l = logReader{path: path, offset: max(0, size-firstLook)}
-	}
-	if size-l.offset > maxStep {
-		l.offset = size - maxStep
-	}
-	if size > l.offset {
-		buf := make([]byte, size-l.offset)
-		n, err := fh.ReadAt(buf, l.offset)
-		if err != nil && err != io.EOF {
-			return l.state, err
+	err := l.tail.Read(path, func(lines io.Reader, fresh bool) {
+		if fresh {
+			l.state = joinState{}
 		}
-		buf = buf[:n]
-		// Only whole lines; a half-written one waits for the next look.
-		if end := bytes.LastIndexByte(buf, '\n'); end >= 0 {
-			l.state.feed(bytes.NewReader(buf[:end+1]))
-			l.offset += int64(end + 1)
-		}
-	}
-	return l.state, nil
+		l.state.feed(lines)
+	})
+	return l.state, err
 }
 
 var (

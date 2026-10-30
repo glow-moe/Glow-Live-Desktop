@@ -1,0 +1,47 @@
+package fortnite
+
+import (
+	"strings"
+	"testing"
+	"time"
+)
+
+// Lines as FortniteGame.log writes them (server address and tokens replaced).
+const match = `[2026.10.30-19.13.26:839][515]MatchmakingLog: [2b0a] Link id changing from [Mnemonic=[] Version=[latest]] to [Mnemonic=[experience_og] Version=[latest]]
+[2026.10.30-19.15.20:000][100]LogEOSSDK: LogEOSPresence: Updating Presence to [Online]. LocalUserId=[5ce...5f2] Template=[] RichText=[Fortnite OG]
+[2026.10.30-19.15.36:617][509]LogLoad: LoadMap: 10.0.0.9:9034/Figment_S10_Map/Athena_Terrain_S10?EncryptionToken=x:y?VerseURI=/Fortnite.com/GameFeatures/FigmentRoot
+[2026.10.30-19.15.49:070][616]LogBattleRoyaleGamePhaseLogic: HandleGamePhaseChanged. OldPhase = EAthenaGamePhase::Setup. NewPhase = EAthenaGamePhase::Warmup
+[2026.10.30-19.15.56:162][201]LogFort: PLAYLIST: Preparing to apply Data Tables and Curves in AFortGameModeAthena::ApplyPlaylistDataTables(), PlaylistName is Playlist_FigmentNoBuildSolo (Server Only)
+[2026.10.30-19.16.03:269][626]LogEOSSDK: LogEOSPresence: Updating Presence to [Online]. LocalUserId=[5ce...5f2] Template=[] RichText=[Fortnite OG Zero  Solo - 98 Left]
+[2026.10.30-19.16.40:011][574]LogBattleRoyaleGamePhaseLogic: HandleGamePhaseChanged. OldPhase = EAthenaGamePhase::Warmup. NewPhase = EAthenaGamePhase::Aircraft
+[2026.10.30-19.17.40:000][574]LogEOSSDK: LogEOSPresence: Updating Presence to [Online]. LocalUserId=[5ce...5f2] Template=[] RichText=[Fortnite OG Zero  Solo - 73 Left]
+`
+
+func TestMatchThenLobby(t *testing.T) {
+	var s State
+	s.feed(strings.NewReader(match))
+	if !s.InMatch || s.Map != "Athena_Terrain_S10" || s.Playlist != "Playlist_FigmentNoBuildSolo" || s.Phase != "Aircraft" || s.Island != "experience_og" {
+		t.Fatalf("in match: %+v", s)
+	}
+	if s.Status != "Fortnite OG Zero Solo - 73 Left" {
+		t.Fatalf("status %q", s.Status)
+	}
+	if want := time.Date(2026, 10, 30, 19, 15, 36, 617e6, time.UTC); !s.JoinedAt.Equal(want) {
+		t.Fatalf("joined %v", s.JoinedAt)
+	}
+	s.feed(strings.NewReader("[2026.10.30-19.18.55:799][267]LogLoad: LoadMap: /Game/Maps/Frontend?closed\n"))
+	if s.InMatch || s.Phase != "" || s.Last == nil {
+		t.Fatalf("back in lobby: %+v", s)
+	}
+	if s.Last.Left != 73 || s.Last.Playlist != "Playlist_FigmentNoBuildSolo" || s.Last.EndedAt.Sub(s.Last.JoinedAt) != 3*time.Minute+19*time.Second+182*time.Millisecond {
+		t.Fatalf("last: %+v", s.Last)
+	}
+}
+
+func TestStartupLobbyIsNotAMatch(t *testing.T) {
+	var s State
+	s.feed(strings.NewReader("[2026.10.30-19.13.06:490][216]LogLoad: LoadMap: /Game/Maps/Frontend?Name=Player\n"))
+	if s.InMatch || s.Last != nil {
+		t.Fatalf("%+v", s)
+	}
+}
