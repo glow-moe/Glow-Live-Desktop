@@ -20,6 +20,7 @@ type fortniteSnap struct {
 	StartedAt int64          `json:"startedAt,omitempty"`
 	Last      *fortniteFinal `json:"last,omitempty"`
 	Loadout   *fortniteGear  `json:"loadout,omitempty"`
+	Name      string         `json:"name,omitempty"`
 	UpdatedAt int64          `json:"updatedAt"`
 }
 
@@ -50,7 +51,7 @@ func ms(t time.Time) int64 {
 }
 
 func fortnitePayload(f fortnite.State) fortniteSnap {
-	p := fortniteSnap{Game: "fortnite", InMatch: f.InMatch, Map: f.Map, Playlist: f.Playlist, Phase: f.Phase, Status: f.Status, Island: f.Island, StartedAt: ms(f.JoinedAt), UpdatedAt: time.Now().UnixMilli()}
+	p := fortniteSnap{Game: "fortnite", InMatch: f.InMatch, Map: f.Map, Playlist: f.Playlist, Phase: f.Phase, Status: f.Status, Island: f.Island, StartedAt: ms(f.JoinedAt), Name: f.Name, UpdatedAt: time.Now().UnixMilli()}
 	if g := f.Loadout; g.Character != "" {
 		p.Loadout = &fortniteGear{g.Character, g.Backpack, g.Pickaxe, g.Glider, g.Contrail, g.Pet, g.PetName}
 	}

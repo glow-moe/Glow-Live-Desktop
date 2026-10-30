@@ -40,8 +40,8 @@ func TestMatchThenLobby(t *testing.T) {
 
 func TestStartupLobbyIsNotAMatch(t *testing.T) {
 	var s State
-	s.feed(strings.NewReader("[2026.10.30-19.13.06:490][216]LogLoad: LoadMap: /Game/Maps/Frontend?Name=Player\n"))
-	if s.InMatch || s.Last != nil {
+	s.feed(strings.NewReader("[2026.10.30-19.13.06:490][216]LogLoad: LoadMap: /Game/Maps/Frontend?Name=Player\n[2026.10.30-19.16.50:630][792]MatchmakingLog: [3ed0] Melocet is now Eligible for matchmaking\n"))
+	if s.InMatch || s.Last != nil || s.Name != "Melocet" {
 		t.Fatalf("%+v", s)
 	}
 }

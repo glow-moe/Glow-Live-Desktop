@@ -31,6 +31,7 @@ type State struct {
 	JoinedAt time.Time // when the match loaded
 	Last     *Final    // the match before, once you're back in the lobby
 	Loadout  Loadout   // what you have equipped
+	Name     string    // your Epic display name (glow.moe looks up public stats by it)
 
 	// a loadout block being read ("--- [LoadoutSlot.X]=..." lines under a
 	// "Local Player ... loadout changed" line)
@@ -69,6 +70,7 @@ var (
 	islandRe   = regexp.MustCompile(`Link id changing from .* to \[Mnemonic=\[([^\]]+)\]`)
 	leftRe     = regexp.MustCompile(`(\d+) Left\s*$`)
 	slotRe     = regexp.MustCompile(`^--- \[LoadoutSlot\.([A-Za-z.]+)\]=[A-Za-z]+:([a-z0-9_]{2,80})`)
+	nameRe     = regexp.MustCompile(`MatchmakingLog: \[[0-9a-f]+\] (.{3,32}?) is now Eligible for matchmaking`)
 	petNameRe  = regexp.MustCompile(`^\s*\{Channel: CustomName - Variant: Text - Data: ([^}]{1,32})\}`)
 )
 
@@ -137,6 +139,10 @@ func (s *State) feed(r io.Reader) {
 		}
 		if m := islandRe.FindStringSubmatch(line); m != nil {
 			s.Island = m[1]
+			continue
+		}
+		if m := nameRe.FindStringSubmatch(line); m != nil {
+			s.Name = m[1]
 		}
 	}
 }
