@@ -94,3 +94,44 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 14
+
+  # macOS: one universal binary in glow L!VE.app, ad-hoc signed (no Apple
+  # Developer account, so not notarized). Built on a Mac runner because the
+  # web view links against Cocoa/WebKit through cgo.
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VER="$(cat VERSION | tr -d '[:space:]')"
+          if [ "$TAG" != "v$VER" ]; then
+            echo "tag $TAG does not match VERSION $VER" >&2; exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build glow L!VE.app
+        env:
+          APP_GLOW: ${{ secrets.APP_GLOW }}
+          APP_LOL: ${{ secrets.APP_LOL }}
+          APP_FH6: ${{ secrets.APP_FH6 }}
+          APP_FH5: ${{ secrets.APP_FH5 }}
+          APP_SPLITCRAFT: ${{ secrets.APP_SPLITCRAFT }}
+        run: bash packaging/macos/build.sh "${{ steps.tag.outputs.tag }}" dist
+
+      - name: Checksums of the builds (for the log)
+        run: cd dist && shasum -a 256 glow-live-macos glow-live-macos.dmg glow-live-macos.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ steps.tag.outputs.tag }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

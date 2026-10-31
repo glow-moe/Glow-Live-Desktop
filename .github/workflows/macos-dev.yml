@@ -1,0 +1,39 @@
+# A test build of the macOS app from any branch, by hand (Actions > macos-dev >
+# Run workflow). Nothing is released: the .dmg is a workflow artifact for
+# trying the app on a Mac before it ships with a numbered release.
+name: macos-dev
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Test the packages
+        run: go test ./internal/...
+
+      - name: Build glow L!VE.app
+        env:
+          APP_GLOW: ${{ secrets.APP_GLOW }}
+          APP_LOL: ${{ secrets.APP_LOL }}
+          APP_FH6: ${{ secrets.APP_FH6 }}
+          APP_FH5: ${{ secrets.APP_FH5 }}
+          APP_SPLITCRAFT: ${{ secrets.APP_SPLITCRAFT }}
+        run: bash packaging/macos/build.sh "dev-${GITHUB_SHA::7}" dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glow-live-macos-dev
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

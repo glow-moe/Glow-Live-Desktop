@@ -2,20 +2,21 @@
 
 Native desktop app for glow.moe L!VE. While you play, it reads your local game
 data and pushes a live snapshot to your glow.moe profile, and shows Discord Rich
-Presence. Windows and Linux.
+Presence. Windows, Linux and macOS (beta).
 
 It reads:
 
 - **League** from Riot's Live Client Data API (`127.0.0.1:2999`, up only while
   you're in a game) and, outside a match, the League client's local API (lobby,
-  champion select, rank). Windows only: Riot's client APIs don't run under Wine
+  champion select, rank). Windows and macOS: Riot's client APIs don't run under Wine
 - **Forza** from the game's Data Out UDP telemetry
 - **Steam** from the client's own local record of the running game (registry on
-  Windows, the launcher's process arguments on Linux), plus your public Steam
+  Windows, Steam's registry.vdf on macOS, the launcher's process arguments on
+  Linux), plus your public Steam
   profile card for the status line, avatar and level
 - **Roblox** from the Roblox client's own log (which experience you joined; the
   website installer and the Microsoft Store build), named through Roblox's
-  public web API. Windows only. The server you're on is never sent anywhere
+  public web API. Windows and macOS. The server you're on is never sent anywhere
 
 When no game is running it mirrors to Discord what glow.moe already knows about
 you: the anime, manga or song the browser extension reports, and your SplitCraft
@@ -33,7 +34,7 @@ no requests to Discord's servers.
 ## Layout
 
 ```
-cmd/gui/               native window (WebView2 on Windows, WebKitGTK on Linux) + tray
+cmd/gui/               native window (WebView2 on Windows, WebKitGTK on Linux, WKWebView on macOS) + tray
 internal/gui/          local HTTP server + embedded UI and OBS overlay
 internal/orchestrator  ties the game readers, the push and Discord RPC together
 internal/live          Riot Live Client Data API reader
@@ -73,6 +74,21 @@ PKG_CONFIG_PATH="$PWD/.pkgconfig-shim:$PKG_CONFIG_PATH" CGO_ENABLED=1 \
     -X $P.appSplitcraft=$APP_SPLITCRAFT" \
   -o glow-collector ./cmd/gui
 ```
+
+### macOS
+
+On a Mac with Xcode's command line tools (CI uses GitHub's macOS runner):
+
+```sh
+source ./.appids
+export APP_GLOW APP_LOL APP_FH6 APP_FH5 APP_SPLITCRAFT
+bash packaging/macos/build.sh v$(cat VERSION) dist
+```
+
+It builds one universal binary (Apple Silicon + Intel, macOS 12+), wraps it in
+`glow L!VE.app`, signs it ad hoc and writes `glow-live-macos.dmg`. It is not
+notarized, so the first launch needs System Settings > Privacy & Security >
+Open Anyway. No tray yet on macOS: closing the window quits the app.
 
 ### Windows (cross-build)
 

@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !darwin
 
 // Package proc answers "is this game's client open?" from the process list
 // (Roblox, Fortnite), without opening or touching the process.

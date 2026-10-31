@@ -23,6 +23,11 @@ func assetName() string {
 	if runtime.GOOS == "windows" {
 		return "glow-live-windows-x64.exe"
 	}
+	// One universal binary (Apple Silicon + Intel); the update swaps the one
+	// inside glow L!VE.app/Contents/MacOS.
+	if runtime.GOOS == "darwin" {
+		return "glow-live-macos"
+	}
 	return "glow-live-linux-x64"
 }
 

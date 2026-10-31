@@ -46,6 +46,15 @@ func runningAppID() (int, bool) {
 		}
 		return id, true
 	}
+	// macOS has no /proc; the Steam client keeps the same RunningAppID it puts
+	// in the Windows registry in its own registry.vdf.
+	if runtime.GOOS == "darwin" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return 0, false
+		}
+		return runningAppIDFromVDF(filepath.Join(home, "Library", "Application Support", "Steam", "registry.vdf"))
+	}
 	// Steam launches games through a "reaper" helper whose arguments carry the id
 	// ("SteamLaunch AppId=238430"), so the process table is the local source.
 	procs, err := os.ReadDir("/proc")
@@ -65,6 +74,26 @@ func runningAppID() (int, bool) {
 		}
 	}
 	return 0, true
+}
+
+// runningAppIDFromVDF reads "RunningAppID" from a Steam registry.vdf ("0"
+// while nothing runs). An unreadable file or a missing key is "unknown".
+func runningAppIDFromVDF(path string) (int, bool) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0, false
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		f := splitQuoted(strings.TrimSpace(line))
+		if len(f) >= 2 && strings.EqualFold(f[0], "RunningAppID") {
+			id, err := strconv.Atoi(f[1])
+			if err != nil || id < 0 {
+				return 0, false
+			}
+			return id, true
+		}
+	}
+	return 0, false
 }
 
 // appIDFromArgs pulls the id out of a launcher command line. The arguments are

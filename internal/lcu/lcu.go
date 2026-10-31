@@ -154,6 +154,8 @@ var commonPaths = []string{
 	`C:\Program Files (x86)\Riot Games\League of Legends`,
 	`D:\Riot Games\League of Legends`,
 	`E:\Riot Games\League of Legends`,
+	// The Mac client keeps its lockfile inside the app bundle.
+	"/Applications/League of Legends.app/Contents/LoL",
 }
 
 // ErrNoClient means the League client isn't running (no readable lockfile).
