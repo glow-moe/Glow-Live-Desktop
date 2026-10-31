@@ -24,7 +24,7 @@ mkdir -p "$OUT"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# macOS 12 is the floor: CI builds with Go 1.25, the last Go whose runtime runs
+# macOS 12 is the floor: CI builds with Go 1.26, the last Go whose runtime runs
 # there (Go 1.27 needs 13). Keep the C side (webview) at the same floor.
 export MACOSX_DEPLOYMENT_TARGET=12.0
 LDFLAGS="-s -w -X main.version=$VERSION \
