@@ -46,6 +46,28 @@ func (o *Orchestrator) ensureDota() *dota.Receiver {
 	return r
 }
 
+// dotaLaunchHint is the status line while Dota runs without sending its game
+// state: it only does with the -gamestateintegration launch option, which the
+// app can't set for the player.
+const dotaLaunchHint = "Dota 2 · no live match? Add -gamestateintegration to its Steam launch options"
+
+// dotaNeedsLaunchOption reports Dota running for a while (45s, past the loading
+// screen) with no game state from it. Called on the tick while Steam says Dota
+// is open; a gap of more than 15s starts a new session.
+func (o *Orchestrator) dotaNeedsLaunchOption() bool {
+	now := time.Now()
+	if now.Sub(o.dotaSeenAt) > 15*time.Second {
+		o.dotaSince = now
+	}
+	o.dotaSeenAt = now
+	r := o.ensureDota()
+	if r == nil {
+		return false
+	}
+	_, ok := r.Latest(45 * time.Second)
+	return !ok && now.Sub(o.dotaSince) > 45*time.Second
+}
+
 func dotaHeroName(key string) string {
 	words := strings.Split(key, "_")
 	for i, w := range words {

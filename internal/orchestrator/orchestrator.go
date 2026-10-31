@@ -970,6 +970,8 @@ type Orchestrator struct {
 	valMatch     valorant.Tracker
 	dotaRecv     *dota.Receiver
 	dotaTriedAt  time.Time
+	dotaSince    time.Time // when this Dota session was first seen running (tick goroutine only)
+	dotaSeenAt   time.Time
 	mirrorsAt    time.Time
 	steamID      uint32 // Steam account id signed in on this machine (0 = none)
 	steamIDAt    time.Time
@@ -1398,6 +1400,9 @@ func (o *Orchestrator) tick() {
 					return
 				}
 				st := Status{Game: "steam", InGame: true, Detail: steamDetail(s), AppID: s.AppID, GameName: s.Game, Pushes: o.pushes, Delay: effDelay}
+				if s.AppID == dota.AppID && o.dotaNeedsLaunchOption() {
+					st.Detail = dotaLaunchHint
+				}
 				o.push(cfg, effDelay, o.steamSnapshotPayload(s), &st)
 				app, named := steamApp(s.AppID)
 				hints := steamGameHints(cfg.Endpoint, s.AppID)
