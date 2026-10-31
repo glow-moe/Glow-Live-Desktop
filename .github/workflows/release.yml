@@ -115,7 +115,8 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: stable
+          # 1.25: the last Go that runs on macOS 12 (2015-2016 Macs stop there).
+          go-version: "1.25.x"
 
       - name: Build glow L!VE.app
         env:
