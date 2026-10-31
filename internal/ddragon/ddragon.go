@@ -94,6 +94,56 @@ func SpellKey(displayName string) string {
 	return "SummonerFlash"
 }
 
+// spellFiles are the summoner-spell keys ddragon has art for (the values above,
+// plus Arena's own two).
+var spellFiles = func() map[string]bool {
+	m := map[string]bool{"SummonerCherryHold": true, "SummonerCherryFlash": true}
+	for _, k := range SummonerSpellKeys {
+		m[k] = true
+	}
+	return m
+}()
+
+// SpellKeyFrom picks the ddragon spell key from the live client's spell slot.
+// rawDisplayName ("GeneratedTip_SummonerSpell_SummonerFlash_DisplayName") is the
+// same in every client language, so it wins; displayName ("Sıçra" on a Turkish
+// client) is only the fallback for a raw name of an unexpected shape.
+// Upgraded variants ("SummonerSmiteAvatarOffensive", "S12_SummonerTeleportUpgrade")
+// map to their base art.
+func SpellKeyFrom(raw, display string) string {
+	key := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(raw), "GeneratedTip_SummonerSpell_"), "_DisplayName")
+	if key != "" && key != strings.TrimSpace(raw) {
+		if spellFiles[key] {
+			return key
+		}
+		switch k := strings.ToLower(key); {
+		case strings.Contains(k, "smite"):
+			return "SummonerSmite"
+		case strings.Contains(k, "teleport"):
+			return "SummonerTeleport"
+		case strings.Contains(k, "snowball"), strings.Contains(k, "mark"):
+			return "SummonerSnowball"
+		case strings.Contains(k, "flash"):
+			return "SummonerFlash"
+		case strings.Contains(k, "dot"), strings.Contains(k, "ignite"):
+			return "SummonerDot"
+		case strings.Contains(k, "heal"):
+			return "SummonerHeal"
+		case strings.Contains(k, "exhaust"):
+			return "SummonerExhaust"
+		case strings.Contains(k, "barrier"):
+			return "SummonerBarrier"
+		case strings.Contains(k, "boost"):
+			return "SummonerBoost"
+		case strings.Contains(k, "haste"):
+			return "SummonerHaste"
+		case strings.Contains(k, "mana"):
+			return "SummonerMana"
+		}
+	}
+	return SpellKey(display)
+}
+
 // imgKeyFix maps ddragon champion.json keys that differ from their image
 // filenames ("Fiddlesticks" data key -> "FiddleSticks" image files).
 var imgKeyFix = map[string]string{"Fiddlesticks": "FiddleSticks"}
@@ -125,8 +175,9 @@ func ProfileIconURL(id int) string {
 
 var (
 	champMu      sync.Mutex
-	champByID    map[int]string // numeric champion id -> ddragon key
-	champsFailAt time.Time      // last load that came back empty
+	champByID    map[int]string    // numeric champion id -> ddragon key
+	champNames   map[string]string // ddragon key -> English name ("MonkeyKing" -> "Wukong")
+	champsFailAt time.Time         // last load that came back empty
 )
 
 // ensureChampionsLocked loads champion.json (champMu held). A load that comes
@@ -137,7 +188,7 @@ func ensureChampionsLocked() {
 	if len(champByID) > 0 || time.Since(champsFailAt) < 2*time.Minute {
 		return
 	}
-	champByID = map[int]string{}
+	champByID, champNames = map[int]string{}, map[string]string{}
 	loadChampions()
 	if len(champByID) == 0 {
 		champsFailAt = time.Now()
@@ -151,6 +202,16 @@ func ChampKeyByID(id int) string {
 	defer champMu.Unlock()
 	ensureChampionsLocked()
 	return champByID[id]
+}
+
+// ChampName is a champion's English name by ddragon key ("MonkeyKing" ->
+// "Wukong"), so the page reads the same whatever language the game client is
+// in. Empty until champion.json has loaded, and for an unknown key.
+func ChampName(key string) string {
+	champMu.Lock()
+	defer champMu.Unlock()
+	ensureChampionsLocked()
+	return champNames[key]
 }
 
 // IsChampKey reports whether key is a champion ddragon knows ("Seraphine",
@@ -186,7 +247,8 @@ func loadChampions() {
 	defer resp.Body.Close()
 	var doc struct {
 		Data map[string]struct {
-			Key string `json:"key"` // numeric id, as a string
+			Key  string `json:"key"` // numeric id, as a string
+			Name string `json:"name"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
@@ -195,6 +257,9 @@ func loadChampions() {
 	for key, v := range doc.Data {
 		if n, err := strconv.Atoi(v.Key); err == nil {
 			champByID[n] = key
+		}
+		if v.Name != "" {
+			champNames[key] = v.Name
 		}
 	}
 }
@@ -208,9 +273,10 @@ var (
 // Per-champion skin data from Community Dragon, loaded once per champion:
 // chroma → parent skin, the real skin numbers, and animated-splash videos.
 var (
-	skinParents = map[int]map[int]int{} // champ id -> chroma num -> parent skin num
-	skinNums    = map[int][]int{}       // champ id -> known skin nums
-	skinFailAt  = map[int]time.Time{}   // last failed load, to avoid hammering offline
+	skinParents = map[int]map[int]int{}    // champ id -> chroma num -> parent skin num
+	skinNames   = map[int]map[int]string{} // champ id -> skin or chroma num -> English name
+	skinNums    = map[int][]int{}          // champ id -> known skin nums
+	skinFailAt  = map[int]time.Time{}      // last failed load, to avoid hammering offline
 )
 
 // champIDLocked resolves a ddragon key to the numeric champion id (skinVidMu held).
@@ -240,12 +306,12 @@ func ensureSkinDataLocked(id int) {
 	if time.Since(skinFailAt[id]) < 2*time.Minute {
 		return
 	}
-	videos, parents, nums, ok := loadSkinData(id)
+	videos, parents, nums, names, ok := loadSkinData(id)
 	if !ok {
 		skinFailAt[id] = time.Now()
 		return
 	}
-	skinVideos[id], skinParents[id], skinNums[id] = videos, parents, nums
+	skinVideos[id], skinParents[id], skinNums[id], skinNames[id] = videos, parents, nums, names
 }
 
 // ParentSkin maps a chroma's skin number to the skin it belongs to. Ddragon only
@@ -299,6 +365,23 @@ func SkinVideoURL(champKey string, skin int) string {
 	return skinVideos[id][skin]
 }
 
+// SkinName is a skin's (or chroma's) English name by skin number, so the page
+// reads the same whatever language the game client is in. Empty when unknown
+// (offline, or the base skin, which the client calls "default").
+func SkinName(champKey string, skin int) string {
+	if champKey == "" || skin <= 0 {
+		return ""
+	}
+	skinVidMu.Lock()
+	defer skinVidMu.Unlock()
+	id := champIDLocked(champKey)
+	if id == 0 {
+		return ""
+	}
+	ensureSkinDataLocked(id)
+	return skinNames[id][skin]
+}
+
 // SkinID returns the numeric skin id (championId*1000 + skin), or 0 on miss.
 func SkinID(champKey string, skin int) int {
 	if champKey == "" {
@@ -313,31 +396,37 @@ func SkinID(champKey string, skin int) int {
 	return id*1000 + skin
 }
 
-func loadSkinData(champID int) (videos map[int]string, parents map[int]int, nums []int, ok bool) {
-	videos, parents = map[int]string{}, map[int]int{}
+func loadSkinData(champID int) (videos map[int]string, parents map[int]int, nums []int, names map[int]string, ok bool) {
+	videos, parents, names = map[int]string{}, map[int]int{}, map[int]string{}
 	const base = "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default"
 	resp, err := httpClient.Get(fmt.Sprintf("%s/v1/champions/%d.json", base, champID))
 	if err != nil {
-		return videos, parents, nil, false
+		return videos, parents, nil, names, false
 	}
 	defer resp.Body.Close()
 	var doc struct {
 		Skins []struct {
 			ID              int    `json:"id"`
+			Name            string `json:"name"`
 			SplashVideoPath string `json:"splashVideoPath"`
 			Chromas         []struct {
-				ID int `json:"id"`
+				ID   int    `json:"id"`
+				Name string `json:"name"`
 			} `json:"chromas"`
 		} `json:"skins"`
 	}
 	if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&doc) != nil {
-		return videos, parents, nil, false
+		return videos, parents, nil, names, false
 	}
 	for _, sk := range doc.Skins {
 		num := sk.ID % 1000
 		nums = append(nums, num)
+		names[num] = sk.Name
 		for _, ch := range sk.Chromas {
 			parents[ch.ID%1000] = num
+			if ch.Name != "" {
+				names[ch.ID%1000] = ch.Name
+			}
 		}
 		if sk.SplashVideoPath == "" {
 			continue
@@ -346,7 +435,7 @@ func loadSkinData(champID int) (videos map[int]string, parents map[int]int, nums
 		rel := strings.ToLower(strings.TrimPrefix(sk.SplashVideoPath, "/lol-game-data/assets/"))
 		videos[num] = base + "/" + rel
 	}
-	return videos, parents, nums, true
+	return videos, parents, nums, names, true
 }
 
 var httpClient = &http.Client{Timeout: 6 * time.Second}
@@ -408,8 +497,9 @@ func ShardIcon(id int) string {
 }
 
 var (
-	runeMu  sync.Mutex
-	runeMap map[int]string // rune/tree id -> icon path
+	runeMu    sync.Mutex
+	runeMap   map[int]string // rune/tree id -> icon path
+	runeNames map[int]string // rune/tree id -> English name
 )
 
 // RuneIcon returns the icon URL for a rune or tree id (keystone, tree, any
@@ -417,14 +507,28 @@ var (
 func RuneIcon(id int) string {
 	runeMu.Lock()
 	defer runeMu.Unlock()
-	if runeMap == nil {
-		runeMap = map[int]string{}
-		loadRunes()
-	}
+	ensureRunesLocked()
 	if p, ok := runeMap[id]; ok {
 		return runeImgBase + p
 	}
 	return ""
+}
+
+// RuneName is a rune's or tree's English name by id ("Dark Harvest",
+// "Domination"), so the page reads the same whatever language the game client
+// is in. Empty on miss.
+func RuneName(id int) string {
+	runeMu.Lock()
+	defer runeMu.Unlock()
+	ensureRunesLocked()
+	return runeNames[id]
+}
+
+func ensureRunesLocked() {
+	if runeMap == nil {
+		runeMap, runeNames = map[int]string{}, map[int]string{}
+		loadRunes()
+	}
 }
 
 func loadRunes() {
@@ -437,10 +541,12 @@ func loadRunes() {
 	var trees []struct {
 		ID    int    `json:"id"`
 		Icon  string `json:"icon"`
+		Name  string `json:"name"`
 		Slots []struct {
 			Runes []struct {
 				ID   int    `json:"id"`
 				Icon string `json:"icon"`
+				Name string `json:"name"`
 			} `json:"runes"`
 		} `json:"slots"`
 	}
@@ -448,10 +554,10 @@ func loadRunes() {
 		return
 	}
 	for _, t := range trees {
-		runeMap[t.ID] = t.Icon
+		runeMap[t.ID], runeNames[t.ID] = t.Icon, t.Name
 		for _, sl := range t.Slots {
 			for _, r := range sl.Runes {
-				runeMap[r.ID] = r.Icon
+				runeMap[r.ID], runeNames[r.ID] = r.Icon, r.Name
 			}
 		}
 	}

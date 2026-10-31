@@ -83,25 +83,28 @@ type FullRunes struct {
 type Rune struct {
 	DisplayName    string `json:"displayName"`
 	RawDescription string `json:"rawDescription"`
+	RawDisplayName string `json:"rawDisplayName"`
 	ID             int    `json:"id"`
 }
 
 type Player struct {
-	ChampionName    string        `json:"championName"`
-	RawChampionName string        `json:"rawChampionName"`
-	IsBot           bool          `json:"isBot"`
-	IsDead          bool          `json:"isDead"`
-	RespawnTimer    float64       `json:"respawnTimer"`
-	Items           []Item        `json:"items"`
-	Level           int           `json:"level"`
-	RiotID          string        `json:"riotId"`
-	RiotIDName      string        `json:"riotIdGameName"`
-	Scores          Scores        `json:"scores"`
-	SkinID          int           `json:"skinID"`
-	SkinName        string        `json:"skinName"`
-	SummonerName    string        `json:"summonerName"`
-	SummonerSpells  SummonerSpell `json:"summonerSpells"`
-	Team            string        `json:"team"`
+	ChampionName    string  `json:"championName"`
+	RawChampionName string  `json:"rawChampionName"`
+	IsBot           bool    `json:"isBot"`
+	IsDead          bool    `json:"isDead"`
+	RespawnTimer    float64 `json:"respawnTimer"`
+	Items           []Item  `json:"items"`
+	Level           int     `json:"level"`
+	// "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY", or "" when the queue has none.
+	Position       string        `json:"position"`
+	RiotID         string        `json:"riotId"`
+	RiotIDName     string        `json:"riotIdGameName"`
+	Scores         Scores        `json:"scores"`
+	SkinID         int           `json:"skinID"`
+	SkinName       string        `json:"skinName"`
+	SummonerName   string        `json:"summonerName"`
+	SummonerSpells SummonerSpell `json:"summonerSpells"`
+	Team           string        `json:"team"`
 }
 
 type Item struct {
@@ -117,13 +120,17 @@ type Scores struct {
 	WardScore  float64 `json:"wardScore"`
 }
 
+// SpellSlot is one summoner spell. displayName is in the game's language
+// ("Sıçra" on a Turkish client); rawDisplayName is the same in every language
+// ("GeneratedTip_SummonerSpell_SummonerFlash_DisplayName").
+type SpellSlot struct {
+	DisplayName    string `json:"displayName"`
+	RawDisplayName string `json:"rawDisplayName"`
+}
+
 type SummonerSpell struct {
-	SummonerSpellOne struct {
-		DisplayName string `json:"displayName"`
-	} `json:"summonerSpellOne"`
-	SummonerSpellTwo struct {
-		DisplayName string `json:"displayName"`
-	} `json:"summonerSpellTwo"`
+	SummonerSpellOne SpellSlot `json:"summonerSpellOne"`
+	SummonerSpellTwo SpellSlot `json:"summonerSpellTwo"`
 }
 
 type Event struct {

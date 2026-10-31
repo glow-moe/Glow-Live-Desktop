@@ -79,14 +79,16 @@ var (
 	playlistRe = regexp.MustCompile(`PlaylistName is (Playlist_[A-Za-z0-9_]+)`)
 	statusRe   = regexp.MustCompile(`LogEOSPresence: Updating Presence to \[[A-Za-z]+\].*RichText=\[([^\]]*)\]`)
 	islandRe   = regexp.MustCompile(`Link id changing from .* to \[Mnemonic=\[([^\]]+)\]`)
-	leftRe     = regexp.MustCompile(`(\d+) Left\s*$`)
-	slotRe     = regexp.MustCompile(`^--- \[LoadoutSlot\.([A-Za-z.]+)\]=[A-Za-z]+:([a-z0-9_]{2,80})`)
-	nameRe     = regexp.MustCompile(`MatchmakingLog: \[[0-9a-f]+\] (.{3,32}?) is now Eligible for matchmaking`)
-	joinRe     = regexp.MustCompile(`LogParty: Verbose: Adding \[(.{1,32}?)\] Id \[MCP:([0-9a-f.]+)\] as a new member`)
-	idRe       = regexp.MustCompile(`(?:TargetAccountId|LocalAccountId)=\[([0-9a-f]{32})\]`)
-	localIDRe  = regexp.MustCompile(`LocalAccountId=\[([0-9a-f]{32})\]`)
-	partRe     = regexp.MustCompile(`LogParty: Verbose: Removing \[(.{1,32}?)\] Id \[MCP:[0-9a-f.]+\] from`)
-	petNameRe  = regexp.MustCompile(`^\s*\{Channel: CustomName - Variant: Text - Data: ([^}]{1,32})\}`)
+	// "<mode> - 73 Left" in English; the word around the number follows the
+	// game's language ("- 73 kaldı", "- Quedan 73"), so only the shape counts.
+	leftRe    = regexp.MustCompile(`\s-\s+(?:\S+\s+)?(\d{1,3})(?:\s+\S+)?\s*$`)
+	slotRe    = regexp.MustCompile(`^--- \[LoadoutSlot\.([A-Za-z.]+)\]=[A-Za-z]+:([a-z0-9_]{2,80})`)
+	nameRe    = regexp.MustCompile(`MatchmakingLog: \[[0-9a-f]+\] (.{3,32}?) is now Eligible for matchmaking`)
+	joinRe    = regexp.MustCompile(`LogParty: Verbose: Adding \[(.{1,32}?)\] Id \[MCP:([0-9a-f.]+)\] as a new member`)
+	idRe      = regexp.MustCompile(`(?:TargetAccountId|LocalAccountId)=\[([0-9a-f]{32})\]`)
+	localIDRe = regexp.MustCompile(`LocalAccountId=\[([0-9a-f]{32})\]`)
+	partRe    = regexp.MustCompile(`LogParty: Verbose: Removing \[(.{1,32}?)\] Id \[MCP:[0-9a-f.]+\] from`)
+	petNameRe = regexp.MustCompile(`^\s*\{Channel: CustomName - Variant: Text - Data: ([^}]{1,32})\}`)
 )
 
 // feed moves the state along the given log lines.

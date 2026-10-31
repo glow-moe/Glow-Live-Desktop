@@ -17,6 +17,25 @@ const match = `[2026.10.30-19.13.26:839][515]MatchmakingLog: [2b0a] Link id chan
 [2026.10.30-19.17.40:000][574]LogEOSSDK: LogEOSPresence: Updating Presence to [Online]. LocalUserId=[5ce...5f2] Template=[] RichText=[Fortnite OG Zero  Solo - 73 Left]
 `
 
+// The status line follows the game's language; the players left must still read.
+func TestLeftInAnyLanguage(t *testing.T) {
+	for status, want := range map[string]string{
+		"Fortnite OG Zero Solo - 73 Left":  "73",
+		"Fortnite OG Zero Solo - 73 kaldı": "73",
+		"Battle Royale - Quedan 12":        "12",
+		"Battle Royale":                    "",
+		"Team Rumble - 20 vs 20":           "",
+	} {
+		got := ""
+		if m := leftRe.FindStringSubmatch(status); m != nil {
+			got = m[1]
+		}
+		if got != want {
+			t.Errorf("%q: %q, want %q", status, got, want)
+		}
+	}
+}
+
 func TestMatchThenLobby(t *testing.T) {
 	var s State
 	s.feed(strings.NewReader(match))

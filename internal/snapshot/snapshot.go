@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/glow-moe/glow-collector/internal/ddragon"
@@ -69,6 +70,8 @@ type Player struct {
 	IsDead    bool     `json:"isDead"`
 	Respawn   int      `json:"respawn"`
 	IsMe      bool     `json:"isMe"`
+	// Lane: TOP, JUNGLE, MIDDLE, BOTTOM or UTILITY; "" when unknown.
+	Role string `json:"role,omitempty"`
 }
 
 type FeedEvent struct {
@@ -439,6 +442,7 @@ func Build(d *live.AllGameData, patch string, now int64) Snapshot {
 		}
 	}
 
+	blue, red = byLane(blue), byLane(red)
 	return Snapshot{
 		Game:      "lol",
 		Patch:     patch,
@@ -464,21 +468,84 @@ func mapPlayer(p live.Player, isMe bool) Player {
 		name = p.SummonerName
 	}
 	ck := champKey(p.RawChampionName, p.ChampionName)
+	spells := playerSpells(p)
 	return Player{
 		Summoner:  name,
-		Champ:     fixChampName(p.ChampionName),
+		Champ:     englishChamp(ck, p.ChampionName),
 		ChampKey:  ck,
 		Skin:      ddragon.ParentSkin(ck, p.SkinID),
 		Kda:       fmt.Sprintf("%d/%d/%d", p.Scores.Kills, p.Scores.Deaths, p.Scores.Assists),
 		Cs:        p.Scores.CreepScore,
 		Vision:    int(math.Round(p.Scores.WardScore)),
 		Lvl:       p.Level,
-		SpellKeys: []string{ddragon.SpellKey(p.SummonerSpells.SummonerSpellOne.DisplayName), ddragon.SpellKey(p.SummonerSpells.SummonerSpellTwo.DisplayName)},
+		SpellKeys: spells,
 		Items:     items,
 		IsDead:    p.IsDead,
 		Respawn:   int(math.Round(p.RespawnTimer)),
 		IsMe:      isMe,
+		Role:      laneOf(p.Position, spells, items),
 	}
+}
+
+// playerSpells reads both summoner spells by their language-independent name.
+func playerSpells(p live.Player) []string {
+	return []string{
+		ddragon.SpellKeyFrom(p.SummonerSpells.SummonerSpellOne.RawDisplayName, p.SummonerSpells.SummonerSpellOne.DisplayName),
+		ddragon.SpellKeyFrom(p.SummonerSpells.SummonerSpellTwo.RawDisplayName, p.SummonerSpells.SummonerSpellTwo.DisplayName),
+	}
+}
+
+// supportItems is the support quest line (World Atlas and what it becomes).
+var supportItems = map[int]bool{3865: true, 3866: true, 3867: true, 3869: true, 3870: true, 3871: true, 3876: true, 3877: true}
+
+// laneOf is the lane the game assigned, else what the build says: Smite is the
+// jungler, the support item the support. "" when neither tells.
+func laneOf(position string, spells []string, items []int) string {
+	switch p := strings.ToUpper(strings.TrimSpace(position)); p {
+	case "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY":
+		return p
+	}
+	for _, k := range spells {
+		if k == "SummonerSmite" {
+			return "JUNGLE"
+		}
+	}
+	for _, it := range items {
+		if supportItems[it] {
+			return "UTILITY"
+		}
+	}
+	return ""
+}
+
+var laneOrder = map[string]int{"TOP": 0, "JUNGLE": 1, "MIDDLE": 2, "BOTTOM": 3, "UTILITY": 4}
+
+// byLane puts a team in lane order (top, jungle, mid, bot, support) when every
+// player's lane is known and no two share one; otherwise the game's own order
+// stays, since a half-guessed order would be wrong in a new way.
+func byLane(team []Player) []Player {
+	if len(team) == 0 {
+		return team // stays [] in the JSON, not null
+	}
+	seen := map[string]bool{}
+	for _, p := range team {
+		if _, ok := laneOrder[p.Role]; !ok || seen[p.Role] {
+			return team
+		}
+		seen[p.Role] = true
+	}
+	out := append([]Player(nil), team...)
+	sort.SliceStable(out, func(i, j int) bool { return laneOrder[out[i].Role] < laneOrder[out[j].Role] })
+	return out
+}
+
+// englishChamp is the champion's English name, whatever language the client
+// runs in; the client's own name until champion.json has loaded.
+func englishChamp(key, display string) string {
+	if n := ddragon.ChampName(key); n != "" {
+		return n
+	}
+	return fixChampName(display)
 }
 
 func mapMe(d *live.AllGameData, champKeyVal string) Me {
@@ -491,6 +558,9 @@ func mapMe(d *live.AllGameData, champKeyVal string) Me {
 	me.ChampKey = champKeyVal
 	me.Skin = ddragon.ParentSkin(champKeyVal, selfSkin(d))
 	me.SkinName = selfSkinName(d)
+	if n := ddragon.SkinName(champKeyVal, selfSkin(d)); n != "" {
+		me.SkinName = n
+	}
 	me.SkinVideoUrl = ddragon.SkinVideoURL(champKeyVal, me.Skin)
 	me.RiotName = name
 	me.RiotTag = tag
@@ -533,10 +603,7 @@ func selfSpells(d *live.AllGameData) []string {
 	for _, p := range d.AllPlayers {
 		if p.SummonerName == d.ActivePlayer.SummonerName ||
 			(p.RiotID != "" && p.RiotID == d.ActivePlayer.RiotID) {
-			return []string{
-				ddragon.SpellKey(p.SummonerSpells.SummonerSpellOne.DisplayName),
-				ddragon.SpellKey(p.SummonerSpells.SummonerSpellTwo.DisplayName),
-			}
+			return playerSpells(p)
 		}
 	}
 	return []string{"SummonerFlash", "SummonerFlash"}
@@ -594,16 +661,25 @@ func runes(fr live.FullRunes) Runes {
 		if r.ID == 0 {
 			continue
 		}
-		perks = append(perks, Perk{Name: r.DisplayName, Icon: ddragon.RuneIcon(r.ID)})
+		perks = append(perks, Perk{Name: runeName(r), Icon: ddragon.RuneIcon(r.ID)})
 	}
 	return Runes{
-		Keystone:      fr.Keystone.DisplayName,
+		Keystone:      runeName(fr.Keystone),
 		KeystoneIcon:  ddragon.RuneIcon(fr.Keystone.ID),
-		PrimaryTree:   fr.PrimaryRuneTree.DisplayName,
-		SecondaryTree: fr.SecondaryRuneTree.DisplayName,
+		PrimaryTree:   runeName(fr.PrimaryRuneTree),
+		SecondaryTree: runeName(fr.SecondaryRuneTree),
 		Shards:        shards,
 		Perks:         perks,
 	}
+}
+
+// runeName is the rune's English name by id; the client's own (possibly
+// translated) name only when ddragon doesn't know the id.
+func runeName(r live.Rune) string {
+	if n := ddragon.RuneName(r.ID); n != "" {
+		return n
+	}
+	return r.DisplayName
 }
 
 // shardLabel turns the live client's stat-shard tooltip key
@@ -730,11 +806,20 @@ func multikill(streak int) string {
 	return "Multikill"
 }
 
+// drakes names the live client's dragon codes the way the game does.
+var drakes = map[string]string{
+	"Air": "a Cloud Drake", "Earth": "a Mountain Drake", "Fire": "an Infernal Drake", "Water": "an Ocean Drake",
+	"Hextech": "a Hextech Drake", "Chemtech": "a Chemtech Drake", "Elder": "the Elder Dragon",
+}
+
 func dragon(t string) string {
+	if n, ok := drakes[t]; ok {
+		return n
+	}
 	if t == "" {
 		return "a Drake"
 	}
-	return t + " Drake"
+	return "a " + t + " Drake"
 }
 
 // champKey derives the ddragon champion key from rawChampionName
@@ -768,10 +853,10 @@ func champKey(raw, display string) string {
 func champName(champKeyVal string, d *live.AllGameData) string {
 	for _, p := range d.AllPlayers {
 		if champKey(p.RawChampionName, p.ChampionName) == champKeyVal {
-			return fixChampName(p.ChampionName)
+			return englishChamp(champKeyVal, p.ChampionName)
 		}
 	}
-	return fixChampName(champKeyVal)
+	return englishChamp(champKeyVal, champKeyVal)
 }
 
 // fixChampName gives the proper display name where the game's internal name
