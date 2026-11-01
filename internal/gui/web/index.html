@@ -585,7 +585,9 @@
           $("st-main").textContent = "Playing Roblox";
           $("st-sub").textContent = st.detail || "";
         } else if (st.inGame) {
-          $("st-main").textContent = "LIVE - " + (st.game === "forza" ? "Forza" : "League");
+          // Each game by its name (this used to say League for anything but Forza).
+          const names = { lol: "League", league: "League", forza: "Forza", fh6: "Forza", valorant: "VALORANT", fortnite: "Fortnite", dota2: "Dota 2" };
+          $("st-main").textContent = "LIVE - " + (names[st.game] || st.gameName || "your game");
           $("st-sub").textContent = st.detail || "";
         } else if (st.game === "league") {
           // Client up, not in a match: lobby / champ select / post-game / client.
