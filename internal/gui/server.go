@@ -18,6 +18,7 @@ import (
 
 	"github.com/glow-moe/glow-collector/internal/autostart"
 	"github.com/glow-moe/glow-collector/internal/config"
+	"github.com/glow-moe/glow-collector/internal/install"
 	"github.com/glow-moe/glow-collector/internal/orchestrator"
 	"github.com/glow-moe/glow-collector/internal/pair"
 	"github.com/glow-moe/glow-collector/internal/poster"
@@ -209,6 +210,11 @@ func (s *Server) watchUpdates() {
 // build is behind. It returns that latest tag ("" when the check failed).
 func (s *Server) checkUpdate() string {
 	v, at, ok := update.Check(s.version)
+	// A release that died on this PC before (the launcher fell back from it)
+	// isn't offered again; the next one is.
+	if ok && install.IsBad(v) {
+		return v
+	}
 	if ok {
 		s.mu.Lock()
 		s.updateVer, s.updateAt = v, at
@@ -238,10 +244,10 @@ func (s *Server) maybeAutoUpdate() {
 	if !due {
 		return
 	}
-	if err := update.Apply(ver); err != nil {
+	if err := install.ApplyUpdate(ver); err != nil {
 		return
 	}
-	update.Relaunch("--hidden")
+	install.Restart(true)
 }
 
 // autoUpdateDue decides whether the automatic update should install `ver` now.
@@ -339,7 +345,7 @@ func (s *Server) hUpdateApply(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "error": "no update available"})
 		return
 	}
-	if err := update.Apply(tag); err != nil {
+	if err := install.ApplyUpdate(tag); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
@@ -347,7 +353,7 @@ func (s *Server) hUpdateApply(w http.ResponseWriter, _ *http.Request) {
 	// Let the response flush, then relaunch into the freshly-swapped binary.
 	go func() {
 		time.Sleep(400 * time.Millisecond)
-		update.Relaunch()
+		install.Restart(false)
 	}()
 }
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -85,6 +86,49 @@ func Apply(tag string) error {
 		return fmt.Errorf("download: %s", resp.Status)
 	}
 	return selfupdate.Apply(resp.Body, selfupdate.Options{Checksum: sum})
+}
+
+// Download fetches the release binary for `tag` to dst (a new release folder,
+// see internal/install), verified against the release's SHA256SUMS before it
+// lands: a half or wrong download never becomes dst.
+func Download(tag, dst string) error {
+	if !strings.HasPrefix(tag, "v") {
+		return errors.New("bad release tag")
+	}
+	shaHex, err := expectedSHA(tag)
+	if err != nil {
+		return err
+	}
+	url := fmt.Sprintf("%s/%s/%s", downloadBase, tag, assetName())
+	resp, err := (&http.Client{Timeout: 5 * time.Minute}).Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download: %s", resp.Status)
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	tmp := dst + ".new"
+	out, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+	h := sha256.New()
+	_, err = io.Copy(io.MultiWriter(out, h), io.LimitReader(resp.Body, 200<<20))
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil && hex.EncodeToString(h.Sum(nil)) != shaHex {
+		err = errors.New("checksum mismatch")
+	}
+	if err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, dst)
 }
 
 // Relaunch starts the freshly-swapped binary and exits this process. The new

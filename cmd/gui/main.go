@@ -72,6 +72,8 @@ func launchHow(args []string) string {
 	switch {
 	case has("--moved"):
 		return "download"
+	case has("--restarted"):
+		return "restart"
 	case has("--relaunch"):
 		return "update"
 	case has("--hidden"):
@@ -89,6 +91,12 @@ func onOff(b bool, on, off string) string {
 
 func main() {
 	runtime.LockOSThread() // the GUI must own the main OS thread
+
+	// Windows: the launcher, or a downloaded copy installing itself, ends here
+	// (see internal/install). What's left runs as the app.
+	if install.Launch(version) {
+		return
+	}
 
 	// A post-update relaunch (see internal/update.Relaunch) races the old copy's
 	// shutdown; give it a moment to release the single-instance lock first.
@@ -110,7 +118,7 @@ func main() {
 	if install.Relocate(version) {
 		return
 	}
-	install.MarkVersion(version)
+	install.MarkHealthy(version)
 
 	cfg, _ := config.Load()
 	// Keep the OS autostart entry in sync with the setting: writes it on first
@@ -128,8 +136,15 @@ func main() {
 
 	srv := gui.NewServer(cfg, version)
 	appServer = srv
-	go srv.ReportLifecycle("start", fmt.Sprintf("how=%s autostart=%s installed=%s",
-		launchHow(os.Args[1:]), onOff(cfg.AutoStart, "on", "off"), onOff(install.Installed(), "yes", "no")))
+	go func() {
+		srv.ReportLifecycle("start", fmt.Sprintf("how=%s autostart=%s installed=%s",
+			launchHow(os.Args[1:]), onOff(cfg.AutoStart, "on", "off"), onOff(install.Installed(), "yes", "no")))
+		// The launcher started this build because the newer one died on start
+		// (an antivirus took it, or it crashed before it was up a minute).
+		if bad := install.FellBack(); bad != "" {
+			srv.ReportLifecycle("update", fmt.Sprintf("%s died on start on this PC, back on %s", bad, version))
+		}
+	}()
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

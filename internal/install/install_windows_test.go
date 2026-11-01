@@ -10,96 +10,192 @@ import (
 	"time"
 )
 
-// The handed-off copy is this test binary itself: started from Target with
-// GLOW_INSTALL_CHILD set, it records where it ran and with which arguments.
+// The started copies are this test binary itself: run with GLOW_INSTALL_CHILD
+// set, it appends where it ran and with which arguments to that file, then
+// exits with the code GLOW_INSTALL_EXIT names for its folder ("app-26.12=1").
 func TestMain(m *testing.M) {
 	if out := os.Getenv("GLOW_INSTALL_CHILD"); out != "" {
-		self, _ := os.Executable()
-		_ = os.WriteFile(out, []byte(self+"\n"+strings.Join(os.Args[1:], " ")), 0o600)
-		// Run from the target already: nothing to do.
-		if Relocate("v26.11") {
-			_ = os.WriteFile(out+".again", nil, 0o600)
+		self := selfPath()
+		f, _ := os.OpenFile(out, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		f.WriteString(self + "|" + strings.Join(os.Args[1:], " ") + "\n")
+		f.Close()
+		if v := os.Getenv("GLOW_INSTALL_FETCH"); v != "" && !strings.Contains(self, "app-"+strings.TrimPrefix(v, "v")) {
+			_ = copyExe(self, versionExe(installDir(), v))
+		}
+		for _, rule := range strings.Split(os.Getenv("GLOW_INSTALL_EXIT"), ",") {
+			if k, v, ok := strings.Cut(rule, "="); ok && strings.Contains(self, k) {
+				code := 0
+				for _, c := range v {
+					code = code*10 + int(c-'0')
+				}
+				os.Exit(code)
+			}
 		}
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
 }
 
-func TestRelocateCopiesAndHandsOff(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("LOCALAPPDATA", dir)
-	out := filepath.Join(dir, "child.txt")
+// setup points LOCALAPPDATA at a temp dir and returns the child log path.
+func setup(t *testing.T, exit string) string {
+	t.Helper()
+	t.Setenv("LOCALAPPDATA", t.TempDir())
+	out := filepath.Join(t.TempDir(), "child.txt")
 	t.Setenv("GLOW_INSTALL_CHILD", out)
-	os.Args = []string{os.Args[0], "--hidden"}
+	t.Setenv("GLOW_INSTALL_EXIT", exit)
+	return out
+}
 
-	if !Relocate("v26.11") {
-		t.Fatal("Relocate did not hand off")
-	}
-	want := filepath.Join(dir, "Programs", "glow L!VE", "glow L!VE.exe")
-	if Target() != want {
-		t.Fatalf("Target = %q, want %q", Target(), want)
-	}
-	if _, err := os.Stat(want + ".new"); !os.IsNotExist(err) {
-		t.Fatal("temp copy left behind")
-	}
-
-	var b []byte
-	for i := 0; i < 100; i++ {
-		if b, _ = os.ReadFile(out); len(b) > 0 {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	lines := strings.SplitN(string(b), "\n", 2)
-	if len(lines) != 2 {
-		t.Fatalf("child never reported: %q", b)
-	}
-	if !strings.EqualFold(lines[0], want) {
-		t.Fatalf("child ran from %q, want %q", lines[0], want)
-	}
-	if lines[1] != "--relaunch --moved --hidden" {
-		t.Fatalf("child args %q", lines[1])
-	}
-	time.Sleep(300 * time.Millisecond)
-	if _, err := os.Stat(out + ".again"); err == nil {
-		t.Fatal("the installed copy tried to relocate again")
+func installTestExe(t *testing.T, dst string) {
+	t.Helper()
+	self, _ := os.Executable()
+	if err := copyExe(self, dst); err != nil {
+		t.Fatal(err)
 	}
 }
 
-// An old download opened after the install moved on hands off to the install
-// and leaves it alone.
-func TestRelocateKeepsNewerInstall(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("LOCALAPPDATA", dir)
-	out := filepath.Join(dir, "child.txt")
-	t.Setenv("GLOW_INSTALL_CHILD", out)
-	os.Args = []string{os.Args[0]}
-
-	self, _ := os.Executable()
-	if err := copyExe(self, Target()); err != nil {
-		t.Fatal(err)
-	}
-	// Mark the install newer, then append a byte so a copy over it would show.
-	if err := os.WriteFile(versionFile(), []byte("v26.12"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	f, _ := os.OpenFile(Target(), os.O_APPEND|os.O_WRONLY, 0)
-	_, _ = f.Write([]byte{0})
-	f.Close()
-	before, _ := os.Stat(Target())
-
-	if !Relocate("v26.10") {
-		t.Fatal("Relocate did not hand off")
-	}
-	after, _ := os.Stat(Target())
-	if after.Size() != before.Size() {
-		t.Fatal("an older copy overwrote the newer install")
-	}
+func runs(t *testing.T, out string, want int) []string {
+	t.Helper()
+	var lines []string
 	for i := 0; i < 100; i++ {
-		if b, _ := os.ReadFile(out); len(b) > 0 {
-			return
+		b, _ := os.ReadFile(out)
+		lines = strings.Split(strings.TrimSpace(string(b)), "\n")
+		if len(b) > 0 && len(lines) >= want {
+			return lines
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatal("the installed copy never started")
+	t.Fatalf("wanted %d runs, got %q", want, lines)
+	return nil
+}
+
+// A new build that dies on start (an antivirus removed it, a crash) is marked
+// bad and the launcher starts the previous one, telling it what happened.
+func TestSuperviseFallsBackFromABuildThatDiesOnStart(t *testing.T) {
+	out := setup(t, "app-26.12=1")
+	os.Args = []string{os.Args[0], "--hidden"}
+	dir := installDir()
+	installTestExe(t, Target())
+	installTestExe(t, versionExe(dir, "v26.11"))
+	mark(dir, "v26.11", healthyMark)
+	installTestExe(t, versionExe(dir, "v26.12"))
+
+	if !supervise("v26.12") {
+		t.Fatal("supervise gave up")
+	}
+	lines := runs(t, out, 2)
+	if !strings.Contains(lines[0], `app-26.12\glow L!VE.exe|--hidden --launched --launcher=v26.12`) {
+		t.Fatalf("first run %q", lines[0])
+	}
+	if !strings.Contains(lines[1], `app-26.11\glow L!VE.exe|--restarted --hidden --launched --launcher=v26.12 --fellback=v26.12`) {
+		t.Fatalf("fallback run %q", lines[1])
+	}
+	if !isBad(dir, "v26.12") || isBad(dir, "v26.11") {
+		t.Fatal("bad marks wrong")
+	}
+}
+
+// An update lands in a new folder and the app exits with restartHidden: the
+// launcher starts the new folder, back in the tray.
+func TestSuperviseStartsTheNewFolderAfterAnUpdate(t *testing.T) {
+	out := setup(t, "app-26.11=3")
+	t.Setenv("GLOW_INSTALL_FETCH", "v26.12") // what the 26.11 run "downloads"
+	os.Args = []string{os.Args[0]}
+	dir := installDir()
+	installTestExe(t, Target())
+	installTestExe(t, versionExe(dir, "v26.11"))
+
+	if !supervise("v26.11") {
+		t.Fatal("supervise gave up")
+	}
+	lines := runs(t, out, 2)
+	if !strings.Contains(lines[0], `app-26.11\glow L!VE.exe|--launched --launcher=v26.11`) {
+		t.Fatalf("first run %q", lines[0])
+	}
+	if !strings.Contains(lines[1], `app-26.12\glow L!VE.exe|--relaunch --hidden --launched --launcher=v26.11`) {
+		t.Fatalf("after the update %q", lines[1])
+	}
+}
+
+// The first start of a launcher from an install before release folders puts
+// its own build in one and runs it from there.
+func TestSuperviseMigratesAnOldInstall(t *testing.T) {
+	out := setup(t, "")
+	os.Args = []string{os.Args[0], "--relaunch", "--hidden"}
+	installTestExe(t, Target())
+
+	if !supervise("v26.11") {
+		t.Fatal("supervise gave up")
+	}
+	lines := runs(t, out, 1)
+	if !strings.Contains(lines[0], `app-26.11\glow L!VE.exe|--hidden --relaunch --launched --launcher=v26.11`) {
+		t.Fatalf("run %q", lines[0])
+	}
+}
+
+// An old download opened again starts the install and leaves the newer build
+// alone; a newer download installs itself.
+func TestInstallFromNeverGoesOverANewerInstall(t *testing.T) {
+	out := setup(t, "")
+	os.Args = []string{os.Args[0]}
+	dir := installDir()
+	installTestExe(t, Target())
+	installTestExe(t, versionExe(dir, "v26.12"))
+	before, _ := os.Stat(Target())
+
+	self, _ := os.Executable()
+	if !installFrom(self, "v26.10") {
+		t.Fatal("did not hand off")
+	}
+	if exists(versionDir(dir, "v26.10")) {
+		t.Fatal("an older download made a release folder")
+	}
+	if after, _ := os.Stat(Target()); !after.ModTime().Equal(before.ModTime()) {
+		t.Fatal("an older download replaced the launcher")
+	}
+	lines := runs(t, out, 1)
+	if !strings.Contains(lines[0], `glow L!VE\glow L!VE.exe|--moved`) {
+		t.Fatalf("handed off to %q", lines[0])
+	}
+
+	if !installFrom(self, "v26.13") || !exists(versionExe(dir, "v26.13")) {
+		t.Fatal("a newer download did not install itself")
+	}
+}
+
+// A dev build still copies itself over the launcher and runs from there.
+func TestRelocateDevBuild(t *testing.T) {
+	out := setup(t, "")
+	os.Args = []string{os.Args[0], "--hidden"}
+	if Relocate("v26.11") {
+		t.Fatal("a release build took the dev path")
+	}
+	if !Relocate("dev-abc1234") {
+		t.Fatal("Relocate did not hand off")
+	}
+	lines := runs(t, out, 1)
+	if !strings.HasPrefix(strings.ToLower(lines[0]), strings.ToLower(Target())+"|--relaunch --hidden") {
+		t.Fatalf("child %q", lines[0])
+	}
+}
+
+// A build that had been running fine and stops (a crash, or ended in Task
+// Manager) is started once more, not over and over.
+func TestSuperviseRevivesAHealthyBuildOnce(t *testing.T) {
+	out := setup(t, "app-26.11=1")
+	os.Args = []string{os.Args[0]}
+	dir := installDir()
+	installTestExe(t, Target())
+	installTestExe(t, versionExe(dir, "v26.11"))
+	mark(dir, "v26.11", healthyMark)
+
+	if !supervise("v26.11") {
+		t.Fatal("supervise gave up")
+	}
+	if lines := runs(t, out, 2); len(lines) != 2 || !strings.Contains(lines[1], "--restarted --hidden") {
+		t.Fatalf("runs %q", lines)
+	}
+	if isBad(dir, "v26.11") {
+		t.Fatal("a healthy build was marked bad")
+	}
 }
