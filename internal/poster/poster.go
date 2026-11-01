@@ -44,7 +44,7 @@ func Post(endpoint, token string, delaySec int, snap any) error {
 	req.Header.Set("X-Glow-Delay", strconv.Itoa(delaySec))
 	req.Header.Set("X-Glow-Live-Version", version)
 
-	resp, err := client.Do(req)
+	resp, err := Do(client, req)
 	if err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func Report(base, token, kind, message, game, osName string) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("X-Glow-Live-Version", version)
-	resp, err := client.Do(req)
+	resp, err := Do(client, req)
 	if err != nil {
 		return err
 	}

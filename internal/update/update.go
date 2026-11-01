@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/glow-moe/glow-collector/internal/poster"
 )
 
 const (
@@ -42,6 +44,39 @@ func Check(current string) (latest string, published time.Time, available bool) 
 		return "", time.Time{}, false
 	}
 	return body.TagName, body.PublishedAt, cmpVer(current, body.TagName) < 0
+}
+
+// holdURL lists releases glow.moe has put on hold: a bad build being pulled is
+// added there and no app updates to it, whether or not it's linked.
+var holdURL = "https://glow.moe/api/live/release"
+
+// Held reports whether glow.moe put release `tag` on hold. A failed check
+// isn't a hold: the day's wait after a release already guards most of it.
+func Held(tag string) bool {
+	req, err := http.NewRequest(http.MethodGet, holdURL, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := poster.Do(&http.Client{Timeout: 6 * time.Second}, req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	var body struct {
+		Hold []string `json:"hold"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&body) != nil {
+		return false
+	}
+	for _, h := range body.Hold {
+		if strings.TrimSpace(h) == tag {
+			return true
+		}
+	}
+	return false
 }
 
 // IsRelease reports whether a build label is a numbered release ("v26.9"),

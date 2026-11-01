@@ -211,8 +211,8 @@ func (s *Server) watchUpdates() {
 func (s *Server) checkUpdate() string {
 	v, at, ok := update.Check(s.version)
 	// A release that died on this PC before (the launcher fell back from it)
-	// isn't offered again; the next one is.
-	if ok && install.IsBad(v) {
+	// isn't offered again; the next one is. Nor is one glow.moe put on hold.
+	if ok && (install.IsBad(v) || update.Held(v)) {
 		return v
 	}
 	if ok {
@@ -241,7 +241,8 @@ func (s *Server) maybeAutoUpdate() {
 		s.autoFailed = ver // set before trying: a failure must not retry every minute
 	}
 	s.mu.Unlock()
-	if !due {
+	// Put on hold since the last check (a bad release being pulled).
+	if !due || update.Held(ver) {
 		return
 	}
 	if err := install.ApplyUpdate(ver); err != nil {
@@ -798,7 +799,7 @@ func whoami(endpoint, token string) (username, avatar, id string) {
 		return "", "", ""
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := (&http.Client{Timeout: 6 * time.Second}).Do(req)
+	resp, err := poster.Do(&http.Client{Timeout: 6 * time.Second}, req)
 	if err != nil {
 		return "", "", ""
 	}

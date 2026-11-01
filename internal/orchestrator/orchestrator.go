@@ -70,6 +70,9 @@ type liveSettings struct {
 	// DiscordApps swaps the Discord application a status kind runs under
 	// ("valorant", "lol-lobby", ...), e.g. when a game gets its own.
 	DiscordApps map[string]string `json:"discordApps"`
+	// FallbackBase is a glow.moe address that skips Cloudflare, tried when
+	// glow.moe can't be reached (poster/fallback.go).
+	FallbackBase string `json:"fallbackBase"`
 }
 
 // lcuRead is one raw client read: send it under Key, re-read every Every
@@ -243,7 +246,7 @@ func fetchSettings(endpoint, token string) (liveSettings, bool) {
 	// The server's release gate applies here too: without the version the read
 	// looks like a pre-26.5 build and is answered 426 (26.6 and 26.6.1 did this).
 	req.Header.Set("X-Glow-Live-Version", poster.Version())
-	resp, err := (&http.Client{Timeout: 6 * time.Second}).Do(req)
+	resp, err := poster.Do(&http.Client{Timeout: 6 * time.Second}, req)
 	if err != nil {
 		return s, false
 	}
@@ -254,6 +257,7 @@ func fetchSettings(endpoint, token string) (liveSettings, bool) {
 	if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
 		return s, false
 	}
+	poster.SetFallback(s.FallbackBase)
 	if s.LolNames != nil {
 		lcu.SetNames(s.LolNames.Queues, s.LolNames.Modes, s.LolNames.Maps)
 	}
@@ -956,6 +960,7 @@ type Orchestrator struct {
 	// every 5s instead of on every tick.
 	dcFailAt  time.Time
 	dcFailErr string
+	errDetail string // the raw error behind a friendlier Status.Err, for the report
 	username  string
 	userID    string // profile cuid, for reading own anime "now watching"
 	// readingTitle / readingStart: the series on Discord and since when.
@@ -1575,8 +1580,14 @@ func (o *Orchestrator) post(cfg config.Config, delaySec int, snap any, st *Statu
 			o.mu.Unlock()
 		} else {
 			st.Err = err.Error()
+			if poster.Unreachable(err) {
+				// The raw text ("wsarecv: forcibly closed...") means nothing to
+				// most people; it still goes in the report.
+				st.Err = unreachableMsg
+			}
 			o.mu.Lock()
 			o.errKind = "push"
+			o.errDetail = err.Error()
 			o.mu.Unlock()
 		}
 		return
@@ -1599,12 +1610,15 @@ func (o *Orchestrator) set(s Status) {
 	s.Outdated = o.outdated
 	s.League = leagueSupported
 	o.status = s
-	kind := o.errKind
-	o.errKind = ""
+	kind, detail := o.errKind, o.errDetail
+	o.errKind, o.errDetail = "", ""
 	o.mu.Unlock()
-	o.reportErr(s, kind)
+	o.reportErr(s, kind, detail)
 	o.emit(s)
 }
+
+// unreachableMsg is the status line when glow.moe can't be reached at all.
+const unreachableMsg = "Can't reach glow.moe: your internet, or your provider blocking it. Trying again."
 
 // Errors that are states, not failures: nothing to fix on our side.
 var quietErrors = []string{"not linked", "Update required"}
@@ -1616,10 +1630,13 @@ const (
 
 // reportErr sends a status error to glow.moe (once per message per hour,
 // capped per hour) so the site's ops page shows what broke on this machine.
-func (o *Orchestrator) reportErr(s Status, kind string) {
+func (o *Orchestrator) reportErr(s Status, kind, detail string) {
 	msg := s.Err
 	if msg == "" {
 		return
+	}
+	if detail != "" {
+		msg = detail
 	}
 	for _, q := range quietErrors {
 		if strings.HasPrefix(msg, q) {
