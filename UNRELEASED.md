@@ -18,3 +18,4 @@ and gets cleared.
 - Hide from my profile for 1 hour, in the tray menu and the window: the game stays off glow.moe while Discord keeps showing it.
 - After an update, a What's new card shows that release's notes once.
 - The window names the game you're in (VALORANT, Fortnite and Dota 2 showed as League).
+- Windows: glow L!VE shows up in the Start menu (and its search). Made once; if you remove it, it stays removed.

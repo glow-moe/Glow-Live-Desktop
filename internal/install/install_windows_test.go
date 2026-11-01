@@ -248,3 +248,19 @@ func TestSuperviseLeavesAShutdownAlone(t *testing.T) {
 		t.Fatal("a shutdown marked the build bad")
 	}
 }
+
+// The Start menu entry is made once and points at the launcher; one deleted
+// afterwards stays deleted.
+func TestShortcutOnce(t *testing.T) {
+	_ = setup(t, "")
+	installTestExe(t, Target())
+	ensureShortcut()
+	if !exists(shortcutPath()) {
+		t.Fatal("no Start menu shortcut")
+	}
+	_ = os.Remove(shortcutPath())
+	ensureShortcut()
+	if exists(shortcutPath()) {
+		t.Fatal("a deleted shortcut came back")
+	}
+}
