@@ -16,12 +16,16 @@ package main
 #define GLOW_ID_HIDE_HOUR 0xF005
 #define GLOW_ID_HIDE_GAME 0xF006
 #define GLOW_ID_SHOW_DC   0xF007
+#define GLOW_ID_HIDE_PROF 0xF008
+#define GLOW_ID_SHOW_PROF 0xF009
 
 extern void glowTrayProfile();
 extern void glowTrayHideHour();
 extern void glowTrayHideGame();
 extern void glowTrayShowDiscord();
 extern void glowTrayQuitting();
+extern void glowTrayHideProfile();
+extern void glowTrayShowProfile();
 extern void glowEndSession();
 
 // Tray status line (menu + tooltip) and whether the alert icon is showing.
@@ -32,6 +36,8 @@ static int g_hasProfile = 0;
 // "until I leave this game" item needs one).
 static int g_dcHidden = 0;
 static int g_inGame = 0;
+// Kept off the glow.moe profile for now (its own hide, apart from Discord).
+static int g_profHidden = 0;
 static HWND g_trayHwnd = NULL;
 
 // Original webview window procedure, so unhandled messages still reach it.
@@ -216,6 +222,8 @@ static LRESULT CALLBACK glow_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
                 AppendMenuW(menu, MF_STRING, GLOW_ID_HIDE_HOUR, L"Hide on Discord for 1 hour");
                 AppendMenuW(menu, MF_STRING | (g_inGame ? 0 : MF_GRAYED), GLOW_ID_HIDE_GAME, L"Hide on Discord until I leave this game");
             }
+            AppendMenuW(menu, MF_STRING, g_profHidden ? GLOW_ID_SHOW_PROF : GLOW_ID_HIDE_PROF,
+                g_profHidden ? L"Show on my profile again" : L"Hide from my profile for 1 hour");
             AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
             AppendMenuW(menu, MF_STRING, GLOW_ID_QUIT, L"Quit");
             // Required so the menu dismisses on click-away.
@@ -250,6 +258,16 @@ static LRESULT CALLBACK glow_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
             glowTrayShowDiscord();
             return 0;
         }
+        if (LOWORD(wp) == GLOW_ID_HIDE_PROF) {
+            g_profHidden = 1;
+            glowTrayHideProfile();
+            return 0;
+        }
+        if (LOWORD(wp) == GLOW_ID_SHOW_PROF) {
+            g_profHidden = 0;
+            glowTrayShowProfile();
+            return 0;
+        }
         if (LOWORD(wp) == GLOW_ID_QUIT) {
             glowTrayQuitting();
             glow_del_tray(hwnd);
@@ -269,12 +287,13 @@ static LRESULT CALLBACK glow_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
 
 // glow_tray_update sets the status line (menu + tooltip), the profile item's
 // availability and the alert icon. Called on the GUI thread.
-static void glow_tray_update(const wchar_t *line, int alert, int hasProfile, int dcHidden, int inGame) {
+static void glow_tray_update(const wchar_t *line, int alert, int hasProfile, int dcHidden, int inGame, int profHidden) {
     lstrcpynW(g_status, line, 128);
     g_alert = alert;
     g_hasProfile = hasProfile;
     g_dcHidden = dcHidden;
     g_inGame = inGame;
+    g_profHidden = profHidden;
     if (!g_trayHwnd) return;
     NOTIFYICONDATAW nid;
     glow_fill(&nid, g_trayHwnd);
@@ -364,7 +383,7 @@ func userBusy() bool {
 
 // trayUpdate pushes the status line, tooltip and alert state to the tray.
 // Runs on the GUI thread (see watchTray).
-func trayUpdate(line string, alert, hasProfile, dcHidden, inGame bool) {
+func trayUpdate(line string, alert, hasProfile, dcHidden, inGame, profHidden bool) {
 	w, err := syscall.UTF16PtrFromString("glow L!VE · " + line)
 	if err != nil {
 		return
@@ -375,5 +394,5 @@ func trayUpdate(line string, alert, hasProfile, dcHidden, inGame bool) {
 		}
 		return 0
 	}
-	C.glow_tray_update((*C.wchar_t)(unsafe.Pointer(w)), b(alert), b(hasProfile), b(dcHidden), b(inGame))
+	C.glow_tray_update((*C.wchar_t)(unsafe.Pointer(w)), b(alert), b(hasProfile), b(dcHidden), b(inGame), b(profHidden))
 }

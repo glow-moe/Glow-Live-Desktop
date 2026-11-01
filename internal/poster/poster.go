@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,6 +18,16 @@ var client = &http.Client{Timeout: 8 * time.Second}
 // ErrOutdated is returned when the server rejects this build as too old to talk
 // to it (HTTP 426). The caller should stop and tell the user to update.
 var ErrOutdated = errors.New("this app version is no longer supported")
+
+// watched is what the last push's answer said: is anyone looking at this
+// member's live view on glow.moe right now? True until told otherwise (an
+// older site never says), so nothing slows down by mistake.
+var watched atomic.Bool
+
+func init() { watched.Store(true) }
+
+// Watched reports whether glow.moe last said someone is watching.
+func Watched() bool { return watched.Load() }
 
 // ErrUnlinked is a push turned down for its key (HTTP 401): the PC was
 // unlinked on glow.moe, or the password changed, which unlinks every PC.
@@ -61,6 +73,12 @@ func Post(endpoint, token string, delaySec int, snap any) error {
 	}
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("ingest returned %s", resp.Status)
+	}
+	var ans struct {
+		Watched *bool `json:"watched"`
+	}
+	if json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&ans) == nil && ans.Watched != nil {
+		watched.Store(*ans.Watched)
 	}
 	return nil
 }

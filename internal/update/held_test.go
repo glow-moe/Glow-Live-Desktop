@@ -20,3 +20,15 @@ func TestHeld(t *testing.T) {
 		t.Fatal("a failed check counted as a hold")
 	}
 }
+
+func TestNotesAreTheReleaseBullets(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"body":"# v26.11\n\nIntro line\n- **Windows**: a launcher\n- Pairing shows a ` + "`code`" + `\n"}`))
+	}))
+	defer srv.Close()
+	notesURL = srv.URL + "/"
+	got := Notes("v26.11")
+	if len(got) != 2 || got[0] != "Windows: a launcher" || got[1] != "Pairing shows a code" {
+		t.Fatalf("notes %q", got)
+	}
+}

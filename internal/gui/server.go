@@ -52,6 +52,10 @@ type Server struct {
 	userID     string    // the linked account's id (from /api/live/me)
 	identityAt time.Time // last whoami retry, so a missing username isn't asked every second
 	linkCode   string    // the code to type on the glow.moe page while linking
+	// whatsNew is the release this build is, with its notes, shown once after
+	// an update until closed.
+	whatsNew      string
+	whatsNewNotes []string
 }
 
 // SetPeekWindow registers the no-focus show the update prompt uses.
@@ -104,6 +108,26 @@ func (s *Server) HideOnDiscordForGame() bool { return s.orch.HideOnDiscordForGam
 
 // ShowOnDiscord ends a hide early.
 func (s *Server) ShowOnDiscord() { s.orch.ShowOnDiscord() }
+
+// HideOnProfile keeps the game off glow.moe for d (the tray item and the
+// window's link); Discord isn't touched.
+func (s *Server) HideOnProfile(d time.Duration) { s.orch.HideOnProfile(d) }
+
+// ShowOnProfile ends a profile hide early.
+func (s *Server) ShowOnProfile() { s.orch.ShowOnProfile() }
+
+func (s *Server) hProfileHide(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Hide bool `json:"hide"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body.Hide {
+		s.HideOnProfile(time.Hour)
+	} else {
+		s.ShowOnProfile()
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
 
 // SetHideToTray registers the callback that parks the window in the system tray
 // (wired by main to the native window). Called once the collector starts pushing
@@ -185,6 +209,7 @@ func NewServer(cfg config.Config, version string) *Server {
 	s := &Server{cfg: cfg, version: version, orch: orchestrator.New(cfg)}
 	s.orch.OnSeenGame(s.recordSeenGame)
 	go s.watchUpdates()
+	go s.noteNewVersion()
 	if cfg.Token != "" {
 		var uid string
 		s.username, s.avatar, uid = whoami(cfg.Endpoint, cfg.Token)
@@ -390,6 +415,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/update-later", s.hUpdateLater)
 	mux.HandleFunc("/api/update-check", s.hUpdateCheck)
 	mux.HandleFunc("/api/diagnose", s.hDiagnose)
+	mux.HandleFunc("/api/profile-hide", s.hProfileHide)
+	mux.HandleFunc("/api/whats-new-seen", s.hWhatsNewSeen)
 	mux.HandleFunc("/api/export-logs", s.hExportLogs)
 	mux.HandleFunc("/api/open-onboarding", s.hOpenOnboarding)
 	// Local OBS overlay data: the overlay page (below, or the glow.moe page with
@@ -520,6 +547,7 @@ func (s *Server) hStatus(w http.ResponseWriter, _ *http.Request) {
 		"avatar":   s.avatar,
 		"linking":  s.linking,
 		"linkCode": s.linkCode,
+		"whatsNew": map[string]any{"version": s.whatsNew, "notes": s.whatsNewNotes},
 		// Linked to an account that hasn't picked a username: nothing shows
 		// until it does (glow.moe/onboarding).
 		"noProfile": linked && s.userID != "" && s.username == "",

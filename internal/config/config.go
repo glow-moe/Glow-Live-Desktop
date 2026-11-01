@@ -57,6 +57,11 @@ type Config struct {
 	// again.
 	UpdateLaterVer   string `json:"updateLaterVer,omitempty"`
 	UpdateLaterUntil int64  `json:"updateLaterUntil,omitempty"`
+	// LastVersion is the build that last ran, so the first start of a newer
+	// one shows what changed. WhatsNewSeen is the release whose notes were
+	// closed.
+	LastVersion  string `json:"lastVersion,omitempty"`
+	WhatsNewSeen string `json:"whatsNewSeen,omitempty"`
 	// SeenGames is every Steam game this app has watched run, so the settings can
 	// list them for the per-game toggle. Purely local; never sent to glow.
 	SeenGames []SeenGame `json:"seenGames"`

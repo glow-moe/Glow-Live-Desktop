@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/glow-moe/glow-collector/internal/poster"
 	"github.com/glow-moe/glow-collector/internal/snapshot"
 )
 
@@ -18,7 +19,11 @@ import (
 //   - the raw League reads only go out when they changed (the site keeps the
 //     rest), with a full set every rawFullEvery and after a failed push.
 //
-// In a match every tick still goes out: that's what the live view is for.
+// In a match every tick goes out while someone has the live view open on
+// glow.moe (the ingest answer says so); with nobody watching, a frame at most
+// every heartbeat, which keeps the site's "live" state and the stored cards
+// current at a fraction of the requests. Discord and the OBS overlay are
+// local and don't wait on this.
 const (
 	heartbeat      = 10 * time.Second
 	outOfGameEvery = 3 * time.Second
@@ -121,6 +126,9 @@ func (o *Orchestrator) gate(snap any, inGame bool, now time.Time) ([]byte, bool)
 	g.pendingHash = h
 	if !g.at.IsZero() {
 		if !inGame && now.Sub(g.at) < outOfGameEvery {
+			return nil, false
+		}
+		if !poster.Watched() && now.Sub(g.at) < heartbeat {
 			return nil, false
 		}
 		if h == g.hash && !rawChanged && now.Sub(g.at) < heartbeat {

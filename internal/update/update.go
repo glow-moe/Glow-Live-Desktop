@@ -46,6 +46,40 @@ func Check(current string) (latest string, published time.Time, available bool) 
 	return body.TagName, body.PublishedAt, cmpVer(current, body.TagName) < 0
 }
 
+// notesURL is one release on GitHub, for its notes.
+var notesURL = "https://api.github.com/repos/glow-moe/Glow-Live-Desktop/releases/tags/"
+
+// Notes returns release `tag`'s notes as lines of plain text (the bullets of
+// the release body, markdown stripped). Nil when GitHub can't be reached.
+func Notes(tag string) []string {
+	resp, err := (&http.Client{Timeout: 8 * time.Second}).Get(notesURL + tag)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	var body struct {
+		Body string `json:"body"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&body) != nil {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(body.Body, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "- ") && !strings.HasPrefix(line, "* ") {
+			continue
+		}
+		line = strings.NewReplacer("**", "", "`", "").Replace(strings.TrimSpace(line[2:]))
+		if line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
 // holdURL lists releases glow.moe has put on hold: a bad build being pulled is
 // added there and no app updates to it, whether or not it's linked.
 var holdURL = "https://glow.moe/api/live/release"

@@ -14,3 +14,6 @@ and gets cleared.
 - A linked account with no username yet gets a Pick a username button instead of asking glow.moe every second.
 - If glow.moe turns this PC's key down (unlinked on the site, or the password changed), the status says to link again.
 - Settings > Help: Test connection (glow.moe, the backup address, this PC's link, Discord, updates, what's being read) and Export logs, which saves a log file to Downloads to send us. Nothing is sent on its own and the key is never in it.
+- Pushes slow down to one every 10 seconds while nobody has your live view open on glow.moe (glow.moe says so in its answer), and go back to every tick the moment someone does. Discord and the OBS overlay don't change.
+- Hide from my profile for 1 hour, in the tray menu and the window: the game stays off glow.moe while Discord keeps showing it.
+- After an update, a What's new card shows that release's notes once.

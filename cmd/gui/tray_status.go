@@ -41,6 +41,19 @@ func trayShowDiscord() {
 	}
 }
 
+// The profile hide: the game stays off glow.moe for an hour, Discord keeps it.
+func trayHideProfile() {
+	if s := trayServer(); s != nil {
+		s.HideOnProfile(time.Hour)
+	}
+}
+
+func trayShowProfile() {
+	if s := trayServer(); s != nil {
+		s.ShowOnProfile()
+	}
+}
+
 func trayServer() *gui.Server {
 	trayMu.Lock()
 	defer trayMu.Unlock()
@@ -76,6 +89,9 @@ func trayLine(info gui.TrayInfo, now time.Time) (line string, alert bool) {
 		return "Update available (" + info.UpdateVer + ") · open the app", false
 	case st.DiscordHidden:
 		return hiddenLine(st, now), false
+	case st.ProfileHidden:
+		left := time.UnixMilli(st.ProfileHiddenUntil).Sub(now)
+		return fmt.Sprintf("Off your profile · %dm left", int(left.Minutes()+0.5)), false
 	}
 	// Mirrored sources (anime from the browser extension, SplitCraft from the
 	// server plugin) are shown on Discord but never pushed from here, so the
@@ -128,8 +144,8 @@ func watchTray(srv *gui.Server, apply func(fn func())) {
 	trayMu.Unlock()
 	go func() {
 		type view struct {
-			line                  string
-			alert, hidden, inGame bool
+			line                              string
+			alert, hidden, inGame, profHidden bool
 		}
 		var last view
 		first := true
@@ -141,12 +157,12 @@ func watchTray(srv *gui.Server, apply func(fn func())) {
 			trayProfile = info.ProfileURL
 			trayMu.Unlock()
 			line, alert := trayLine(info, time.Now())
-			v := view{line, alert, info.Status.DiscordHidden, info.Status.InGame}
+			v := view{line, alert, info.Status.DiscordHidden, info.Status.InGame, info.Status.ProfileHidden}
 			if !first && v == last {
 				continue
 			}
 			first, last = false, v
-			apply(func() { trayUpdate(v.line, v.alert, info.ProfileURL != "", v.hidden, v.inGame) })
+			apply(func() { trayUpdate(v.line, v.alert, info.ProfileURL != "", v.hidden, v.inGame, v.profHidden) })
 		}
 	}()
 }

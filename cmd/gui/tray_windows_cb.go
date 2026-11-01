@@ -37,3 +37,11 @@ func glowTrayHideGame() { trayHideGame() }
 
 //export glowTrayShowDiscord
 func glowTrayShowDiscord() { trayShowDiscord() }
+
+// glowTrayHideProfile and glowTrayShowProfile are the profile hide item.
+//
+//export glowTrayHideProfile
+func glowTrayHideProfile() { trayHideProfile() }
+
+//export glowTrayShowProfile
+func glowTrayShowProfile() { trayShowProfile() }

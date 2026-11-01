@@ -913,6 +913,8 @@ type Status struct {
 	// Hide on Discord: on, and until when (unix ms; 0 while on means "until
 	// this game ends").
 	DiscordHidden      bool  `json:"discordHidden"`
+	ProfileHidden      bool  `json:"profileHidden"`
+	ProfileHiddenUntil int64 `json:"profileHiddenUntil,omitempty"`
 	DiscordHiddenUntil int64 `json:"discordHiddenUntil"`
 }
 
@@ -1011,7 +1013,9 @@ type Orchestrator struct {
 	// Hide on Discord (tray menu): until a moment, or until the game it was
 	// turned on in ends. The profile keeps updating; only Discord goes quiet.
 	dcHideUntil time.Time
-	dcHideGame  string
+	// profHideUntil keeps the game off glow.moe (not Discord) until then.
+	profHideUntil time.Time
+	dcHideGame    string
 	// Error reports to glow.moe: the kind the failing step set (push), when
 	// each message was last sent (one per hour each) and the recent sends (a
 	// hard cap per hour, so a broken machine cannot flood the site).
@@ -1080,10 +1084,40 @@ func (o *Orchestrator) Status() Status {
 	defer o.mu.Unlock()
 	s := o.status
 	s.DiscordHidden = o.discordHiddenLocked(time.Now())
+	if s.ProfileHidden = o.profileHiddenLocked(time.Now()); s.ProfileHidden {
+		s.ProfileHiddenUntil = o.profHideUntil.UnixMilli()
+	}
 	if s.DiscordHidden && !o.dcHideUntil.IsZero() {
 		s.DiscordHiddenUntil = o.dcHideUntil.UnixMilli()
 	}
 	return s
+}
+
+// HideOnProfile keeps what's being played off glow.moe for d: nothing is
+// pushed, so the profile drops the live game within its 15s window. Discord
+// carries on (that has its own hide).
+func (o *Orchestrator) HideOnProfile(d time.Duration) {
+	o.mu.Lock()
+	o.profHideUntil = time.Now().Add(d)
+	o.mu.Unlock()
+}
+
+// ShowOnProfile ends a profile hide early.
+func (o *Orchestrator) ShowOnProfile() {
+	o.mu.Lock()
+	o.profHideUntil = time.Time{}
+	o.mu.Unlock()
+}
+
+func (o *Orchestrator) profileHiddenLocked(now time.Time) bool {
+	if o.profHideUntil.IsZero() {
+		return false
+	}
+	if now.Before(o.profHideUntil) {
+		return true
+	}
+	o.profHideUntil = time.Time{}
+	return false
 }
 
 // HideOnDiscord takes the Rich Presence down for d. glow.moe keeps getting
@@ -1574,6 +1608,12 @@ func (o *Orchestrator) drainDelayed(cfg config.Config, delaySec int) {
 
 func (o *Orchestrator) post(cfg config.Config, delaySec int, snap any, st *Status) {
 	now := time.Now()
+	o.mu.Lock()
+	hidden := o.profileHiddenLocked(now)
+	o.mu.Unlock()
+	if hidden {
+		return // off the profile for now; Discord was already updated
+	}
 	b, ok := o.gate(snap, st.InGame, now) // push_gate.go: skip repeats, trim raw reads
 	if !ok {
 		st.Pushes = o.pushes

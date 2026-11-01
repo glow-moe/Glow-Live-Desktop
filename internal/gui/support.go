@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/glow-moe/glow-collector/internal/applog"
+	"github.com/glow-moe/glow-collector/internal/config"
 	"github.com/glow-moe/glow-collector/internal/install"
 	"github.com/glow-moe/glow-collector/internal/pair"
 	"github.com/glow-moe/glow-collector/internal/poster"
@@ -183,5 +184,44 @@ func (s *Server) hOpenOnboarding(w http.ResponseWriter, _ *http.Request) {
 	base := pair.BaseFrom(s.cfg.Endpoint)
 	s.mu.Unlock()
 	openURL(base + "/onboarding")
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// noteNewVersion runs at start: the first start of a newer release (after an
+// update, not a fresh install) fetches that release's notes for the "What's
+// new" card, and every start records this build as the last one.
+func (s *Server) noteNewVersion() {
+	s.mu.Lock()
+	last, seen := s.cfg.LastVersion, s.cfg.WhatsNewSeen
+	s.cfg.LastVersion = s.version
+	cfg := s.cfg
+	s.mu.Unlock()
+	if last != s.version {
+		_ = config.Save(cfg)
+	}
+	updated := last != "" && update.IsRelease(s.version) && update.IsRelease(last) && update.Compare(s.version, last) > 0
+	// Also after a restart that came before the card was closed.
+	pending := last == s.version && seen != s.version && update.IsRelease(s.version) && seen != ""
+	if !updated && !pending {
+		return
+	}
+	notes := update.Notes(s.version)
+	if len(notes) == 0 {
+		return
+	}
+	applog.Printf("what's new: %s (%d notes)", s.version, len(notes))
+	s.mu.Lock()
+	s.whatsNew, s.whatsNewNotes = s.version, notes
+	s.mu.Unlock()
+}
+
+// hWhatsNewSeen closes the "What's new" card for this release.
+func (s *Server) hWhatsNewSeen(w http.ResponseWriter, _ *http.Request) {
+	s.mu.Lock()
+	s.whatsNew, s.whatsNewNotes = "", nil
+	s.cfg.WhatsNewSeen = s.version
+	cfg := s.cfg
+	s.mu.Unlock()
+	_ = config.Save(cfg)
 	writeJSON(w, map[string]any{"ok": true})
 }

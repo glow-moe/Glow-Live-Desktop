@@ -35,6 +35,12 @@ func glowTrayProfile() {
 // glowTrayHideHour, glowTrayHideGame and glowTrayShowDiscord are the Discord
 // hide items; they only flip state in the orchestrator.
 //
+//export glowTrayHideProfile
+func glowTrayHideProfile() { trayHideProfile() }
+
+//export glowTrayShowProfile
+func glowTrayShowProfile() { trayShowProfile() }
+
 //export glowTrayHideHour
 func glowTrayHideHour() { trayHideHour() }
 
