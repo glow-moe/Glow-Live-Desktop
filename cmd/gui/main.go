@@ -98,6 +98,18 @@ func onOff(b bool, on, off string) string {
 func main() {
 	runtime.LockOSThread() // the GUI must own the main OS thread
 
+	// Settings > Apps > Uninstall runs the launcher with --uninstall.
+	for _, a := range os.Args[1:] {
+		if a == "--uninstall" {
+			quiet := false
+			for _, b := range os.Args[1:] {
+				quiet = quiet || b == "--quiet"
+			}
+			install.Uninstall(quiet)
+			return
+		}
+	}
+
 	applog.Enable()
 	applog.CatchCrashes()
 	pair.Version = version
@@ -130,6 +142,7 @@ func main() {
 		return
 	}
 	install.MarkHealthy(version)
+	install.Register(version)
 
 	cfg, _ := config.Load()
 	// Keep the OS autostart entry in sync with the setting: writes it on first
@@ -193,6 +206,11 @@ func main() {
 	// Auto-tuck into the tray once the collector starts pushing. The server fires
 	// this (from an HTTP handler goroutine); marshal it onto the GUI thread.
 	srv.SetHideToTray(func() { w.Dispatch(func() { hideToTray(w.Window()) }) })
+	// The uninstaller closes the running copy through this.
+	srv.SetQuit(func() {
+		quitHow = "uninstall"
+		w.Dispatch(w.Terminate)
+	})
 	srv.SetShowWindow(func() { w.Dispatch(func() { showWindow(w.Window()) }) })
 	// The update prompt: up in the corner without stealing focus, and not at
 	// all while the user is in something full screen.

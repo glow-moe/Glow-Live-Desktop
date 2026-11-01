@@ -32,6 +32,12 @@ func Describe() string { return "" }
 // NoteShutdown is a no-op off Windows.
 func NoteShutdown() {}
 
+// Register and Uninstall are no-ops off Windows (no Installed apps list).
+func Register(string) {}
+
+// Uninstall is a no-op off Windows.
+func Uninstall(bool) {}
+
 // IsBad is always false off Windows.
 func IsBad(string) bool { return false }
 

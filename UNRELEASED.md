@@ -19,3 +19,4 @@ and gets cleared.
 - After an update, a What's new card shows that release's notes once.
 - The window names the game you're in (VALORANT, Fortnite and Dota 2 showed as League).
 - Windows: glow L!VE shows up in the Start menu (and its search). Made once; if you remove it, it stays removed.
+- Windows: glow L!VE is listed in Settings > Apps > Installed apps, with its version, and Uninstall there removes it cleanly (the app, its autostart, Start menu entry, settings and log).

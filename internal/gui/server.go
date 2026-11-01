@@ -52,6 +52,7 @@ type Server struct {
 	userID     string    // the linked account's id (from /api/live/me)
 	identityAt time.Time // last whoami retry, so a missing username isn't asked every second
 	linkCode   string    // the code to type on the glow.moe page while linking
+	quit       func()    // the app's real exit (set by main)
 	// whatsNew is the release this build is, with its notes, shown once after
 	// an update until closed.
 	whatsNew      string
@@ -108,6 +109,28 @@ func (s *Server) HideOnDiscordForGame() bool { return s.orch.HideOnDiscordForGam
 
 // ShowOnDiscord ends a hide early.
 func (s *Server) ShowOnDiscord() { s.orch.ShowOnDiscord() }
+
+// SetQuit registers the app's real exit (main wires it), for the uninstaller
+// asking the running copy to close.
+func (s *Server) SetQuit(fn func()) {
+	s.mu.Lock()
+	s.quit = fn
+	s.mu.Unlock()
+}
+
+func (s *Server) hQuit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "post", http.StatusMethodNotAllowed)
+		return
+	}
+	s.mu.Lock()
+	fn := s.quit
+	s.mu.Unlock()
+	writeJSON(w, map[string]any{"ok": fn != nil})
+	if fn != nil {
+		go fn()
+	}
+}
 
 // HideOnProfile keeps the game off glow.moe for d (the tray item and the
 // window's link); Discord isn't touched.
@@ -416,6 +439,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/update-check", s.hUpdateCheck)
 	mux.HandleFunc("/api/diagnose", s.hDiagnose)
 	mux.HandleFunc("/api/profile-hide", s.hProfileHide)
+	mux.HandleFunc("/api/quit", s.hQuit)
 	mux.HandleFunc("/api/whats-new-seen", s.hWhatsNewSeen)
 	mux.HandleFunc("/api/export-logs", s.hExportLogs)
 	mux.HandleFunc("/api/open-onboarding", s.hOpenOnboarding)
