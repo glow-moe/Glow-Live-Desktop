@@ -165,6 +165,30 @@ func TestInstallFromNeverGoesOverANewerInstall(t *testing.T) {
 	}
 }
 
+// An install from before release folders (the launcher file is the old app,
+// no app-* folder): a newer download puts itself in a folder AND over the
+// launcher, so the launcher that starts is the new one.
+func TestInstallFromReplacesAnOldStyleInstall(t *testing.T) {
+	_ = setup(t, "")
+	os.Args = []string{os.Args[0]}
+	if err := os.MkdirAll(installDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(Target(), []byte("old v26.10 app"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	self, _ := os.Executable()
+	if !installFrom(self, "v26.11") {
+		t.Fatal("did not hand off")
+	}
+	if b, _ := os.ReadFile(Target()); string(b) == "old v26.10 app" {
+		t.Fatal("the old app is still the launcher")
+	}
+	if !exists(versionExe(installDir(), "v26.11")) {
+		t.Fatal("no release folder")
+	}
+}
+
 // A dev build still copies itself over the launcher and runs from there.
 func TestRelocateDevBuild(t *testing.T) {
 	out := setup(t, "")

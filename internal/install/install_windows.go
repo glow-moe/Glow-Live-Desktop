@@ -146,12 +146,17 @@ func Launch(version string) bool {
 // never goes over a newer install.
 func installFrom(self, version string) bool {
 	dir := installDir()
-	if newest := pick(dir); newest == "" || update.Compare(version, newest) > 0 {
+	// Decided before anything is copied: the install's newest build, or none
+	// (an install from before folders, whose launcher file is the old app).
+	// The same build again repairs it; only an older one leaves it alone.
+	if newest := pick(dir); newest == "" || update.Compare(version, newest) >= 0 {
 		if copyExe(self, versionExe(dir, version)) != nil {
 			return false
 		}
-	}
-	if !exists(Target()) || update.Compare(version, launcherVersion()) > 0 {
+		if copyExe(self, Target()) != nil {
+			return false
+		}
+	} else if !exists(Target()) {
 		if copyExe(self, Target()) != nil {
 			return false
 		}
@@ -159,10 +164,6 @@ func installFrom(self, version string) bool {
 	args := append([]string{flagMoved}, userArgs()...)
 	return exec.Command(Target(), args...).Start() == nil
 }
-
-// launcherVersion is the newest release folder, standing in for the launcher's
-// own build when there is no running launcher to ask.
-func launcherVersion() string { return pick(installDir()) }
 
 // supervise is the launcher: start the build to run, wait on it, and act on
 // how it ended. A clean exit (tray Quit, or the second copy handing over to

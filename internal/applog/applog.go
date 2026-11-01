@@ -106,7 +106,12 @@ func Export(header string) (string, error) {
 		b.WriteString(scrub(string(data)))
 	}
 	dir := Dir()
-	if home, err := os.UserHomeDir(); err == nil {
+	if d := downloadsDir(); d != "" {
+		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
+			dir = d
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil && dir == Dir() {
 		if fi, err := os.Stat(filepath.Join(home, "Downloads")); err == nil && fi.IsDir() {
 			dir = filepath.Join(home, "Downloads")
 		}
