@@ -264,3 +264,20 @@ func TestShortcutOnce(t *testing.T) {
 		t.Fatal("a deleted shortcut came back")
 	}
 }
+
+// A build that keeps asking to be restarted (exit code 3) is not restarted
+// forever: four restarts in ten minutes and the launcher stops.
+func TestSuperviseStopsARestartLoop(t *testing.T) {
+	out := setup(t, "app-26.11=3")
+	os.Args = []string{os.Args[0]}
+	dir := installDir()
+	installTestExe(t, Target())
+	installTestExe(t, versionExe(dir, "v26.11"))
+
+	if !supervise("v26.11") {
+		t.Fatal("supervise gave up")
+	}
+	if lines := runs(t, out, 4); len(lines) != 4 {
+		t.Fatalf("ran %d times, want 4: %q", len(lines), lines)
+	}
+}

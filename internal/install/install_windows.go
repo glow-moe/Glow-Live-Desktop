@@ -197,6 +197,7 @@ func supervise(version string) bool {
 	fellBack := ""
 	var stops []time.Time
 	var revived time.Time
+	var updates []time.Time
 	for {
 		ver := pick(dir)
 		if ver == "" {
@@ -221,6 +222,13 @@ func supervise(version string) bool {
 		case 0:
 			return true
 		case restartHidden, restartShown:
+			// Updates come a month apart: more than 3 in 10 minutes is a
+			// build stuck asking to be restarted, not updates.
+			updates = append(updates, time.Now())
+			if len(updates) > 3 && time.Since(updates[len(updates)-4]) < 10*time.Minute {
+				applog.Printf("%s asked for a restart %d times in 10 minutes: stopping", ver, len(updates))
+				return true
+			}
 			args = []string{flagRelaunch}
 			if code == restartHidden {
 				args = append(args, "--hidden")
