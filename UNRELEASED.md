@@ -17,3 +17,4 @@ and gets cleared.
 - Pushes slow down to one every 10 seconds while nobody has your live view open on glow.moe (glow.moe says so in its answer), and go back to every tick the moment someone does. Discord and the OBS overlay don't change.
 - Hide from my profile for 1 hour, in the tray menu and the window: the game stays off glow.moe while Discord keeps showing it.
 - After an update, a What's new card shows that release's notes once.
+- The window names the game you're in (VALORANT, Fortnite and Dota 2 showed as League).
