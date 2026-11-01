@@ -51,6 +51,9 @@ func reportQuit(how string) {
 			return
 		}
 		applog.Printf("quit how=%s", how)
+		if how == "shutdown" {
+			install.NoteShutdown()
+		}
 		done := make(chan struct{})
 		go func() { appServer.ReportLifecycle("quit", "how="+how); close(done) }()
 		select {

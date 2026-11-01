@@ -225,6 +225,12 @@ func supervise(version string) bool {
 			fellBack = ""
 			continue
 		}
+		// Windows ending the session took the app down: not a crash, and
+		// nothing to start again.
+		if shuttingDown() {
+			applog.Printf("%s ended by Windows shutting down", ver)
+			return true
+		}
 		// A crash or a kill.
 		stops = append(stops, time.Now())
 		if len(stops) > 3 && time.Since(stops[len(stops)-4]) < time.Hour {
@@ -308,6 +314,23 @@ func Describe() string {
 		parts = append(parts, "launcher missing")
 	}
 	return strings.Join(parts, ", ")
+}
+
+// shutdownMark is touched by the app when Windows signs out or shuts down, so
+// the launcher doesn't take the app being ended for a crash.
+func shutdownMark() string { return filepath.Join(installDir(), "shutdown") }
+
+// NoteShutdown records that Windows is ending the session (WM_ENDSESSION).
+func NoteShutdown() {
+	if Target() != "" {
+		_ = os.WriteFile(shutdownMark(), []byte(time.Now().Format(time.RFC3339)), 0o644)
+	}
+}
+
+// shuttingDown reports a shutdown noted in the last minute.
+func shuttingDown() bool {
+	fi, err := os.Stat(shutdownMark())
+	return err == nil && time.Since(fi.ModTime()) < time.Minute
 }
 
 // IsBad reports whether release `ver` died on this machine before, so the

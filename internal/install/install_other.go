@@ -29,6 +29,9 @@ func MarkHealthy(string) {}
 // Describe is "" off Windows (no release folders).
 func Describe() string { return "" }
 
+// NoteShutdown is a no-op off Windows.
+func NoteShutdown() {}
+
 // IsBad is always false off Windows.
 func IsBad(string) bool { return false }
 
