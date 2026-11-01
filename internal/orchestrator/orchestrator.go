@@ -1939,6 +1939,7 @@ func (o *Orchestrator) presence(appID string, a discord.Activity) error {
 		o.mu.Unlock()
 		return err
 	}
+	a = tagGlowButtons(a)
 	go func() {
 		if err := dc.SetActivity(a); err != nil {
 			// Discord went away mid-session: drop this client so the next tick
