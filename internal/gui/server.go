@@ -285,8 +285,9 @@ func (s *Server) checkUpdate() string {
 }
 
 // autoUpdateAfter is how long a release must have been out before the app
-// installs it on its own, so a bad one can be pulled before it spreads. The
-// "Check for updates" button and "Update now" don't wait.
+// installs it on its own, so a bad one can be pulled before it spreads, when
+// glow.moe hasn't said (it sets it: update.AutoUpdateAfter). The "Check for
+// updates" button and "Update now" don't wait.
 const autoUpdateAfter = 24 * time.Hour
 
 // maybeAutoUpdate installs a waiting release in the background when the user
@@ -317,7 +318,7 @@ func (s *Server) maybeAutoUpdate() {
 // autoUpdateDue decides whether the automatic update should install `ver` now.
 func autoUpdateDue(on bool, ver, failed string, published, now time.Time, inGame bool) bool {
 	return on && ver != "" && ver != failed && !inGame &&
-		!published.IsZero() && now.Sub(published) >= autoUpdateAfter
+		!published.IsZero() && now.Sub(published) >= update.AutoUpdateAfter(autoUpdateAfter)
 }
 
 // hUpdateCheck: the "Check for updates" button. Asks GitHub right now and says

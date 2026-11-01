@@ -21,3 +21,4 @@ and gets cleared.
 - Updates ask glow.moe first and come from there once glow.moe hosts the releases (GitHub until then), so where releases live can change without a new app. The download button opens glow.moe's L!VE page.
 - If glow.moe unlinks this PC (removed under Linked PCs, or the password changed), the app goes straight back to its Link screen, with a line saying why.
 - The app can show a pairing code for glow.moe's link page to ask for; glow.moe has it switched off for now.
+- How long a new release waits before installing itself (it never installs mid-game) is set by glow.moe; 24 hours if the app can't ask.

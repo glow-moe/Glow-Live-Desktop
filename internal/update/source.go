@@ -36,7 +36,10 @@ type hostedRelease struct {
 var (
 	hostedMu sync.Mutex
 	hosted   *hostedRelease // glow.moe's newest release from the last check, if it hosts one
-	shaRE    = regexp.MustCompile(`^[a-f0-9]{64}$`)
+	// waitFor is how long glow.moe says a release is out before apps install
+	// it on their own (0 until it has said).
+	waitFor time.Duration
+	shaRE   = regexp.MustCompile(`^[a-f0-9]{64}$`)
 )
 
 // releaseInfo asks glow.moe for the hold list and the release it hosts.
@@ -54,11 +57,20 @@ func releaseInfo() (hold []string, latest *hostedRelease, ok bool) {
 		return nil, nil, false
 	}
 	var body struct {
-		Hold   []string       `json:"hold"`
-		Latest *hostedRelease `json:"latest"`
+		Hold       []string       `json:"hold"`
+		Latest     *hostedRelease `json:"latest"`
+		AfterHours *float64       `json:"autoUpdateAfterHours"`
 	}
 	if json.NewDecoder(resp.Body).Decode(&body) != nil {
 		return nil, nil, false
+	}
+	if h := body.AfterHours; h != nil && *h >= 0 && *h <= 24*14 {
+		hostedMu.Lock()
+		waitFor = time.Duration(*h * float64(time.Hour))
+		if waitFor == 0 {
+			waitFor = time.Nanosecond // "now", but still known
+		}
+		hostedMu.Unlock()
 	}
 	return body.Hold, usable(body.Latest), true
 }
@@ -84,6 +96,17 @@ func glowURL(raw string) bool {
 	}
 	h := strings.ToLower(u.Hostname())
 	return h == "glow.moe" || strings.HasSuffix(h, ".glow.moe")
+}
+
+// AutoUpdateAfter is how long a release must be out before the app installs
+// it on its own: what glow.moe last said, else fallback.
+func AutoUpdateAfter(fallback time.Duration) time.Duration {
+	hostedMu.Lock()
+	defer hostedMu.Unlock()
+	if waitFor > 0 {
+		return waitFor
+	}
+	return fallback
 }
 
 // hostedFor is glow.moe's file for release `tag`, when that's where it lives.

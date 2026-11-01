@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func serve(t *testing.T, body string) {
@@ -59,4 +60,25 @@ func TestNotesAskGlowWhenNothingHasYet(t *testing.T) {
 	if n := Notes("v26.12"); len(n) != 1 || n[0] != "Fresh" {
 		t.Fatalf("notes = %q", n)
 	}
+}
+
+// glow.moe sets how long a release waits before apps install it on their
+// own; until it has said, the app's own default holds.
+func TestAutoUpdateAfterComesFromGlow(t *testing.T) {
+	hostedMu.Lock()
+	waitFor = 0
+	hostedMu.Unlock()
+	if got := AutoUpdateAfter(24 * time.Hour); got != 24*time.Hour {
+		t.Fatalf("before asking: %v", got)
+	}
+	serve(t, `{"hold":[],"autoUpdateAfterHours":12,"latest":null}`)
+	releaseInfo()
+	if got := AutoUpdateAfter(24 * time.Hour); got != 12*time.Hour {
+		t.Fatalf("after asking: %v", got)
+	}
+	t.Cleanup(func() {
+		hostedMu.Lock()
+		waitFor = 0
+		hostedMu.Unlock()
+	})
 }
