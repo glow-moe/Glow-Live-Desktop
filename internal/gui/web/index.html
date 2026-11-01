@@ -145,17 +145,13 @@
         This PC was unlinked on glow.moe (or your password changed). Link it again to keep showing your games.
       </div>
       <div class="muted">
-        Link this PC to your <b>glow.moe</b> profile. <span id="link-copy">Your live match (League) and
-        driving telemetry (Forza)</span> then show on your page - only while this runs.
+        Link this PC to your <b>glow.moe</b> profile to show <span id="link-copy">the games you play</span> on it.
       </div>
       <button class="btn" id="btn-browser">Link with browser</button>
       <div class="code hide" id="link-code-box">
         Approve it on the glow.moe page that opened.<br />
         Your secure code, just in case:
         <b id="link-code"></b>
-      </div>
-      <div class="foot" style="margin-top:12px">
-        You'll approve this device on glow.moe - no keys to copy or paste.
       </div>
     </div>
 
@@ -251,8 +247,7 @@
 
       <div class="sechead">Games</div>
       <div class="muted" style="margin-bottom:8px">
-        Turn a game off to keep it off your profile and Discord - handy for games
-        that already show their own Discord status. Stays on this PC only.
+        Turn a game off to keep it off your profile and Discord.
       </div>
       <div id="games-list"></div>
       <div class="muted hide" id="games-empty">Play a Steam game and it shows up here.</div>
@@ -271,7 +266,7 @@
 
       <div class="sechead">On the site</div>
       <a href="#" id="settings-link" class="foot" style="display:block; margin-top:2px; text-align:left">
-        Stream delay &amp; name masking - set on glow.moe → L!VE ↗
+        Stream delay and name masking are on glow.moe → L!VE ↗
       </a>
     </div>
 
@@ -562,7 +557,7 @@
         $("btn-toggle").textContent = running ? "Stop" : "Start";
         // Linux builds don't read League: drop the mention.
         if (s.league === false) {
-          $("link-copy").textContent = "Your Steam games and driving telemetry (Forza)";
+          $("link-copy").textContent = "the games you play";
         }
 
         const st = s.status || {};
