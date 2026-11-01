@@ -12,7 +12,7 @@ const frame = `{
  "hero": {"name": "npc_dota_hero_juggernaut", "level": 18},
  "auth": {"token": "0123456789abcdef0123456789abcdef"},
  "previously": {"hero": {"level": 17}},
- "wearables": {"wearable0": 1}
+ "wearables": {"wearable0": 9741, "style0": 1}
 }`
 
 func TestAccept(t *testing.T) {
@@ -22,13 +22,16 @@ func TestAccept(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(out)
-	for _, gone := range []string{"auth", "0123456789abcdef", "previously", "wearables"} {
+	for _, gone := range []string{"auth", "0123456789abcdef", "previously"} {
 		if strings.Contains(s, gone) {
 			t.Errorf("%q should not be forwarded: %s", gone, s)
 		}
 	}
 	if !strings.Contains(s, "npc_dota_hero_juggernaut") {
 		t.Errorf("hero missing: %s", s)
+	}
+	if !strings.Contains(s, `"wearable0":9741`) {
+		t.Errorf("the hero's cosmetics should be forwarded: %s", s)
 	}
 	if _, err := (&Receiver{token: "ffffffffffffffffffffffffffffffff"}).accept([]byte(frame)); err == nil {
 		t.Error("a wrong token must be refused")
@@ -48,6 +51,9 @@ func TestSummarize(t *testing.T) {
 
 func TestCfg(t *testing.T) {
 	c := cfgText("0123456789abcdef0123456789abcdef")
+	if !strings.Contains(c, "\"wearables\"\t\"1\"") {
+		t.Fatal("the cfg should ask Dota for wearables")
+	}
 	if !strings.Contains(c, `"uri"		"http://127.0.0.1:47101/"`) || tokenRE.FindStringSubmatch(c)[1] != "0123456789abcdef0123456789abcdef" {
 		t.Fatal(c)
 	}

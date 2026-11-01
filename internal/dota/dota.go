@@ -34,10 +34,12 @@ const Addr = "127.0.0.1:47101"
 const cfgName = "gamestate_integration_glow.cfg"
 
 // keep are the GSI blocks sent on to glow.moe. "auth" (our token) and the
-// "previously"/"added" diffs never leave the app.
+// "previously"/"added" diffs never leave the app. "wearables" is the hero's
+// equipped cosmetics (item numbers), for the skin glow.moe shows.
 var keep = map[string]bool{
 	"provider": true, "map": true, "player": true, "hero": true, "abilities": true,
 	"items": true, "draft": true, "buildings": true, "roshan": true, "events": true,
+	"wearables": true,
 }
 
 var tokenRE = regexp.MustCompile(`"token"\s+"([a-f0-9]{32})"`)
@@ -97,7 +99,7 @@ func cfgText(token string) string {
 		"buildings"	"1"
 		"roshan"	"1"
 		"events"	"1"
-		"wearables"	"0"
+		"wearables"	"1"
 		"minimap"	"0"
 		"couriers"	"0"
 		"neutralitems"	"0"
