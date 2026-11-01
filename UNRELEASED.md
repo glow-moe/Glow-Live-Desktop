@@ -22,5 +22,8 @@ and gets cleared.
 - Windows: glow L!VE is listed in Settings > Apps > Installed apps, with its version, and Uninstall there removes it cleanly (the app, its autostart, Start menu entry, settings and log).
 - Updates ask glow.moe first and come from there once glow.moe hosts the releases (GitHub until then), so where releases live can change without a new app. The download button opens glow.moe's L!VE page.
 - If glow.moe unlinks this PC (removed under Linked PCs, or the password changed), the app goes straight back to its Link screen, with a line saying why.
-- The app can show a pairing code for glow.moe's link page to ask for; glow.moe has it switched off for now.
+- Linking from a different network than this PC (your phone on mobile data, say), glow.moe asks for the code the app shows. From the same network it's still one click.
+- Windows: started with the PC, the app goes quietly to the tray, without a pop-up in the corner.
+- Windows: a build that keeps asking to restart stops after 4 tries in 10 minutes instead of looping.
+- Dota 2: between matches the status says you're in the menu instead of Steam's old line.
 - How long a new release waits before installing itself (it never installs mid-game) is set by glow.moe; 24 hours if the app can't ask.
