@@ -176,6 +176,8 @@ func supervise(version string) bool {
 	applog.SetRole("launcher")
 	dir := installDir()
 	_ = os.Remove(Target() + ".old")
+	// The hidden copy the old in-place updater (minio selfupdate) left behind.
+	_ = os.Remove(filepath.Join(dir, "."+exeName+".old"))
 	// The first start of a launcher with no release folder (an install from
 	// before folders) puts its own build in one.
 	// An old updater that swapped this file for a newer build does the same.
