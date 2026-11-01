@@ -20,3 +20,4 @@ and gets cleared.
 - The window names the game you're in (VALORANT, Fortnite and Dota 2 showed as League).
 - Windows: glow L!VE shows up in the Start menu (and its search). Made once; if you remove it, it stays removed.
 - Windows: glow L!VE is listed in Settings > Apps > Installed apps, with its version, and Uninstall there removes it cleanly (the app, its autostart, Start menu entry, settings and log).
+- Updates ask glow.moe first and come from there once glow.moe hosts the releases (GitHub until then), so where releases live can change without a new app. The download button opens glow.moe's L!VE page.

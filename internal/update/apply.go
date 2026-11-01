@@ -35,6 +35,9 @@ func assetName() string {
 // expectedSHA fetches the release's SHA256SUMS and returns the hex hash for our
 // asset, so a download can be verified before it replaces the running binary.
 func expectedSHA(tag string) (string, error) {
+	if f, ok := hostedFor(tag); ok {
+		return strings.ToLower(f.SHA256), nil
+	}
 	url := fmt.Sprintf("%s/%s/SHA256SUMS", downloadBase, tag)
 	resp, err := (&http.Client{Timeout: 20 * time.Second}).Get(url)
 	if err != nil {
@@ -76,7 +79,7 @@ func Apply(tag string) error {
 	if err != nil || len(sum) != sha256.Size {
 		return errors.New("bad checksum")
 	}
-	url := fmt.Sprintf("%s/%s/%s", downloadBase, tag, assetName())
+	url := assetURL(tag)
 	resp, err := (&http.Client{Timeout: 5 * time.Minute}).Get(url)
 	if err != nil {
 		return err
@@ -99,7 +102,7 @@ func Download(tag, dst string) error {
 	if err != nil {
 		return err
 	}
-	url := fmt.Sprintf("%s/%s/%s", downloadBase, tag, assetName())
+	url := assetURL(tag)
 	resp, err := (&http.Client{Timeout: 5 * time.Minute}).Get(url)
 	if err != nil {
 		return err
