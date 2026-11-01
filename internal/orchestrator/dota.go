@@ -50,6 +50,17 @@ func (o *Orchestrator) ensureDota() *dota.Receiver {
 // dotaLaunchHint is the status line while Dota runs without sending its game
 // state: it only does with the -gamestateintegration launch option, which the
 // app can't set for the player.
+// dotaInMenu reports Dota sending its game state (GSI) without a match being
+// played: the menus, after a match, out of Demo Hero.
+func (o *Orchestrator) dotaInMenu() bool {
+	r := o.ensureDota()
+	if r == nil {
+		return false
+	}
+	frame, ok := r.Latest(30 * time.Second)
+	return ok && !dota.Summarize(frame).Playing
+}
+
 const dotaLaunchHint = "Dota 2 · no live match? Add -gamestateintegration to its Steam launch options"
 
 // dotaNeedsLaunchOption reports Dota running for a while (45s, past the loading

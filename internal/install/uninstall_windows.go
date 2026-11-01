@@ -79,7 +79,6 @@ func Register(version string) {
 	C.glow_reg_sz(k, w("DisplayName"), w("glow L!VE"))
 	C.glow_reg_sz(k, w("DisplayVersion"), w(strings.TrimPrefix(version, "v")))
 	C.glow_reg_sz(k, w("Publisher"), w("SplitFlux LLC"))
-	C.glow_reg_sz(k, w("DisplayIcon"), w(target))
 	C.glow_reg_sz(k, w("InstallLocation"), w(installDir()))
 	C.glow_reg_sz(k, w("UninstallString"), w(`"`+target+`" --uninstall`))
 	C.glow_reg_sz(k, w("QuietUninstallString"), w(`"`+target+`" --uninstall --quiet`))
@@ -87,10 +86,16 @@ func Register(version string) {
 	C.glow_reg_dword(k, w("NoModify"), 1)
 	C.glow_reg_dword(k, w("NoRepair"), 1)
 	C.glow_reg_dword(k, w("EstimatedSize"), C.DWORD(dirSizeKB(installDir())))
-	if !exists(filepath.Join(installDir(), "installed")) {
-		C.glow_reg_sz(k, w("InstallDate"), w(time.Now().Format("20060102")))
-		_ = os.WriteFile(filepath.Join(installDir(), "installed"), nil, 0o644)
+	// The install date is the day the "installed" mark was first written.
+	mark := filepath.Join(installDir(), "installed")
+	if !exists(mark) {
+		_ = os.WriteFile(mark, nil, 0o644)
 	}
+	day := time.Now()
+	if fi, err := os.Stat(mark); err == nil {
+		day = fi.ModTime()
+	}
+	C.glow_reg_sz(k, w("InstallDate"), w(day.Format("20060102")))
 }
 
 func dirSizeKB(dir string) uint32 {

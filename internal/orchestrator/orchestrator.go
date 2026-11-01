@@ -1452,6 +1452,12 @@ func (o *Orchestrator) tick() {
 					o.set(Status{Game: "steam", AppID: s.AppID, GameName: s.Game, Hidden: true, Delay: effDelay})
 					return
 				}
+				// Dota out of a match: its own game state (GSI) knows that now,
+				// while Steam's status line can say "Demo Hero: Lvl 30 ..." for
+				// minutes after (Steam caches it, Dota doesn't always reset it).
+				if s.AppID == dota.AppID && o.dotaInMenu() {
+					s.Detail = "In the menu"
+				}
 				st := Status{Game: "steam", InGame: true, Detail: steamDetail(s), AppID: s.AppID, GameName: s.Game, Pushes: o.pushes, Delay: effDelay}
 				if s.AppID == dota.AppID && o.dotaNeedsLaunchOption() {
 					st.Detail = dotaLaunchHint
