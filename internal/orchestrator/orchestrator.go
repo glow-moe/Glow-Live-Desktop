@@ -969,8 +969,11 @@ type Orchestrator struct {
 	dcFailAt  time.Time
 	dcFailErr string
 	errDetail string // the raw error behind a friendlier Status.Err, for the report
-	username  string
-	userID    string // profile cuid, for reading own anime "now watching"
+	// onUnlinked runs when glow.moe turns this PC's key down (the GUI clears
+	// the link and shows the link screen again).
+	onUnlinked func()
+	username   string
+	userID     string // profile cuid, for reading own anime "now watching"
 	// readingTitle / readingStart: the series on Discord and since when.
 	readingTitle string
 	readingStart time.Time
@@ -1077,6 +1080,13 @@ func (o *Orchestrator) SetUserID(id string) {
 
 // SetConfig swaps the config the loop reads (token/delay changes take effect
 // next tick; poll interval applies on the next Start).
+// OnUnlinked registers what happens when glow.moe turns this PC's key down.
+func (o *Orchestrator) OnUnlinked(fn func()) {
+	o.mu.Lock()
+	o.onUnlinked = fn
+	o.mu.Unlock()
+}
+
 func (o *Orchestrator) SetConfig(cfg config.Config) {
 	o.mu.Lock()
 	o.cfg = cfg
@@ -1635,6 +1645,12 @@ func (o *Orchestrator) post(cfg config.Config, delaySec int, snap any, st *Statu
 		o.failed()
 		if errors.Is(err, poster.ErrUnlinked) {
 			st.Err = unlinkedMsg
+			o.mu.Lock()
+			fn := o.onUnlinked
+			o.mu.Unlock()
+			if fn != nil {
+				go fn()
+			}
 		} else if errors.Is(err, poster.ErrOutdated) {
 			st.Err = "Update required: this version is no longer supported. Get the latest from glow.moe."
 			o.mu.Lock()

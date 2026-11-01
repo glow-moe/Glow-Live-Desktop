@@ -46,13 +46,14 @@ type Server struct {
 	autoFailed string    // a release the automatic update couldn't install this session
 	// peekWindow shows the hidden window without taking focus (main wires it;
 	// false when the user is busy: full screen, presenting, quiet hours).
-	peekWindow func() bool
-	prompted   string    // the update prompt already shown this session ("tag|forced")
-	peeked     bool      // the window is on screen only because of that prompt
-	userID     string    // the linked account's id (from /api/live/me)
-	identityAt time.Time // last whoami retry, so a missing username isn't asked every second
-	linkCode   string    // the code to type on the glow.moe page while linking
-	quit       func()    // the app's real exit (set by main)
+	peekWindow  func() bool
+	prompted    string    // the update prompt already shown this session ("tag|forced")
+	peeked      bool      // the window is on screen only because of that prompt
+	userID      string    // the linked account's id (from /api/live/me)
+	identityAt  time.Time // last whoami retry, so a missing username isn't asked every second
+	linkCode    string    // the code to type on the glow.moe page while linking
+	quit        func()    // the app's real exit (set by main)
+	wasUnlinked bool      // glow.moe turned the key down: the link screen says so
 	// whatsNew is the release this build is, with its notes, shown once after
 	// an update until closed.
 	whatsNew      string
@@ -231,6 +232,7 @@ func NewServer(cfg config.Config, version string) *Server {
 	poster.SetVersion(version)
 	s := &Server{cfg: cfg, version: version, orch: orchestrator.New(cfg)}
 	s.orch.OnSeenGame(s.recordSeenGame)
+	s.orch.OnUnlinked(s.dropLink)
 	go s.watchUpdates()
 	go s.noteNewVersion()
 	if cfg.Token != "" {
@@ -565,13 +567,14 @@ func (s *Server) hStatus(w http.ResponseWriter, _ *http.Request) {
 	linked := s.cfg.Token != ""
 	needIdentity := linked && (s.username == "" || s.avatar == "")
 	out := map[string]any{
-		"version":  s.version,
-		"linked":   linked,
-		"username": s.username,
-		"avatar":   s.avatar,
-		"linking":  s.linking,
-		"linkCode": s.linkCode,
-		"whatsNew": map[string]any{"version": s.whatsNew, "notes": s.whatsNewNotes},
+		"version":     s.version,
+		"linked":      linked,
+		"username":    s.username,
+		"avatar":      s.avatar,
+		"linking":     s.linking,
+		"linkCode":    s.linkCode,
+		"wasUnlinked": s.wasUnlinked,
+		"whatsNew":    map[string]any{"version": s.whatsNew, "notes": s.whatsNewNotes},
 		// Linked to an account that hasn't picked a username: nothing shows
 		// until it does (glow.moe/onboarding).
 		"noProfile": linked && s.userID != "" && s.username == "",
@@ -738,6 +741,7 @@ func (s *Server) hLink(w http.ResponseWriter, r *http.Request) {
 	if body.Unlink {
 		s.orch.Stop()
 		s.mu.Lock()
+		s.wasUnlinked = false
 		s.cfg.Token = ""
 		s.username = ""
 		s.avatar = ""
@@ -759,6 +763,7 @@ func (s *Server) hLink(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.linking = true
+		s.wasUnlinked = false
 		base := pair.BaseFrom(s.cfg.Endpoint)
 		s.mu.Unlock()
 		go func() {

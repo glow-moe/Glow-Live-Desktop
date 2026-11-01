@@ -141,6 +141,9 @@
 
     <!-- ── Not linked ── -->
     <div class="card" id="panel-link">
+      <div class="note hide" id="unlinked-note" style="margin: 0 0 10px">
+        This PC was unlinked on glow.moe (or your password changed). Link it again to keep showing your games.
+      </div>
       <div class="muted">
         Link this PC to your <b>glow.moe</b> profile. <span id="link-copy">Your live match (League) and
         driving telemetry (Forza)</span> then show on your page - only while this runs.
@@ -516,6 +519,7 @@
         }
         const linked = s.linked;
         applyView(linked);
+        $("unlinked-note").classList.toggle("hide", !s.wasUnlinked || !!s.linking);
         $("link-code").textContent = s.linkCode || "";
         $("link-code-box").classList.toggle("hide", !(s.linking && s.linkCode));
         if (s.linking) {
