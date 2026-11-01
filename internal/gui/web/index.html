@@ -77,6 +77,14 @@
       .update .later { color: #a8875f; font-weight: 700; }
       .foot { margin-top: 12px; text-align: center; font-size: 10px; color: #bda6c8; }
       .foot a { color: #a24fc0; text-decoration: none; }
+      .acts2 { margin-top: 12px; display: flex; gap: 8px; }
+      .acts2 a {
+        flex: 1; text-align: center; padding: 8px 10px; border-radius: 12px;
+        background: #fff; border: 1px solid #ecd2f5; color: #8a3fb0;
+        font-size: 11.5px; font-weight: 800; text-decoration: none; line-height: 1.25;
+      }
+      .acts2 a:hover { background: #fbefff; border-color: #d9a6ef; }
+      .acts2 a.on { background: #fff4e5; border-color: #f2c98a; color: #8a5a12; }
       .iconbtn {
         width: 30px; height: 30px; flex: 0 0 auto; border-radius: 999px; cursor: pointer;
         font-size: 15px; font-weight: 800; color: #a24fc0; background: #f6e4f7; border: 1px solid #eccbee;
@@ -173,9 +181,9 @@
         <button class="btn ghost" id="btn-toggle">Stop</button>
         <button class="btn ghost" id="btn-settings" style="flex:0 0 auto; width:auto; padding:11px 16px">⚙</button>
       </div>
-      <div class="foot">
-        <a id="profhide" href="#">hide from my profile for 1 hour</a> ·
-        <a id="relink" href="#">unlink / switch account</a>
+      <div class="acts2">
+        <a id="profhide" href="#">Hide from my profile for 1 hour</a>
+        <a id="relink" href="#">Unlink / switch account</a>
       </div>
     </div>
 
@@ -552,9 +560,10 @@
         const st = s.status || {};
         const ph = $("profhide");
         ph.dataset.hidden = st.profileHidden ? "1" : "";
+        ph.classList.toggle("on", !!st.profileHidden);
         ph.textContent = st.profileHidden
-          ? "off your profile until " + new Date(st.profileHiddenUntil).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + " · show again"
-          : "hide from my profile for 1 hour";
+          ? "Off your profile until " + new Date(st.profileHiddenUntil).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + " · show again"
+          : "Hide from my profile for 1 hour";
         const dot = $("dot");
         dot.className = "dot" + (st.err ? " err" : st.inGame ? " on" : "");
         if (!running) {
