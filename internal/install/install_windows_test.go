@@ -40,6 +40,8 @@ func TestMain(m *testing.M) {
 func setup(t *testing.T, exit string) string {
 	t.Helper()
 	t.Setenv("LOCALAPPDATA", t.TempDir())
+	// The launcher logs (internal/applog); keep that out of the real config dir.
+	t.Setenv("APPDATA", t.TempDir())
 	out := filepath.Join(t.TempDir(), "child.txt")
 	t.Setenv("GLOW_INSTALL_CHILD", out)
 	t.Setenv("GLOW_INSTALL_EXIT", exit)
