@@ -18,7 +18,7 @@ func downloadsDir() string {
 		return ""
 	}
 	defer syscall.RegCloseKey(key)
-	name, _ := syscall.UTF16PtrFromString("{374DE290-123F-4565-9164-B4428D93E7FA}")
+	name, _ := syscall.UTF16PtrFromString("{374DE290-123F-4565-9164-39C4925E467B}")
 	buf := make([]uint16, 1024)
 	n := uint32(len(buf) * 2)
 	var typ uint32

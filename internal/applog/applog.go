@@ -35,7 +35,7 @@ func previous() string { return filepath.Join(Dir(), "app.old.log") }
 // Printf adds one timestamped line, tagged with the process (launcher or app)
 // so the two writing the same file can be told apart.
 func Printf(format string, args ...any) {
-	if Dir() == "" {
+	if !on || Dir() == "" {
 		return
 	}
 	line := time.Now().Format("2006-01-02 15:04:05") + " [" + role + "] " + fmt.Sprintf(format, args...)
@@ -55,7 +55,17 @@ func Printf(format string, args ...any) {
 	_ = f.Close()
 }
 
+// on is set by the app at start (Enable); until then Printf writes nothing,
+// so tests and tools never touch the real log.
+var on bool
+
+// Enable turns the log on for this process (main does, first thing).
+func Enable() { on = true }
+
 var role = "app"
+
+// downloads finds the Downloads folder (a var so tests point it elsewhere).
+var downloads = downloadsDir
 
 // SetRole names this process in the lines it writes ("launcher" or "app").
 func SetRole(r string) { role = r }
@@ -106,7 +116,7 @@ func Export(header string) (string, error) {
 		b.WriteString(scrub(string(data)))
 	}
 	dir := Dir()
-	if d := downloadsDir(); d != "" {
+	if d := downloads(); d != "" {
 		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
 			dir = d
 		}

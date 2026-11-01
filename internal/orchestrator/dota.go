@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/glow-moe/glow-collector/internal/discord"
@@ -68,7 +69,26 @@ func (o *Orchestrator) dotaNeedsLaunchOption() bool {
 	return !ok && now.Sub(o.dotaSince) > 45*time.Second
 }
 
+// dotaNames are the hero names glow.moe sends for keys that don't spell the
+// hero ("queenofpain" is Queen of Pain); set from the L!VE settings.
+var (
+	dotaNamesMu sync.Mutex
+	dotaNames   map[string]string
+)
+
+func setDotaNames(m map[string]string) {
+	dotaNamesMu.Lock()
+	dotaNames = m
+	dotaNamesMu.Unlock()
+}
+
 func dotaHeroName(key string) string {
+	dotaNamesMu.Lock()
+	name := dotaNames[key]
+	dotaNamesMu.Unlock()
+	if name != "" {
+		return name
+	}
 	words := strings.Split(key, "_")
 	for i, w := range words {
 		if w != "" {

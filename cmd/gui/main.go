@@ -98,6 +98,7 @@ func onOff(b bool, on, off string) string {
 func main() {
 	runtime.LockOSThread() // the GUI must own the main OS thread
 
+	applog.Enable()
 	applog.CatchCrashes()
 	pair.Version = version
 

@@ -71,6 +71,8 @@ type liveSettings struct {
 	// DiscordApps swaps the Discord application a status kind runs under
 	// ("valorant", "lol-lobby", ...), e.g. when a game gets its own.
 	DiscordApps map[string]string `json:"discordApps"`
+	// DotaNames name Dota heroes whose internal key doesn't ("queenofpain").
+	DotaNames map[string]string `json:"dotaNames"`
 	// FallbackBase is a glow.moe address that skips Cloudflare, tried when
 	// glow.moe can't be reached (poster/fallback.go).
 	FallbackBase string `json:"fallbackBase"`
@@ -259,6 +261,9 @@ func fetchSettings(endpoint, token string) (liveSettings, bool) {
 		return s, false
 	}
 	poster.SetFallback(s.FallbackBase)
+	if s.DotaNames != nil {
+		setDotaNames(s.DotaNames)
+	}
 	if s.LolNames != nil {
 		lcu.SetNames(s.LolNames.Queues, s.LolNames.Modes, s.LolNames.Maps)
 	}

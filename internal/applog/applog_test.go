@@ -16,6 +16,9 @@ func TestExportHasTheLogWithoutTheAccountName(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(home, "Downloads"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	downloads = func() string { return "" } // not the real Downloads folder
+	defer func() { downloads = downloadsDir }()
+	Enable()
 	Printf(`open C:\Users\sam\AppData\x.json: denied`)
 	Printf("league in game")
 	path, err := Export("glow L!VE v26.11\n")
