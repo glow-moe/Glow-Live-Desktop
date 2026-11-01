@@ -55,7 +55,12 @@ import (
 // The app's entry in Settings > Apps > Installed apps (per user, like Discord):
 // name, version, publisher, icon, size, and an Uninstall that runs this exe
 // with --uninstall.
-const uninstallKey = `Software\Microsoft\Windows\CurrentVersion\Uninstall\glow L!VE`
+// The key's name is plain (Explorer's list skips one with a "!" in it); the
+// name people see is DisplayName.
+const uninstallKey = `Software\Microsoft\Windows\CurrentVersion\Uninstall\glow-live`
+
+// oldUninstallKey is the first name, from test builds before release.
+const oldUninstallKey = `Software\Microsoft\Windows\CurrentVersion\Uninstall\glow L!VE`
 
 func w(s string) *C.wchar_t {
 	p, _ := syscall.UTF16PtrFromString(s)
@@ -68,6 +73,7 @@ func Register(version string) {
 	if !Supervised() || Target() == "" {
 		return
 	}
+	C.glow_reg_delete_key(w(oldUninstallKey))
 	k := w(uninstallKey)
 	target := Target()
 	C.glow_reg_sz(k, w("DisplayName"), w("glow L!VE"))
@@ -110,6 +116,7 @@ func Uninstall(quiet bool) {
 	run := w(`Software\Microsoft\Windows\CurrentVersion\Run`)
 	C.glow_reg_delete_value(run, w("glow L!VE"))
 	C.glow_reg_delete_key(w(uninstallKey))
+	C.glow_reg_delete_key(w(oldUninstallKey))
 	if p := shortcutPath(); p != "" {
 		_ = os.Remove(p)
 	}
