@@ -18,35 +18,38 @@ import (
 	"github.com/glow-moe/glow-collector/internal/update"
 )
 
-// check is one line of "Test connection": what was tried and how it went.
+// check is one line of "Test connection": what was tried and how it went,
+// in plain words for the window (Detail) and with the technical reason for
+// the exported log (Tech, never shown).
 type check struct {
 	Name   string `json:"name"`
 	OK     bool   `json:"ok"`
 	Detail string `json:"detail"`
+	Tech   string `json:"-"`
 }
 
-// diagnose runs the connection checks side by side: glow.moe itself, the
-// fallback address, this PC's key, Discord, GitHub (updates) and what the app
-// is reading right now. Nothing here changes anything.
+// diagnose runs the connection checks side by side: glow.moe itself (and the
+// backup address when glow.moe fails and one is set), this PC's link,
+// Discord, updates and what the app is reading right now. Nothing here
+// changes anything. A row is red only for something the person can fix.
 func (s *Server) diagnose() []check {
 	s.mu.Lock()
 	base, tok := pair.BaseFrom(s.cfg.Endpoint), s.cfg.Token
 	s.mu.Unlock()
 	client := &http.Client{Timeout: 8 * time.Second}
-	ping := func(name, url string) check {
+	ping := func(url string) (bool, string) {
 		t := time.Now()
 		resp, err := client.Get(url)
 		if err != nil {
-			return check{name, false, shortErr(err)}
+			return false, shortErr(err)
 		}
 		resp.Body.Close()
-		ms := time.Since(t).Milliseconds()
-		return check{name, resp.StatusCode/100 == 2, fmt.Sprintf("%s in %d ms", resp.Status, ms)}
+		return resp.StatusCode/100 == 2, fmt.Sprintf("%s in %d ms", resp.Status, time.Since(t).Milliseconds())
 	}
 	var (
 		wg  sync.WaitGroup
 		mu  sync.Mutex
-		out = make([]check, 6)
+		out = make([]check, 5)
 	)
 	run := func(i int, fn func() check) {
 		wg.Add(1)
@@ -58,61 +61,68 @@ func (s *Server) diagnose() []check {
 			mu.Unlock()
 		}()
 	}
-	run(0, func() check { return ping("glow.moe", base+"/api/health") })
-	run(1, func() check {
-		if fb := poster.Fallback(); fb != "" {
-			return ping("Backup address", fb+"/api/health")
+	run(0, func() check {
+		ok, tech := ping(base + "/api/health")
+		if ok {
+			return check{"glow.moe", true, "connected", tech}
 		}
-		return check{"Backup address", true, "none set (not needed)"}
+		// glow.moe is out of reach: say whether the backup way gets through.
+		if fb := poster.Fallback(); fb != "" {
+			if fbOK, fbTech := ping(fb + "/api/health"); fbOK {
+				return check{"glow.moe", true, "connected through the backup route", tech + " | backup " + fbTech}
+			}
+		}
+		return check{"glow.moe", false, "can't reach it. Check your internet, or try another connection.", tech}
 	})
-	run(2, func() check {
+	run(1, func() check {
 		if tok == "" {
-			return check{"This PC's link", false, "not linked"}
+			return check{"Your account", false, "this PC isn't linked yet", ""}
 		}
 		name, _, id := whoami(s.cfg.Endpoint, tok)
 		switch {
 		case id == "":
-			return check{"This PC's link", false, "glow.moe didn't accept this PC's key: unlink and link again"}
+			return check{"Your account", false, "not linked anymore. Use unlink / switch account to link again.", "whoami without an id"}
 		case name == "":
-			return check{"This PC's link", false, "linked, but the account has no username yet (glow.moe/onboarding)"}
+			return check{"Your account", false, "pick a username on glow.moe first", "no username"}
 		}
-		return check{"This PC's link", true, "linked as @" + name}
+		return check{"Your account", true, "linked as @" + name, ""}
+	})
+	run(2, func() check {
+		on, last := s.orch.DiscordState()
+		switch {
+		case on:
+			return check{"Discord", true, "connected", ""}
+		case strings.Contains(strings.ToLower(last), "not running"):
+			return check{"Discord", false, "isn't open. Open Discord to show your status there.", last}
+		}
+		// Not connected yet only means nothing to show so far.
+		return check{"Discord", true, "ready, shows up when you play", last}
 	})
 	run(3, func() check {
-		on, last := s.orch.DiscordState()
-		if on {
-			return check{"Discord", true, "connected"}
-		}
-		if last == "" {
-			last = "not connected yet (it connects when there's a status to show)"
-		}
-		return check{"Discord", false, last}
-	})
-	run(4, func() check {
 		if !update.IsRelease(s.version) {
-			return check{"Updates", true, "test build, updates are off"}
+			return check{"Updates", true, "test build", ""}
 		}
 		latest, _, behind := update.Check(s.version)
 		if latest == "" {
-			return check{"Updates", false, "couldn't reach GitHub"}
+			return check{"Updates", true, "couldn't check right now", "GitHub unreachable"}
 		}
 		if behind {
-			return check{"Updates", true, latest + " is out (this is " + s.version + ")"}
+			return check{"Updates", true, latest + " is out", "this is " + s.version}
 		}
-		return check{"Updates", true, "on the latest (" + s.version + ")"}
+		return check{"Updates", true, "up to date", s.version}
 	})
-	run(5, func() check {
+	run(4, func() check {
 		st := s.orch.Status()
 		if !s.orch.Running() {
-			return check{"Reading", false, "stopped (press Start)"}
+			return check{"Games", false, "stopped. Press Start.", ""}
 		}
 		if st.Err != "" {
-			return check{"Reading", false, st.Err}
+			return check{"Games", false, st.Err, st.Err}
 		}
 		if st.InGame {
-			return check{"Reading", true, strings.TrimSpace(st.Game + " " + st.Detail)}
+			return check{"Games", true, "reading " + strings.TrimSpace(st.Detail), st.Game}
 		}
-		return check{"Reading", true, "running, no game open right now"}
+		return check{"Games", true, "ready, no game open right now", ""}
 	})
 	wg.Wait()
 	return out
@@ -130,7 +140,7 @@ func shortErr(err error) string {
 func (s *Server) hDiagnose(w http.ResponseWriter, _ *http.Request) {
 	checks := s.diagnose()
 	for _, c := range checks {
-		applog.Printf("test %s ok=%v %s", c.Name, c.OK, c.Detail)
+		applog.Printf("test %s ok=%v %s (%s)", c.Name, c.OK, c.Detail, c.Tech)
 	}
 	writeJSON(w, map[string]any{"ok": true, "checks": checks})
 }
@@ -155,7 +165,7 @@ func (s *Server) hExportLogs(w http.ResponseWriter, _ *http.Request) {
 		if !c.OK {
 			mark = "FAIL"
 		}
-		fmt.Fprintf(&b, "  %s %s: %s\n", mark, c.Name, c.Detail)
+		fmt.Fprintf(&b, "  %s %s: %s [%s]\n", mark, c.Name, c.Detail, c.Tech)
 	}
 	path, err := applog.Export(b.String())
 	if err != nil {
