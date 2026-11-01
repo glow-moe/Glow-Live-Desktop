@@ -61,6 +61,17 @@ var notesURL = "https://api.github.com/repos/glow-moe/Glow-Live-Desktop/releases
 // Notes returns release `tag`'s notes as lines of plain text (the bullets of
 // the release body, markdown stripped). Nil when GitHub can't be reached.
 func Notes(tag string) []string {
+	// Right after an update nothing has asked glow.moe yet in this run.
+	hostedMu.Lock()
+	known := hosted != nil
+	hostedMu.Unlock()
+	if !known {
+		if _, r, ok := releaseInfo(); ok && r != nil {
+			hostedMu.Lock()
+			hosted = r
+			hostedMu.Unlock()
+		}
+	}
 	hostedMu.Lock()
 	if hosted != nil && hosted.Tag == tag && len(hosted.Notes) > 0 {
 		n := append([]string(nil), hosted.Notes...)

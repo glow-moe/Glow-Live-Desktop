@@ -50,3 +50,13 @@ func TestAHostedFileOffGlowIsIgnored(t *testing.T) {
 		t.Fatalf("not GitHub: %q", got)
 	}
 }
+
+// Right after an update the new copy asks for its notes before anything has
+// checked glow.moe in this run: they come from glow.moe all the same.
+func TestNotesAskGlowWhenNothingHasYet(t *testing.T) {
+	serve(t, `{"hold":[],"latest":{"tag":"v26.12","publishedAt":"2026-12-01T00:00:00Z","notes":["Fresh"],
+		"files":{"`+assetName()+`":{"url":"https://glow.moe/x","sha256":"`+strings.Repeat("d", 64)+`"}}}}`)
+	if n := Notes("v26.12"); len(n) != 1 || n[0] != "Fresh" {
+		t.Fatalf("notes = %q", n)
+	}
+}
