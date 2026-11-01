@@ -27,3 +27,4 @@ and gets cleared.
 - Windows: a build that keeps asking to restart stops after 4 tries in 10 minutes instead of looping.
 - Dota 2: between matches the status says you're in the menu instead of Steam's old line.
 - How long a new release waits before installing itself (it never installs mid-game) is set by glow.moe; 24 hours if the app can't ask.
+- Steam: the built-in game table refreshed (20109 games) so new releases get their own "Playing <game>" headline offline too.
