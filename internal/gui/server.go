@@ -109,6 +109,32 @@ func (s *Server) SetHideToTray(fn func()) {
 	s.mu.Unlock()
 }
 
+// ReportLifecycle tells glow.moe this app started or quit and how ("how=boot
+// autostart=on installed=yes"), so God Mode can tell a member who closed the
+// app from one whose app vanished (an antivirus, a crash). Nothing to report
+// when unlinked. A start retries a network that isn't up yet at boot; a quit
+// gets one try.
+func (s *Server) ReportLifecycle(kind, detail string) {
+	s.mu.Lock()
+	base, tok := pair.BaseFrom(s.cfg.Endpoint), s.cfg.Token
+	s.mu.Unlock()
+	if tok == "" {
+		return
+	}
+	tries := 1
+	if kind == "start" {
+		tries = 3
+	}
+	for i := 0; i < tries; i++ {
+		if poster.Report(base, tok, kind, detail, "", runtime.GOOS) == nil {
+			return
+		}
+		if i < tries-1 {
+			time.Sleep(20 * time.Second)
+		}
+	}
+}
+
 // refreshIdentity re-fetches the profile name + avatar when they're missing
 // (e.g. the startup whoami raced a cold network). Runs at most once at a time.
 func (s *Server) refreshIdentity() {

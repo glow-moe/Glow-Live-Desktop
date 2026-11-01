@@ -21,6 +21,8 @@ extern void glowTrayProfile();
 extern void glowTrayHideHour();
 extern void glowTrayHideGame();
 extern void glowTrayShowDiscord();
+extern void glowTrayQuitting();
+extern void glowEndSession();
 
 // Tray status line (menu + tooltip) and whether the alert icon is showing.
 static wchar_t g_status[128] = L"glow L!VE";
@@ -249,10 +251,14 @@ static LRESULT CALLBACK glow_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
             return 0;
         }
         if (LOWORD(wp) == GLOW_ID_QUIT) {
+            glowTrayQuitting();
             glow_del_tray(hwnd);
             DestroyWindow(hwnd); // real close: skips WM_CLOSE, ends the loop
             return 0;
         }
+        break;
+    case WM_ENDSESSION:
+        if (wp) glowEndSession(); // Windows is signing out or shutting down
         break;
     case WM_DESTROY:
         glow_del_tray(hwnd); // make sure the icon never lingers

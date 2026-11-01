@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	webview "github.com/webview/webview_go"
@@ -29,6 +30,62 @@ var version = "dev"
 // trayTerminate is the app's real exit, wired to the webview's Terminate; the
 // tray menu's Quit calls it from whichever platform's tray is active.
 var trayTerminate func()
+
+// appServer is the running GUI server, for the quit report sent from the
+// window procedure when Windows shuts down.
+var appServer *gui.Server
+
+// quitHow is how the app is closing: the tray's Quit sets "tray"; anything else
+// that ends the window loop stays "other".
+var quitHow = "other"
+
+var quitOnce sync.Once
+
+// reportQuit tells glow.moe the app is closing, once, waiting at most a few
+// seconds so a dead network never holds the exit up.
+func reportQuit(how string) {
+	quitOnce.Do(func() {
+		if appServer == nil {
+			return
+		}
+		done := make(chan struct{})
+		go func() { appServer.ReportLifecycle("quit", "how="+how); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+		}
+	})
+}
+
+// launchHow names what started this copy, for the start report: a downloaded
+// file handing off to the install (--moved), the relaunch after an update, the
+// boot entry (--hidden) or a double-click.
+func launchHow(args []string) string {
+	has := func(f string) bool {
+		for _, a := range args {
+			if a == f {
+				return true
+			}
+		}
+		return false
+	}
+	switch {
+	case has("--moved"):
+		return "download"
+	case has("--relaunch"):
+		return "update"
+	case has("--hidden"):
+		return "boot"
+	}
+	return "manual"
+}
+
+func onOff(b bool, on, off string) string {
+	if b {
+		return on
+	}
+	return off
+}
 
 func main() {
 	runtime.LockOSThread() // the GUI must own the main OS thread
@@ -50,9 +107,10 @@ func main() {
 
 	// Windows: a copy run from Downloads moves into its fixed home and hands
 	// off to it, so Startup apps and the updater see one clean "glow L!VE.exe".
-	if install.Relocate() {
+	if install.Relocate(version) {
 		return
 	}
+	install.MarkVersion(version)
 
 	cfg, _ := config.Load()
 	// Keep the OS autostart entry in sync with the setting: writes it on first
@@ -69,6 +127,9 @@ func main() {
 	}
 
 	srv := gui.NewServer(cfg, version)
+	appServer = srv
+	go srv.ReportLifecycle("start", fmt.Sprintf("how=%s autostart=%s installed=%s",
+		launchHow(os.Args[1:]), onOff(cfg.AutoStart, "on", "off"), onOff(install.Installed(), "yes", "no")))
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -119,6 +180,7 @@ func main() {
 	// Tray status line / tooltip / alert icon, refreshed on the GUI thread.
 	watchTray(srv, w.Dispatch)
 	w.Run()
+	reportQuit(quitHow)
 }
 
 // addrFilePath is where the running copy leaves its local GUI address.

@@ -19,6 +19,7 @@ func glowTrayOpen() {
 //
 //export glowTrayQuit
 func glowTrayQuit() {
+	quitHow = "tray"
 	if trayTerminate != nil {
 		trayTerminate()
 	}

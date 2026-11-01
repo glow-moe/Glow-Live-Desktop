@@ -48,6 +48,9 @@ func Check(current string) (latest string, published time.Time, available bool) 
 // as opposed to a dev or test build, which never updates itself.
 func IsRelease(version string) bool { return strings.HasPrefix(version, "v") }
 
+// Compare orders two release labels ("v26.9.1" < "v26.10"): -1, 0 or 1.
+func Compare(a, b string) int { return cmpVer(strings.TrimSpace(a), strings.TrimSpace(b)) }
+
 // cmpVer compares dotted versions ("v1.2" vs "v1.3"), ignoring a leading "v".
 func cmpVer(a, b string) int {
 	pa, pb := parts(a), parts(b)

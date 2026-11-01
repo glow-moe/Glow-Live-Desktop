@@ -17,7 +17,7 @@ func TestMain(m *testing.M) {
 		self, _ := os.Executable()
 		_ = os.WriteFile(out, []byte(self+"\n"+strings.Join(os.Args[1:], " ")), 0o600)
 		// Run from the target already: nothing to do.
-		if Relocate() {
+		if Relocate("v26.11") {
 			_ = os.WriteFile(out+".again", nil, 0o600)
 		}
 		os.Exit(0)
@@ -32,7 +32,7 @@ func TestRelocateCopiesAndHandsOff(t *testing.T) {
 	t.Setenv("GLOW_INSTALL_CHILD", out)
 	os.Args = []string{os.Args[0], "--hidden"}
 
-	if !Relocate() {
+	if !Relocate("v26.11") {
 		t.Fatal("Relocate did not hand off")
 	}
 	want := filepath.Join(dir, "Programs", "glow L!VE", "glow L!VE.exe")
@@ -57,11 +57,49 @@ func TestRelocateCopiesAndHandsOff(t *testing.T) {
 	if !strings.EqualFold(lines[0], want) {
 		t.Fatalf("child ran from %q, want %q", lines[0], want)
 	}
-	if lines[1] != "--relaunch --hidden" {
+	if lines[1] != "--relaunch --moved --hidden" {
 		t.Fatalf("child args %q", lines[1])
 	}
 	time.Sleep(300 * time.Millisecond)
 	if _, err := os.Stat(out + ".again"); err == nil {
 		t.Fatal("the installed copy tried to relocate again")
 	}
+}
+
+// An old download opened after the install moved on hands off to the install
+// and leaves it alone.
+func TestRelocateKeepsNewerInstall(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LOCALAPPDATA", dir)
+	out := filepath.Join(dir, "child.txt")
+	t.Setenv("GLOW_INSTALL_CHILD", out)
+	os.Args = []string{os.Args[0]}
+
+	self, _ := os.Executable()
+	if err := copyExe(self, Target()); err != nil {
+		t.Fatal(err)
+	}
+	// Mark the install newer, then append a byte so a copy over it would show.
+	if err := os.WriteFile(versionFile(), []byte("v26.12"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, _ := os.OpenFile(Target(), os.O_APPEND|os.O_WRONLY, 0)
+	_, _ = f.Write([]byte{0})
+	f.Close()
+	before, _ := os.Stat(Target())
+
+	if !Relocate("v26.10") {
+		t.Fatal("Relocate did not hand off")
+	}
+	after, _ := os.Stat(Target())
+	if after.Size() != before.Size() {
+		t.Fatal("an older copy overwrote the newer install")
+	}
+	for i := 0; i < 100; i++ {
+		if b, _ := os.ReadFile(out); len(b) > 0 {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("the installed copy never started")
 }
