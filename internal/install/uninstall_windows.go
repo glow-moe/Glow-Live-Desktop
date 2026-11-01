@@ -144,7 +144,7 @@ func Uninstall(quiet bool) {
 		_ = cmd.Start()
 	}
 	if !quiet {
-		C.glow_message(w("glow L!VE was removed from this PC.\n\nTo stop your profile from showing it, remove this PC on glow.moe > L!VE too."))
+		C.glow_message(w("glow L!VE is uninstalled. Nothing of it is left on this PC.\n\nYour glow.moe account is untouched. This PC is still listed under Linked PCs on glow.moe's L!VE page, if you want to remove it there."))
 	}
 }
 
