@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/glow-moe/glow-collector/internal/applog"
 	"github.com/glow-moe/glow-collector/internal/update"
 )
 
@@ -171,6 +172,7 @@ func launcherVersion() string { return pick(installDir()) }
 // fine gets one restart an hour (a crash), so ending it in Task Manager still
 // ends it, and a machine where nothing runs stops trying.
 func supervise(version string) bool {
+	applog.SetRole("launcher")
 	dir := installDir()
 	_ = os.Remove(Target() + ".old")
 	// The first start of a launcher with no release folder (an install from
@@ -202,12 +204,15 @@ func supervise(version string) bool {
 			child = append(child, flagFellBack+fellBack)
 		}
 		started := time.Now()
+		applog.Printf("launcher %s starts %s %v", version, ver, child)
 		cmd := exec.Command(versionExe(dir, ver), child...)
 		code, err := run(cmd)
 		if err != nil && code < 0 {
 			// It would not even start (removed, blocked): same as dying on start.
+			applog.Printf("%s would not start: %v", ver, err)
 			code = 1
 		}
+		applog.Printf("%s ended with code %d after %s", ver, code, time.Since(started).Round(time.Second))
 		switch code {
 		case 0:
 			return true
@@ -226,6 +231,7 @@ func supervise(version string) bool {
 		}
 		if !isHealthy(dir, ver) && time.Since(started) < healthyAfter+30*time.Second && len(versions(dir)) > 1 {
 			mark(dir, ver, badMark)
+			applog.Printf("%s died on start: marked bad, falling back", ver)
 			fellBack = ver
 		} else {
 			if !revived.IsZero() && time.Since(revived) < time.Hour {
@@ -271,6 +277,36 @@ func MarkHealthy(version string) {
 			_ = copyExe(selfPath(), Target())
 		}
 	})
+}
+
+// Describe is the install for the exported log: where this copy runs and
+// each release folder with its marks.
+func Describe() string {
+	dir := installDir()
+	if dir == "" || dir == "." {
+		return ""
+	}
+	where := "outside the install"
+	if samePath(selfPath(), Target()) {
+		where = "the launcher"
+	} else if inInstall() {
+		where = filepath.Base(filepath.Dir(selfPath()))
+	}
+	parts := []string{"running from " + where}
+	for _, v := range versions(dir) {
+		p := v
+		if isHealthy(dir, v) {
+			p += " healthy"
+		}
+		if isBad(dir, v) {
+			p += " BAD"
+		}
+		parts = append(parts, p)
+	}
+	if !exists(Target()) {
+		parts = append(parts, "launcher missing")
+	}
+	return strings.Join(parts, ", ")
 }
 
 // IsBad reports whether release `ver` died on this machine before, so the

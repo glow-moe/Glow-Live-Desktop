@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/glow-moe/glow-collector/internal/applog"
 	"github.com/glow-moe/glow-collector/internal/autostart"
 	"github.com/glow-moe/glow-collector/internal/config"
 	"github.com/glow-moe/glow-collector/internal/install"
@@ -46,8 +47,11 @@ type Server struct {
 	// peekWindow shows the hidden window without taking focus (main wires it;
 	// false when the user is busy: full screen, presenting, quiet hours).
 	peekWindow func() bool
-	prompted   string // the update prompt already shown this session ("tag|forced")
-	peeked     bool   // the window is on screen only because of that prompt
+	prompted   string    // the update prompt already shown this session ("tag|forced")
+	peeked     bool      // the window is on screen only because of that prompt
+	userID     string    // the linked account's id (from /api/live/me)
+	identityAt time.Time // last whoami retry, so a missing username isn't asked every second
+	linkCode   string    // the code to type on the glow.moe page while linking
 }
 
 // SetPeekWindow registers the no-focus show the update prompt uses.
@@ -140,11 +144,14 @@ func (s *Server) ReportLifecycle(kind, detail string) {
 // (e.g. the startup whoami raced a cold network). Runs at most once at a time.
 func (s *Server) refreshIdentity() {
 	s.mu.Lock()
-	if s.refreshing || s.cfg.Token == "" {
+	// An account with no username yet answers without one every time: ask
+	// again at most every 30 seconds, not on every status poll.
+	if s.refreshing || s.cfg.Token == "" || time.Since(s.identityAt) < 30*time.Second {
 		s.mu.Unlock()
 		return
 	}
 	s.refreshing = true
+	s.identityAt = time.Now()
 	endpoint, tok := s.cfg.Endpoint, s.cfg.Token
 	s.mu.Unlock()
 
@@ -164,6 +171,9 @@ func (s *Server) refreshIdentity() {
 	}
 	if uid != "" {
 		s.orch.SetUserID(uid)
+		s.mu.Lock()
+		s.userID = uid
+		s.mu.Unlock()
 	}
 }
 
@@ -178,6 +188,7 @@ func NewServer(cfg config.Config, version string) *Server {
 	if cfg.Token != "" {
 		var uid string
 		s.username, s.avatar, uid = whoami(cfg.Endpoint, cfg.Token)
+		s.userID, s.identityAt = uid, time.Now()
 		s.orch.SetUsername(s.username)
 		s.orch.SetUserID(uid)
 		s.orch.Start() // already linked → auto-start collecting
@@ -246,8 +257,10 @@ func (s *Server) maybeAutoUpdate() {
 		return
 	}
 	if err := install.ApplyUpdate(ver); err != nil {
+		applog.Printf("auto update to %s failed: %v", ver, err)
 		return
 	}
+	applog.Printf("auto update to %s installed, restarting", ver)
 	install.Restart(true)
 }
 
@@ -376,6 +389,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/update-apply", s.hUpdateApply)
 	mux.HandleFunc("/api/update-later", s.hUpdateLater)
 	mux.HandleFunc("/api/update-check", s.hUpdateCheck)
+	mux.HandleFunc("/api/diagnose", s.hDiagnose)
+	mux.HandleFunc("/api/export-logs", s.hExportLogs)
+	mux.HandleFunc("/api/open-onboarding", s.hOpenOnboarding)
 	// Local OBS overlay data: the overlay page (below, or the glow.moe page with
 	// ?src=local) reads the current masked League snapshot from here instead of
 	// polling glow.moe, so the ~2s live poll never touches our server.
@@ -503,10 +519,14 @@ func (s *Server) hStatus(w http.ResponseWriter, _ *http.Request) {
 		"username": s.username,
 		"avatar":   s.avatar,
 		"linking":  s.linking,
-		"running":  s.orch.Running(),
-		"status":   s.orch.Status(),
-		"league":   orchestrator.LeagueSupported(),
-		"update":   map[string]any{"version": s.updateVer, "url": update.ReleasesPage},
+		"linkCode": s.linkCode,
+		// Linked to an account that hasn't picked a username: nothing shows
+		// until it does (glow.moe/onboarding).
+		"noProfile": linked && s.userID != "" && s.username == "",
+		"running":   s.orch.Running(),
+		"status":    s.orch.Status(),
+		"league":    orchestrator.LeagueSupported(),
+		"update":    map[string]any{"version": s.updateVer, "url": update.ReleasesPage},
 	}
 	s.mu.Unlock()
 	// Recover the name/avatar if the startup whoami came back empty (cold network).
@@ -669,6 +689,7 @@ func (s *Server) hLink(w http.ResponseWriter, r *http.Request) {
 		s.cfg.Token = ""
 		s.username = ""
 		s.avatar = ""
+		s.userID = ""
 		cfg := s.cfg
 		s.mu.Unlock()
 		_ = config.Save(cfg)
@@ -689,9 +710,19 @@ func (s *Server) hLink(w http.ResponseWriter, r *http.Request) {
 		base := pair.BaseFrom(s.cfg.Endpoint)
 		s.mu.Unlock()
 		go func() {
-			tok, err := pair.Run(base)
+			tok, err := pair.Run(base, func(code string) {
+				s.mu.Lock()
+				s.linkCode = code
+				s.mu.Unlock()
+			})
+			if err != nil {
+				applog.Printf("link failed: %v", err)
+			} else {
+				applog.Printf("link approved")
+			}
 			s.mu.Lock()
 			s.linking = false
+			s.linkCode = ""
 			if err == nil && tok != "" {
 				s.cfg.Token = tok
 				cfg := s.cfg
@@ -700,6 +731,7 @@ func (s *Server) hLink(w http.ResponseWriter, r *http.Request) {
 				s.orch.SetConfig(cfg)
 				name, av, uid := whoami(cfg.Endpoint, tok)
 				s.mu.Lock()
+				s.userID, s.identityAt = uid, time.Now()
 				s.username = name
 				s.avatar = av
 				s.orch.SetUsername(name)
@@ -726,6 +758,7 @@ func (s *Server) hLink(w http.ResponseWriter, r *http.Request) {
 	s.orch.SetConfig(cfg)
 	name, av, uid := whoami(cfg.Endpoint, tok)
 	s.mu.Lock()
+	s.userID, s.identityAt = uid, time.Now()
 	s.username = name
 	s.avatar = av
 	s.orch.SetUsername(name)

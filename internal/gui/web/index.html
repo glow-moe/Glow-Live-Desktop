@@ -86,6 +86,14 @@
       }
       .opt { display: flex; align-items: center; gap: 8px; margin-top: 8px; cursor: pointer; }
       .opt input { accent-color: #b05cff; flex: 0 0 auto; }
+      .note { margin-top: 10px; padding: 9px 11px; border-radius: 12px; background: #fff4e5; color: #8a5a12; font-size: 12px; line-height: 1.45; }
+      .note a { color: #b8620a; font-weight: 800; text-decoration: none; }
+      .code { margin-top: 12px; text-align: center; font-size: 12px; color: #6b5478; }
+      .code b { display: block; margin-top: 4px; font-size: 26px; letter-spacing: 6px; color: #2a1736; }
+      .checks { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+      .checks div { display: flex; gap: 7px; align-items: flex-start; font-size: 11.5px; line-height: 1.4; color: #5c4668; }
+      .checks .dot { margin-top: 4px; }
+      .checks .dot.ok { background: #34d399; }
       .grow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
       .grow .name { font-size: 12px; font-weight: 700; color: #6a4c78; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       /* iOS-style switch */
@@ -120,6 +128,10 @@
         driving telemetry (Forza)</span> then show on your page - only while this runs.
       </div>
       <button class="btn" id="btn-browser">Link with browser</button>
+      <div class="code hide" id="link-code-box">
+        Type this code on the glow.moe page that opened:
+        <b id="link-code"></b>
+      </div>
       <div class="foot" style="margin-top:12px">
         You'll approve this device on glow.moe - no keys to copy or paste.
       </div>
@@ -133,6 +145,10 @@
           <div class="uname" id="uname">@you</div>
           <div class="sub">linked to glow.moe</div>
         </div>
+      </div>
+      <div class="note hide" id="noprofile">
+        Your glow account has no username yet, so there's no page to show this on.
+        <a href="#" id="noprofile-btn">Pick a username ↗</a>
       </div>
 
       <div class="status">
@@ -212,6 +228,18 @@
       </div>
       <div id="games-list"></div>
       <div class="muted hide" id="games-empty">Play a Steam game and it shows up here.</div>
+
+      <div class="sechead">Help</div>
+      <div class="muted" style="margin-bottom:8px">
+        Something off? Test the connection, or export the app's log and send it to us
+        (Discord or a support ticket on glow.moe). Your key is never in it.
+      </div>
+      <div class="row" style="gap:10px; flex-wrap:wrap">
+        <button class="btn ghost" id="btn-diagnose" style="margin-top:0; flex:0 0 auto; width:auto; padding:8px 14px">Test connection</button>
+        <button class="btn ghost" id="btn-export" style="margin-top:0; flex:0 0 auto; width:auto; padding:8px 14px">Export logs</button>
+      </div>
+      <div class="checks" id="checks"></div>
+      <div class="muted" id="export-msg" style="margin-top:6px"></div>
 
       <div class="sechead">On the site</div>
       <a href="#" id="settings-link" class="foot" style="display:block; margin-top:2px; text-align:left">
@@ -390,6 +418,43 @@
         } else msg.textContent = "You're on the latest (" + r.current + ").";
       };
 
+      // ── Help: connection test + log export ──
+      $("btn-diagnose").onclick = async () => {
+        const btn = $("btn-diagnose");
+        btn.disabled = true;
+        $("checks").textContent = "Testing…";
+        const r = await api("diagnose", {});
+        btn.disabled = false;
+        const box = $("checks");
+        box.textContent = "";
+        for (const c of r.checks || []) {
+          const row = document.createElement("div");
+          const dot = document.createElement("span");
+          dot.className = "dot " + (c.ok ? "ok" : "err");
+          const txt = document.createElement("span");
+          const b = document.createElement("b");
+          b.textContent = c.name + ": ";
+          txt.append(b, document.createTextNode(c.detail));
+          row.append(dot, txt);
+          box.append(row);
+        }
+        if (!(r.checks || []).length) box.textContent = "Couldn't run the test.";
+      };
+      $("btn-export").onclick = async () => {
+        const btn = $("btn-export");
+        btn.disabled = true;
+        $("export-msg").textContent = "Exporting…";
+        const r = await api("export-logs", {});
+        btn.disabled = false;
+        $("export-msg").textContent = r.ok
+          ? "Saved " + r.name + " in Downloads. Send that file to us."
+          : "Couldn't save the log" + (r.error ? ": " + r.error : ".");
+      };
+      $("noprofile-btn").onclick = (e) => {
+        e.preventDefault();
+        api("open-onboarding", {});
+      };
+
       // ── Poll status ──
       function render(s) {
         if (s.version) $("ver").textContent = s.version;
@@ -409,6 +474,8 @@
         }
         const linked = s.linked;
         applyView(linked);
+        $("link-code").textContent = s.linkCode || "";
+        $("link-code-box").classList.toggle("hide", !(s.linking && s.linkCode));
         if (s.linking) {
           $("btn-browser").textContent = "Waiting for browser…";
           $("btn-browser").disabled = true;
@@ -418,6 +485,7 @@
         }
         if (!linked) return;
 
+        $("noprofile").classList.toggle("hide", !s.noProfile);
         const name = s.username || "you";
         $("uname").textContent = "@" + name;
         const initial = (name[0] || "?").toUpperCase();

@@ -26,6 +26,9 @@ func FellBack() string { return "" }
 // MarkHealthy is a no-op off Windows.
 func MarkHealthy(string) {}
 
+// Describe is "" off Windows (no release folders).
+func Describe() string { return "" }
+
 // IsBad is always false off Windows.
 func IsBad(string) bool { return false }
 

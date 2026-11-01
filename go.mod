@@ -1,6 +1,6 @@
 module github.com/glow-moe/glow-collector
 
-go 1.22
+go 1.23
 
 require (
 	github.com/minio/selfupdate v0.6.0

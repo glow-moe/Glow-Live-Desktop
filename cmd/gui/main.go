@@ -16,10 +16,12 @@ import (
 
 	webview "github.com/webview/webview_go"
 
+	"github.com/glow-moe/glow-collector/internal/applog"
 	"github.com/glow-moe/glow-collector/internal/autostart"
 	"github.com/glow-moe/glow-collector/internal/config"
 	"github.com/glow-moe/glow-collector/internal/gui"
 	"github.com/glow-moe/glow-collector/internal/install"
+	"github.com/glow-moe/glow-collector/internal/pair"
 	"github.com/glow-moe/glow-collector/internal/single"
 )
 
@@ -48,6 +50,7 @@ func reportQuit(how string) {
 		if appServer == nil {
 			return
 		}
+		applog.Printf("quit how=%s", how)
 		done := make(chan struct{})
 		go func() { appServer.ReportLifecycle("quit", "how="+how); close(done) }()
 		select {
@@ -92,11 +95,15 @@ func onOff(b bool, on, off string) string {
 func main() {
 	runtime.LockOSThread() // the GUI must own the main OS thread
 
+	applog.CatchCrashes()
+	pair.Version = version
+
 	// Windows: the launcher, or a downloaded copy installing itself, ends here
 	// (see internal/install). What's left runs as the app.
 	if install.Launch(version) {
 		return
 	}
+	applog.Printf("start %s how=%s", version, launchHow(os.Args[1:]))
 
 	// A post-update relaunch (see internal/update.Relaunch) races the old copy's
 	// shutdown; give it a moment to release the single-instance lock first.

@@ -17,6 +17,10 @@ var client = &http.Client{Timeout: 8 * time.Second}
 // to it (HTTP 426). The caller should stop and tell the user to update.
 var ErrOutdated = errors.New("this app version is no longer supported")
 
+// ErrUnlinked is a push turned down for its key (HTTP 401): the PC was
+// unlinked on glow.moe, or the password changed, which unlinks every PC.
+var ErrUnlinked = errors.New("this PC is no longer linked")
+
 // version is the build label, reported to the server on every push so it can
 // turn away builds that are too old. Set once at startup via SetVersion.
 var version = "dev"
@@ -51,6 +55,9 @@ func Post(endpoint, token string, delaySec int, snap any) error {
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUpgradeRequired { // 426: build too old
 		return ErrOutdated
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		return ErrUnlinked
 	}
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("ingest returned %s", resp.Status)

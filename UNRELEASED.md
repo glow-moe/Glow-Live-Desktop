@@ -10,3 +10,7 @@ and gets cleared.
 - Windows: updates work like Discord's now. Each release gets its own folder next to a small launcher, an update is a new folder (never a file written over the running one), and the launcher starts the newest. If a new build dies before it has run a minute (an antivirus removed it, a crash), the launcher goes back to the previous one and skips that release. Opening an old downloaded copy just starts the installed app instead of replacing it. The first start after this update moves the install over by itself.
 - When glow.moe can't be reached at all, the status line says so in plain words (your internet, or your provider blocking it) instead of a raw network error, and the app tries a second glow.moe address that skips Cloudflare when glow.moe hands one out.
 - glow.moe can put a bad release on hold: no app updates itself to it until it's taken off.
+- Linking shows a 4-digit code that you type on the glow.moe page, so a link someone sends you can't link their app to your account. The page also says which country the app is in.
+- A linked account with no username yet gets a Pick a username button instead of asking glow.moe every second.
+- If glow.moe turns this PC's key down (unlinked on the site, or the password changed), the status says to link again.
+- Settings > Help: Test connection (glow.moe, the backup address, this PC's link, Discord, updates, what's being read) and Export logs, which saves a log file to Downloads to send us. Nothing is sent on its own and the key is never in it.

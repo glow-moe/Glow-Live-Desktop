@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/glow-moe/glow-collector/internal/applog"
 	"github.com/glow-moe/glow-collector/internal/config"
 	"github.com/glow-moe/glow-collector/internal/ddragon"
 	"github.com/glow-moe/glow-collector/internal/discord"
@@ -1136,6 +1137,14 @@ func (o *Orchestrator) discordHiddenLocked(now time.Time) bool {
 }
 
 // Running reports whether the loop is active.
+// DiscordState says whether a Discord client is connected and, when not, the
+// last connect error ("Discord not running").
+func (o *Orchestrator) DiscordState() (bool, string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.dc != nil, o.dcFailErr
+}
+
 func (o *Orchestrator) Running() bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -1573,7 +1582,9 @@ func (o *Orchestrator) post(cfg config.Config, delaySec int, snap any, st *Statu
 	}
 	if err := poster.Post(cfg.Endpoint, cfg.Token, delaySec, json.RawMessage(b)); err != nil {
 		o.failed()
-		if errors.Is(err, poster.ErrOutdated) {
+		if errors.Is(err, poster.ErrUnlinked) {
+			st.Err = unlinkedMsg
+		} else if errors.Is(err, poster.ErrOutdated) {
 			st.Err = "Update required: this version is no longer supported. Get the latest from glow.moe."
 			o.mu.Lock()
 			o.outdated = true
@@ -1604,6 +1615,9 @@ func (o *Orchestrator) post(cfg config.Config, delaySec int, snap any, st *Statu
 
 func (o *Orchestrator) set(s Status) {
 	o.mu.Lock()
+	if prev := o.status; prev.Err != s.Err || prev.Game != s.Game || prev.InGame != s.InGame {
+		applog.Printf("status game=%q inGame=%v detail=%q err=%q", s.Game, s.InGame, s.Detail, s.Err)
+	}
 	if !o.lastPushAt.IsZero() {
 		s.LastPushAt = o.lastPushAt.UnixMilli()
 	}
@@ -1617,11 +1631,14 @@ func (o *Orchestrator) set(s Status) {
 	o.emit(s)
 }
 
+// unlinkedMsg is the status line when glow.moe turns this PC's key down.
+const unlinkedMsg = "Not linked anymore (unlinked on glow.moe, or your password changed). Use unlink / switch account to link again."
+
 // unreachableMsg is the status line when glow.moe can't be reached at all.
 const unreachableMsg = "Can't reach glow.moe: your internet, or your provider blocking it. Trying again."
 
 // Errors that are states, not failures: nothing to fix on our side.
-var quietErrors = []string{"not linked", "Update required"}
+var quietErrors = []string{"not linked", "Not linked anymore", "Update required"}
 
 const (
 	reportEvery    = time.Hour // same message at most once per hour

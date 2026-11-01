@@ -29,7 +29,13 @@ type startResp struct {
 	ID     string `json:"id"`
 	Secret string `json:"secret"`
 	URL    string `json:"url"`
+	// Code is what the person types on the glow.moe page, proving the page is
+	// the one this PC opened (not a link someone sent them).
+	Code string `json:"code"`
 }
+
+// Version is sent with the start so glow.moe knows this build shows the code.
+var Version = "dev"
 
 type statusResp struct {
 	Approved bool   `json:"approved"`
@@ -38,10 +44,14 @@ type statusResp struct {
 }
 
 // Run performs the whole flow and returns the push token, or an error/timeout.
-func Run(base string) (string, error) {
+// onCode gets the code to show while the page waits for it (nil: not shown).
+func Run(base string, onCode func(string)) (string, error) {
 	sr, err := start(base)
 	if err != nil {
 		return "", err
+	}
+	if onCode != nil && sr.Code != "" {
+		onCode(sr.Code)
 	}
 	fmt.Println("\nAuthorize this device in your browser:")
 	fmt.Println("  " + sr.URL)
@@ -71,7 +81,13 @@ func Run(base string) (string, error) {
 
 func start(base string) (startResp, error) {
 	var sr startResp
-	resp, err := httpClient.Post(base+"/api/live/pair/start", "application/json", bytes.NewReader([]byte("{}")))
+	req, err := http.NewRequest(http.MethodPost, base+"/api/live/pair/start", bytes.NewReader([]byte("{}")))
+	if err != nil {
+		return sr, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Glow-Live-Version", Version)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return sr, err
 	}

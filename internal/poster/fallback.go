@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/glow-moe/glow-collector/internal/applog"
 )
 
 // A second address for glow.moe that skips Cloudflare, for when a provider
@@ -52,6 +54,14 @@ func loadFallback() {
 			fallback = strings.TrimSpace(string(b))
 		}
 	}
+}
+
+// Fallback is the fallback address in use ("" when none).
+func Fallback() string {
+	fbMu.Lock()
+	defer fbMu.Unlock()
+	loadFallback()
+	return fallback
 }
 
 // SetFallback records the fallback address from the L!VE settings ("" clears
@@ -111,6 +121,9 @@ func Do(c *http.Client, req *http.Request) (*http.Response, error) {
 		if err == nil {
 			fbMu.Lock()
 			if base != "" {
+				if !time.Now().Before(fbUntil) {
+					applog.Printf("glow.moe unreachable, using the backup address")
+				}
 				fbUntil = time.Now().Add(fallbackFor)
 			} else {
 				fbUntil = time.Time{} // glow.moe answers again
