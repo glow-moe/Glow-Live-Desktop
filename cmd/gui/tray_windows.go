@@ -188,6 +188,15 @@ static void glow_hide_to_tray(HWND hwnd) {
     g_balloonShown = 1;
 }
 
+// glow_start_hidden puts a window that should never have been seen (a start
+// with the computer) in the tray without the "still running" balloon: nobody
+// closed anything, so there is nothing to explain.
+static void glow_start_hidden(void *win) {
+    if (!win) return;
+    ShowWindow((HWND)win, SW_HIDE);
+    g_balloonShown = 1;
+}
+
 // glow_hide is the void* entry point Go calls to auto-hide to the tray.
 static void glow_hide(void *win) {
     if (win) glow_hide_to_tray((HWND)win);
@@ -361,6 +370,12 @@ func pinBottomRight(win unsafe.Pointer, w, h int) {
 // collector starts pushing so the widget doesn't sit open on screen.
 func hideToTray(win unsafe.Pointer) {
 	C.glow_hide(win)
+}
+
+// startInTray hides the window at a start with the computer, quietly (no
+// balloon): the app just sits in the tray.
+func startInTray(win unsafe.Pointer) {
+	C.glow_start_hidden(win)
 }
 
 // showWindow brings the window back from the tray; same path the tray menu's

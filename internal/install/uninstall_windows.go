@@ -79,6 +79,7 @@ func Register(version string) {
 	C.glow_reg_sz(k, w("DisplayName"), w("glow L!VE"))
 	C.glow_reg_sz(k, w("DisplayVersion"), w(strings.TrimPrefix(version, "v")))
 	C.glow_reg_sz(k, w("Publisher"), w("SplitFlux LLC"))
+	C.glow_reg_sz(k, w("DisplayIcon"), w(target+",0"))
 	C.glow_reg_sz(k, w("InstallLocation"), w(installDir()))
 	C.glow_reg_sz(k, w("UninstallString"), w(`"`+target+`" --uninstall`))
 	C.glow_reg_sz(k, w("QuietUninstallString"), w(`"`+target+`" --uninstall --quiet`))

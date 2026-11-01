@@ -11,5 +11,8 @@ func enableCloseToTray(win unsafe.Pointer) {}
 // hideToTray is a no-op off Windows (no tray to hide into).
 func hideToTray(win unsafe.Pointer) {}
 
+// startInTray is a no-op where there is no tray.
+func startInTray(win unsafe.Pointer) {}
+
 // trayUpdate is a no-op where there is no tray.
 func trayUpdate(line string, alert, hasProfile, dcHidden, inGame, profHidden bool) {}

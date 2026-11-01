@@ -200,7 +200,8 @@ func main() {
 		moveBottomRight(w.Window(), winW, winH)
 		enableCloseToTray(w.Window()) // close button hides to tray
 		if startHidden {
-			hideToTray(w.Window())
+			// Quietly: a start with the computer shows nothing on screen.
+			startInTray(w.Window())
 		}
 	})
 	// Auto-tuck into the tray once the collector starts pushing. The server fires

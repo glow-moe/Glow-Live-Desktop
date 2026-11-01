@@ -203,6 +203,9 @@ func enableCloseToTray(win unsafe.Pointer) {
 	}
 }
 
+// startInTray is the same as hideToTray here (no balloon on Linux).
+func startInTray(win unsafe.Pointer) { hideToTray(win) }
+
 // hideToTray hides the window; the tray icon is the way back. Without a tray
 // there is nothing to come back from, so it refuses to strand the window.
 func hideToTray(win unsafe.Pointer) {
