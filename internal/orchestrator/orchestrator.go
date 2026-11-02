@@ -239,11 +239,14 @@ type overlayShow struct {
 	Mode   string `json:"mode"`
 }
 
-func fetchSettings(endpoint, token string) (liveSettings, bool) {
+// fetchSettings reads the member's L!VE settings. err is poster.ErrUnlinked
+// when glow.moe turns the key down (401), so an app that isn't pushing (no
+// game open) still finds out its PC was unlinked.
+func fetchSettings(endpoint, token string) (liveSettings, error) {
 	var s liveSettings
 	req, err := http.NewRequest(http.MethodGet, pair.BaseFrom(endpoint)+"/api/live/settings", nil)
 	if err != nil {
-		return s, false
+		return s, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	// The server's release gate applies here too: without the version the read
@@ -251,14 +254,17 @@ func fetchSettings(endpoint, token string) (liveSettings, bool) {
 	req.Header.Set("X-Glow-Live-Version", poster.Version())
 	resp, err := poster.Do(&http.Client{Timeout: 6 * time.Second}, req)
 	if err != nil {
-		return s, false
+		return s, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return s, poster.ErrUnlinked
+	}
 	if resp.StatusCode != http.StatusOK {
-		return s, false
+		return s, fmt.Errorf("settings returned %s", resp.Status)
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
-		return s, false
+		return s, err
 	}
 	poster.SetFallback(s.FallbackBase)
 	if s.DotaNames != nil {
@@ -267,7 +273,7 @@ func fetchSettings(endpoint, token string) (liveSettings, bool) {
 	if s.LolNames != nil {
 		lcu.SetNames(s.LolNames.Queues, s.LolNames.Modes, s.LolNames.Maps)
 	}
-	return s, true
+	return s, nil
 }
 
 // animeSnap is the "now watching" the browser extension pushes to glow.moe. The
@@ -970,8 +976,8 @@ type Orchestrator struct {
 	dcFailErr string
 	errDetail string // the raw error behind a friendlier Status.Err, for the report
 	// onUnlinked runs when glow.moe turns this PC's key down (the GUI clears
-	// the link and shows the link screen again).
-	onUnlinked func()
+	// the link and shows the link screen again), with the key it turned down.
+	onUnlinked func(token string)
 	username   string
 	userID     string // profile cuid, for reading own anime "now watching"
 	// readingTitle / readingStart: the series on Discord and since when.
@@ -1081,10 +1087,21 @@ func (o *Orchestrator) SetUserID(id string) {
 // SetConfig swaps the config the loop reads (token/delay changes take effect
 // next tick; poll interval applies on the next Start).
 // OnUnlinked registers what happens when glow.moe turns this PC's key down.
-func (o *Orchestrator) OnUnlinked(fn func()) {
+func (o *Orchestrator) OnUnlinked(fn func(token string)) {
 	o.mu.Lock()
 	o.onUnlinked = fn
 	o.mu.Unlock()
+}
+
+// unlinked hands the turned-down key to OnUnlinked's func, off the tick (it
+// stops the orchestrator, which waits for the tick).
+func (o *Orchestrator) unlinked(token string) {
+	o.mu.Lock()
+	fn := o.onUnlinked
+	o.mu.Unlock()
+	if fn != nil {
+		go fn(token)
+	}
 }
 
 func (o *Orchestrator) SetConfig(cfg config.Config) {
@@ -1306,12 +1323,16 @@ func (o *Orchestrator) tick() {
 		o.mu.Lock()
 		o.settingsTriedAt = time.Now()
 		o.mu.Unlock()
-		if s, ok := fetchSettings(cfg.Endpoint, cfg.Token); ok {
+		s, err := fetchSettings(cfg.Endpoint, cfg.Token)
+		if err == nil {
 			o.mu.Lock()
 			o.settings = s
 			o.settingsAt = time.Now()
 			o.mu.Unlock()
 			settings = s
+		} else if errors.Is(err, poster.ErrUnlinked) {
+			o.unlinked(cfg.Token)
+			return
 		}
 	}
 	effDelay := settings.DelaySec
@@ -1645,12 +1666,7 @@ func (o *Orchestrator) post(cfg config.Config, delaySec int, snap any, st *Statu
 		o.failed()
 		if errors.Is(err, poster.ErrUnlinked) {
 			st.Err = unlinkedMsg
-			o.mu.Lock()
-			fn := o.onUnlinked
-			o.mu.Unlock()
-			if fn != nil {
-				go fn()
-			}
+			o.unlinked(cfg.Token)
 		} else if errors.Is(err, poster.ErrOutdated) {
 			st.Err = "Update required: this version is no longer supported. Get the latest from glow.moe."
 			o.mu.Lock()

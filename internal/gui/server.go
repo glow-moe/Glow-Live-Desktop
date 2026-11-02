@@ -54,6 +54,7 @@ type Server struct {
 	linkCode    string    // the code to type on the glow.moe page while linking
 	quit        func()    // the app's real exit (set by main)
 	wasUnlinked bool      // glow.moe turned the key down: the link screen says so
+	linkPrompt  bool      // that link screen still has to be brought up (the user was busy)
 	// whatsNew is the release this build is, with its notes, shown once after
 	// an update until closed.
 	whatsNew      string
@@ -257,6 +258,7 @@ func (s *Server) watchUpdates() {
 		for {
 			s.maybeAutoUpdate()
 			s.maybePromptUpdate()
+			s.maybePromptLink()
 			time.Sleep(time.Minute)
 		}
 	}()
@@ -372,6 +374,22 @@ func (s *Server) maybePromptUpdate() {
 	}
 	s.mu.Lock()
 	s.prompted, s.peeked = key, true
+	s.mu.Unlock()
+}
+
+// maybePromptLink brings the window up in its corner (no focus taken) with the
+// link screen after glow.moe turned this PC's key down, so a copy that lives
+// in the tray doesn't sit there linked to nothing. Waits out full screen.
+func (s *Server) maybePromptLink() {
+	s.mu.Lock()
+	peek := s.peekWindow
+	due := s.linkPrompt && s.cfg.Token == "" && peek != nil
+	s.mu.Unlock()
+	if !due || !peek() {
+		return
+	}
+	s.mu.Lock()
+	s.linkPrompt = false
 	s.mu.Unlock()
 }
 
@@ -742,7 +760,7 @@ func (s *Server) hLink(w http.ResponseWriter, r *http.Request) {
 	if body.Unlink {
 		s.orch.Stop()
 		s.mu.Lock()
-		s.wasUnlinked = false
+		s.wasUnlinked, s.linkPrompt = false, false
 		s.cfg.Token = ""
 		s.username = ""
 		s.avatar = ""

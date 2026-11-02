@@ -239,19 +239,29 @@ func (s *Server) hWhatsNewSeen(w http.ResponseWriter, _ *http.Request) {
 // dropLink forgets a key glow.moe turned down (this PC was removed on the
 // site, or the password changed): the app goes back to its link screen, with
 // the big Link button and a line saying why, instead of a status to decode.
-func (s *Server) dropLink() {
+func (s *Server) dropLink(token string) {
+	s.mu.Lock()
+	// Only the key glow.moe turned down: a read that left before linking again
+	// can't drop the new one.
+	if s.cfg.Token == "" || s.cfg.Token != token {
+		s.mu.Unlock()
+		return
+	}
+	s.mu.Unlock()
 	s.orch.Stop()
 	s.mu.Lock()
-	if s.cfg.Token == "" {
+	if s.cfg.Token != token {
 		s.mu.Unlock()
 		return
 	}
 	s.cfg.Token = ""
 	s.username, s.avatar, s.userID = "", "", ""
 	s.wasUnlinked = true
+	s.linkPrompt = true
 	cfg := s.cfg
 	s.mu.Unlock()
 	_ = config.Save(cfg)
 	s.orch.SetConfig(cfg)
 	applog.Printf("glow.moe turned this PC's key down: back to the link screen")
+	s.maybePromptLink()
 }
