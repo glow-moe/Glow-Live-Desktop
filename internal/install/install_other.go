@@ -1,44 +1,46 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package install
 
 import "github.com/glow-moe/glow-collector/internal/update"
 
-// Off Windows the app runs from wherever the user put it (Linux) or from its
-// .app bundle (macOS), and updates swap the binary in place: no launcher.
+// On macOS the app runs from its .app bundle, and updates swap the binary
+// inside it in place: no launcher.
 
-// Launch is a no-op off Windows.
+// exeName is unused here (no release folders); versions.go names it.
+const exeName = "glow-live"
+
+// Launch is a no-op on macOS.
 func Launch(string) bool { return false }
 
-// Relocate is a no-op off Windows: Linux runs from wherever the user put the
-// binary, and its autostart entry names the app itself.
+// Relocate is a no-op on macOS.
 func Relocate(string) bool { return false }
 
-// Installed is always true off Windows: wherever the app runs is its home.
+// Installed is always true on macOS: the bundle is its home.
 func Installed() bool { return true }
 
-// Supervised is always false off Windows (no launcher).
+// Supervised is always false on macOS (no launcher).
 func Supervised() bool { return false }
 
-// FellBack is always "" off Windows.
+// FellBack is always "" on macOS.
 func FellBack() string { return "" }
 
-// MarkHealthy is a no-op off Windows.
+// MarkHealthy is a no-op on macOS.
 func MarkHealthy(string) {}
 
-// Describe is "" off Windows (no release folders).
+// Describe is "" on macOS (no release folders).
 func Describe() string { return "" }
 
-// NoteShutdown is a no-op off Windows.
+// NoteShutdown is a no-op on macOS.
 func NoteShutdown() {}
 
-// Register and Uninstall are no-ops off Windows (no Installed apps list).
+// Register is a no-op on macOS.
 func Register(string) {}
 
-// Uninstall is a no-op off Windows.
+// Uninstall is a no-op on macOS (the bundle goes to the Trash).
 func Uninstall(bool) {}
 
-// IsBad is always false off Windows.
+// IsBad is always false on macOS.
 func IsBad(string) bool { return false }
 
 // ApplyUpdate swaps the running binary for release `tag`.

@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/glow-moe/glow-collector/internal/install"
 )
 
 func entryPath() (string, error) {
@@ -33,9 +35,13 @@ func Set(on bool) error {
 		}
 		return err
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return err
+	// Always the installed launcher when there is one (as on Windows): the
+	// download it came from may be deleted later.
+	exe := install.Target()
+	if fi, err := os.Stat(exe); exe == "" || err != nil || fi.IsDir() {
+		if exe, err = os.Executable(); err != nil {
+			return err
+		}
 	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err

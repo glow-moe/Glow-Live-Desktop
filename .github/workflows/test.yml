@@ -1,0 +1,32 @@
+# The packages' tests and a Linux build of the app, on every push to main and
+# by hand: the Linux install and launcher only run here before a release.
+name: test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev
+
+      - name: Test the packages
+        run: go test ./internal/...
+
+      - name: Build the app
+        run: PKG_CONFIG_PATH="$PWD/.pkgconfig-shim:$PKG_CONFIG_PATH" CGO_ENABLED=1 go build -o /tmp/glow-live ./cmd/gui

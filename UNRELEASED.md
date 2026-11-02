@@ -27,5 +27,6 @@ and gets cleared.
 - Windows: a build that keeps asking to restart stops after 4 tries in 10 minutes instead of looping.
 - Dota 2: between matches the status says you're in the menu instead of Steam's old line.
 - How long a new release waits before installing itself (it never installs mid-game) is set by glow.moe; 24 hours if the app can't ask.
+- Linux: the app installs itself like a normal program. Opened from Downloads it moves to ~/.local/share/glow-live, shows up in the app menu (right-click it to uninstall) and starts with the computer from there. Updates land in a folder of their own and a build that fails to start falls back to the last one, as on Windows.
 - A PC removed on glow.moe (or after a password change) goes back to the link screen right away, and the window opens in its corner to say so, even with no game open. It used to sit on "@you" until the next game.
 - Steam: the built-in game table refreshed (20109 games) so new releases get their own "Playing <game>" headline offline too.

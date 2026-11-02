@@ -13,7 +13,8 @@ import (
 // Each release lives in its own folder next to the launcher, the way Discord
 // keeps app-1.0.x folders: an update is a new folder, never a file written
 // over a running one, so the previous build is still there when the new one
-// gets removed by an antivirus or dies on start.
+// gets removed by an antivirus or dies on start. On Linux the same, with
+// glow-live/glow-live in place of the names below.
 //
 //	glow L!VE\
 //	  glow L!VE.exe        the launcher (same binary, see Launch)
@@ -22,7 +23,6 @@ import (
 //	  app-26.13\glow L!VE.exe, bad       (died before that: skipped)
 
 const (
-	exeName     = "glow L!VE.exe"
 	appPrefix   = "app-"
 	healthyMark = "healthy"
 	badMark     = "bad"
@@ -128,6 +128,11 @@ func copyExe(src, dst string) error {
 		return err
 	}
 	if err := out.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	// Linux starts only files marked executable (no-op on Windows).
+	if err := os.Chmod(tmp, 0o755); err != nil {
 		os.Remove(tmp)
 		return err
 	}

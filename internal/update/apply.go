@@ -127,6 +127,9 @@ func Download(tag, dst string) error {
 	if err == nil && hex.EncodeToString(h.Sum(nil)) != shaHex {
 		err = errors.New("checksum mismatch")
 	}
+	if err == nil {
+		err = os.Chmod(tmp, 0o755) // Linux starts only files marked executable
+	}
 	if err != nil {
 		os.Remove(tmp)
 		return err
