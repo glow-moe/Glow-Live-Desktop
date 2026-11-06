@@ -25,6 +25,7 @@ func (s *Snapshot) Mask(hideMyName, hideOtherNames bool) {
 			hidden[n] = true
 		}
 		p.Summoner = hiddenName
+		p.Tag = ""
 	}
 	for i := range s.Blue {
 		if s.Blue[i].IsMe {

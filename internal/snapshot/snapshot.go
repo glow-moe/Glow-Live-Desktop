@@ -72,6 +72,9 @@ type Player struct {
 	IsMe      bool     `json:"isMe"`
 	// Lane: TOP, JUNGLE, MIDDLE, BOTTOM or UTILITY; "" when unknown.
 	Role string `json:"role,omitempty"`
+	// Riot tag, for the site to match the player to a Glow member. The site drops
+	// it on arrival: it is never stored or shown.
+	Tag string `json:"tag,omitempty"`
 }
 
 type FeedEvent struct {
@@ -463,6 +466,7 @@ func mapPlayer(p live.Player, isMe bool) Player {
 	for _, it := range p.Items {
 		items = append(items, it.ItemID)
 	}
+	_, tag := splitRiotID(p.RiotID, p.RiotIDName, p.SummonerName)
 	name := p.RiotIDName
 	if name == "" {
 		name = p.SummonerName
@@ -484,6 +488,7 @@ func mapPlayer(p live.Player, isMe bool) Player {
 		Respawn:   int(math.Round(p.RespawnTimer)),
 		IsMe:      isMe,
 		Role:      laneOf(p.Position, spells, items),
+		Tag:       tag,
 	}
 }
 

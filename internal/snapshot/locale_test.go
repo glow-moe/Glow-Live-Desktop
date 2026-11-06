@@ -90,3 +90,10 @@ func TestDrakeNames(t *testing.T) {
 		}
 	}
 }
+
+func TestMapPlayerSendsTheRiotTag(t *testing.T) {
+	row := mapPlayer(live.Player{RiotID: "Melisa#TR1", RiotIDName: "Melisa"}, false)
+	if row.Summoner != "Melisa" || row.Tag != "TR1" {
+		t.Fatalf("got name %q tag %q", row.Summoner, row.Tag)
+	}
+}

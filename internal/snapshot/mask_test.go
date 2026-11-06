@@ -63,3 +63,16 @@ func TestReplaceNameWholeWordsOnly(t *testing.T) {
 		t.Fatalf("whole name not replaced: %q", got)
 	}
 }
+
+func TestMaskDropsTheTagOfAHiddenPlayer(t *testing.T) {
+	s := sample()
+	s.Blue[0].Tag = "EUW"
+	s.Red[0].Tag = "aykms"
+	s.Mask(false, true)
+	if s.Blue[0].Tag != "" {
+		t.Fatalf("hidden player kept the tag: %+v", s.Blue[0])
+	}
+	if s.Red[0].Tag != "aykms" {
+		t.Fatalf("own row lost the tag: %+v", s.Red[0])
+	}
+}
