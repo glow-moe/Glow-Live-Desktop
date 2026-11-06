@@ -240,6 +240,8 @@ type Snapshot struct {
 	Feed      []FeedEvent `json:"feed"`
 	// Lobby is set instead of the match fields when out of game.
 	Lobby *Lobby `json:"lobby,omitempty"`
+	// Tft is set on a Teamfight Tactics game, in place of the match fields.
+	Tft *TFT `json:"tft,omitempty"`
 	// Raw holds the League client reads glow.moe asked for (its settings'
 	// lcuReads), keyed by the site's names and sent back untouched.
 	Raw map[string]json.RawMessage `json:"raw,omitempty"`
@@ -889,8 +891,10 @@ func mapLabel(g live.GameData) string {
 		return "Summoner's Rift"
 	case 12:
 		return "Howling Abyss"
-	case 21, 22:
+	case 21:
 		return "Nexus Blitz"
+	case 22:
+		return "Convergence"
 	case 30:
 		return "Arena"
 	}

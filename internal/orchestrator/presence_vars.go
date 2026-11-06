@@ -45,6 +45,14 @@ func leagueVars(s snapshot.Snapshot) map[string]string {
 	return v
 }
 
+func tftVars(s snapshot.Snapshot) map[string]string {
+	t := s.Tft
+	return map[string]string{
+		"queue": t.Queue, "level": itoa(s.Me.Level), "clock": s.Clock, "rank": tftRank(t),
+		"companion": t.Companion, "companionIcon": t.CompanionIcon,
+	}
+}
+
 func lobbyVars(l *snapshot.Lobby) map[string]string {
 	v := map[string]string{
 		"phase": l.Phase, "label": l.Label, "queue": l.QueueName, "mode": l.ModeLabel, "map": l.MapName,
