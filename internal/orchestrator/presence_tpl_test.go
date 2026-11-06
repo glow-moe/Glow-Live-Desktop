@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/glow-moe/glow-collector/internal/discord"
+	"github.com/glow-moe/glow-collector/internal/dota"
 )
 
 func TestPresenceTemplate(t *testing.T) {
@@ -60,5 +61,19 @@ func TestPresenceTemplate(t *testing.T) {
 func TestInPhase(t *testing.T) {
 	if !inPhase(nil, "Lobby") || !inPhase([]string{"None"}, "") || inPhase([]string{"ChampSelect"}, "Lobby") {
 		t.Fatal("inPhase")
+	}
+}
+
+// Dota 2 out of a match comes through the Steam branch. It has to take the
+// dota entry, so its Discord headline matches the one in a match, and every
+// other Steam game has to stay on the steam entry.
+func TestSteamAppKindKeepsDotaOnItsOwnApp(t *testing.T) {
+	o := &Orchestrator{}
+	o.settings.DiscordApps = map[string]string{"dota": "1568273861345022022"}
+	if got := o.appFor(steamAppKind(dota.AppID), "valve"); got != "1568273861345022022" {
+		t.Fatalf("dota in the menu ran under %q", got)
+	}
+	if got := o.appFor(steamAppKind(440), "tf2"); got != "tf2" {
+		t.Fatalf("another Steam game ran under %q", got)
 	}
 }

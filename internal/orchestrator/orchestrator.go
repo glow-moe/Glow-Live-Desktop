@@ -1501,7 +1501,7 @@ func (o *Orchestrator) tick() {
 					// that slot so we do not fight it; the site still gets the
 					// status above.
 					o.clearPresence()
-				} else if err := o.presence(o.appFor("steam", app), o.styled("steam", steamActivity(s, uname, hints.Icon, named), steamVars(s, hints.Icon, named))); err != nil {
+				} else if err := o.presence(o.appFor(steamAppKind(s.AppID), app), o.styled("steam", steamActivity(s, uname, hints.Icon, named), steamVars(s, hints.Icon, named))); err != nil {
 					// The push to glow.moe is the job here; Discord being closed
 					// is a note, not a problem state.
 					st.Detail = joinDots(st.Detail, err.Error())
@@ -2271,6 +2271,16 @@ func steamApp(appID int) (app string, named bool) {
 		return strconv.FormatUint(id, 10), true
 	}
 	return orGlow(""), false
+}
+
+// steamAppKind picks which discordApps entry a Steam game runs under. Dota 2
+// outside a match still comes through here, and it keeps the same Discord app
+// as its matches so the headline doesn't change between them.
+func steamAppKind(appID int) string {
+	if appID == dota.AppID {
+		return "dota"
+	}
+	return "steam"
 }
 
 // steamDetail is the one-line status the app shows for a Steam game.
