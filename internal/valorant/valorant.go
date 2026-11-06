@@ -41,6 +41,11 @@ type State struct {
 	FoeScore  int
 	Tier      int
 	Level     int
+	// The party: DEFAULT, MATCHMAKING or CUSTOM_GAME_SETUP, how many, of how many.
+	PartyState string
+	PartySize  int
+	PartyMax   int
+	Card       string // equipped player card (valorant-api.com id)
 
 	// The local Riot Client the presence came from, for the match reads
 	// (remote.go).
@@ -148,10 +153,15 @@ func (s *State) read(dec []byte) {
 			MatchMap  string `json:"partyOwnerMatchMap"`
 			ScoreAlly int    `json:"partyOwnerMatchScoreAllyTeam"`
 			ScoreFoe  int    `json:"partyOwnerMatchScoreEnemyTeam"`
+			State     string `json:"partyState"`
+			Size      int    `json:"partySize"`
+			Max       int    `json:"maxPartySize"`
 		} `json:"partyPresenceData"`
 		Player struct {
-			AccountLevel    int `json:"accountLevel"`
-			CompetitiveTier int `json:"competitiveTier"`
+			AccountLevel    int    `json:"accountLevel"`
+			CompetitiveTier int    `json:"competitiveTier"`
+			PlayerCardID    string `json:"playerCardId"`
+			CardID          string `json:"cardId"`
 		} `json:"playerPresenceData"`
 		SessionLoopState string `json:"sessionLoopState"`
 		ProvisioningFlow string `json:"provisioningFlow"`
@@ -161,6 +171,10 @@ func (s *State) read(dec []byte) {
 		ScoreFoe         int    `json:"partyOwnerMatchScoreEnemyTeam"`
 		AccountLevel     int    `json:"accountLevel"`
 		CompetitiveTier  int    `json:"competitiveTier"`
+		PartyState       string `json:"partyState"`
+		PartySize        int    `json:"partySize"`
+		MaxPartySize     int    `json:"maxPartySize"`
+		PlayerCardID     string `json:"playerCardId"`
 	}
 	if json.Unmarshal(dec, &pb) != nil {
 		return
@@ -177,6 +191,10 @@ func (s *State) read(dec []byte) {
 	s.FoeScore = orN(pb.Party.ScoreFoe, pb.ScoreFoe)
 	s.Tier = orN(pb.Player.CompetitiveTier, pb.CompetitiveTier)
 	s.Level = orN(pb.Player.AccountLevel, pb.AccountLevel)
+	s.PartyState = or(pb.Party.State, pb.PartyState)
+	s.PartySize = orN(pb.Party.Size, pb.PartySize)
+	s.PartyMax = orN(pb.Party.Max, pb.MaxPartySize)
+	s.Card = or(pb.Player.PlayerCardID, or(pb.Player.CardID, pb.PlayerCardID))
 }
 
 func or(a, b string) string {

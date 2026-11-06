@@ -17,6 +17,34 @@ func TestRead(t *testing.T) {
 	}
 }
 
+func TestReadParty(t *testing.T) {
+	var s State
+	s.read([]byte(`{"partyPresenceData":{"partyState":"MATCHMAKING","partySize":2,"maxPartySize":5},"playerPresenceData":{"playerCardId":"abc"}}`))
+	if s.PartyState != "MATCHMAKING" || s.PartySize != 2 || s.PartyMax != 5 || s.Card != "abc" {
+		t.Fatalf("nested: %+v", s)
+	}
+	var f State
+	f.read([]byte(`{"partyState":"DEFAULT","partySize":1,"maxPartySize":5,"playerCardId":"xyz"}`))
+	if f.PartyState != "DEFAULT" || f.PartySize != 1 || f.PartyMax != 5 || f.Card != "xyz" {
+		t.Fatalf("flat: %+v", f)
+	}
+}
+
+func TestSelfAgent(t *testing.T) {
+	var tr Tracker
+	if tr.SelfAgent() != "" {
+		t.Fatal("no match, no agent")
+	}
+	tr.match = &Match{Players: []Player{{Agent: "other", Locked: true}, {Agent: "hover", Self: true}}}
+	if tr.SelfAgent() != "" {
+		t.Fatal("an agent you only hover isn't yours yet")
+	}
+	tr.match.Players[1].Locked = true
+	if tr.SelfAgent() != "hover" {
+		t.Fatal("locked agent not read")
+	}
+}
+
 func TestRankName(t *testing.T) {
 	for n, want := range map[int]string{0: "", 3: "Iron 1", 13: "Gold 2", 24: "Immortal 1", 26: "Immortal 3", 27: "Radiant"} {
 		if got := RankName(n); got != want {

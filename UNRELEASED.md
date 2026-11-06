@@ -7,3 +7,4 @@ and gets cleared.
 - Dota 2 keeps the same Discord status name in the menu and in a match.
 - League matches send each player's Riot tag, so live pages can mark players who are on Glow.
 - Teamfight Tactics has its own Discord status (Little Legend, queue, level, rank) and live page instead of reading as a League match.
+- VALORANT on Discord shows your agent in a match, your player card in the menus, lobby and queue with party size, and a match and queue clock. Deathmatch no longer shows a team score.

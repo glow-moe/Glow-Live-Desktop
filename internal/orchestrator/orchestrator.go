@@ -989,6 +989,9 @@ type Orchestrator struct {
 	pushGate     pushGate
 	valLast      *valorant.State
 	valAt        time.Time
+	// The VALORANT stage on screen and when it started, for the Discord clock.
+	valStage     string
+	valStageAt   time.Time
 	valMatch     valorant.Tracker
 	dotaRecv     *dota.Receiver
 	dotaTriedAt  time.Time
@@ -1393,7 +1396,8 @@ func (o *Orchestrator) tick() {
 			frame.Raw.Party = o.valMatch.LatestParty()
 		}
 		o.push(cfg, effDelay, frame, &st)
-		o.presence(o.appFor("valorant", orGlow(appValorant)), o.styled("valorant", valorantActivity(v, settings.ValorantNames, uname), valorantVars(v, settings.ValorantNames)))
+		activity, vars := o.valorantStatus(v, settings.ValorantNames, uname)
+		o.presence(o.appFor("valorant", orGlow(appValorant)), o.styled("valorant", activity, vars))
 		o.set(st)
 		return
 	}

@@ -124,6 +124,22 @@ func (t *Tracker) Latest() (*Match, *Final) {
 	return t.match, t.final
 }
 
+// SelfAgent is the agent you're on: locked in during agent select, or in the
+// match. Empty while you haven't picked, or when match reads are off.
+func (t *Tracker) SelfAgent() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.match == nil {
+		return ""
+	}
+	for _, p := range t.match.Players {
+		if p.Self && p.Locked {
+			return p.Agent
+		}
+	}
+	return ""
+}
+
 // LatestParty is the lobby (nil outside the menus).
 func (t *Tracker) LatestParty() *Party {
 	t.mu.Lock()
