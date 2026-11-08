@@ -1,6 +1,7 @@
 package tft
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -116,5 +117,24 @@ func TestArenaFromTheLoadingWorldOnly(t *testing.T) {
 `))
 	if s.Arena != "Backstage_Day" {
 		t.Fatalf("arena %q", s.Arena)
+	}
+}
+
+func TestFromHeadFindsTheLegendAndArena(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/TFT.log"
+	head := `[2026.11.08-12.08.26:225][150]TFT: Error: [Standalone] TFTNiagaraSubsystem: Failed to find ComponentTag matching Request[Id[4], ComponentTag[IdleParticles], NiagaraState[Hidden], Actor[BP_PetStyleTwoAhri_Skin1_C_2147462317 {DA_StyleTwoAhri_Base_Classic_Tier1}]
+[2026.11.08-12.08.35:668][1]LogStreaming: Display: UWorld::AddToWorld: computing time limit for /Arena_Backstage/Day/SubLevels/1_0_Backstage_Day_DefaultLighting took (less than) 122.17 ms
+[2026.11.08-12.08.37:446][400]TFT: [Client] TFTLobbySubsystem_2147482177: Entering LobbyState[ETFTLobbyState::InGame]
+`
+	if err := os.WriteFile(path, []byte(head+strings.Repeat("LogTemp: filler line\n", 10)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := fromHead(path)
+	if s.Companion != "StyleTwoAhri_Base_Classic_Tier1" || s.Arena != "Backstage_Day" {
+		t.Fatalf("got %q %q", s.Companion, s.Arena)
+	}
+	if got := fromHead(dir + "/missing.log"); got.Arena != "" {
+		t.Fatal("a missing log gives nothing")
 	}
 }

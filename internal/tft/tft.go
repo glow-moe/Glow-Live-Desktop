@@ -218,9 +218,10 @@ func logPath() string {
 }
 
 var (
-	mu    sync.Mutex
-	tail  logtail.Follower
-	state State
+	mu       sync.Mutex
+	tail     logtail.Follower
+	state    State
+	headRead bool
 )
 
 // Current is the TFT state, or ok=false when the game isn't open.
@@ -233,10 +234,23 @@ func Current() (State, bool) {
 	if p := logPath(); p != "" {
 		_ = tail.Read(p, func(lines io.Reader, fresh bool) {
 			if fresh {
-				state = State{}
+				state, headRead = State{}, false
 			}
 			state.feed(lines)
 		})
+		// The Little Legend and the arena are written early (the lobby, the
+		// first game's load). When the first look started further in, read
+		// them from the head of the log, once per log.
+		if (state.Companion == "" || state.Arena == "") && !headRead {
+			headRead = true
+			early := fromHead(p)
+			if state.Companion == "" {
+				state.Companion = early.Companion
+			}
+			if state.Arena == "" {
+				state.Arena = early.Arena
+			}
+		}
 	}
 	out := state
 	out.Units = append([]Unit(nil), state.Units...)
@@ -252,4 +266,20 @@ func Current() (State, bool) {
 		}
 	}
 	return out, true
+}
+
+// headLimit is how much of the log fromHead reads.
+const headLimit = 32 << 20
+
+// fromHead runs the start of the log through a fresh state, for what it says
+// before the part the follower read.
+func fromHead(path string) State {
+	var s State
+	fh, err := os.Open(path)
+	if err != nil {
+		return s
+	}
+	defer fh.Close()
+	s.feed(io.LimitReader(fh, headLimit))
+	return s
 }
