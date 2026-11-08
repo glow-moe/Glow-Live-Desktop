@@ -19,6 +19,8 @@ type TFT struct {
 	// Your Little Legend's art; glow.moe names it.
 	Companion     string `json:"companion,omitempty"`
 	CompanionIcon string `json:"companionIcon,omitempty"`
+	// Your arena ("Backstage_Day"); glow.moe finds its name and art.
+	Arena string `json:"arena,omitempty"`
 }
 
 // TFTUnit is a champion on your side and the most stars it reached.
@@ -55,7 +57,7 @@ func TFTQueue(id int) string { return tftQueues[id] }
 // FromTFT is the frame for the TFT client. Live only while a game runs, so
 // menus don't count as time played.
 func FromTFT(s tft.State, now time.Time) Snapshot {
-	t := &TFT{State: s.Phase, Queue: TFTQueue(s.QueueID), QueueID: s.QueueID, Set: s.Set, Companion: s.Companion, CompanionIcon: TFTCompanionIcon(s.Companion)}
+	t := &TFT{State: s.Phase, Queue: TFTQueue(s.QueueID), QueueID: s.QueueID, Set: s.Set, Companion: s.Companion, CompanionIcon: TFTCompanionIcon(s.Companion), Arena: s.Arena}
 	for _, u := range s.Best(tft.MaxUnits) {
 		t.Units = append(t.Units, TFTUnit{ChampKey: u.Champ, Stars: u.Stars})
 	}

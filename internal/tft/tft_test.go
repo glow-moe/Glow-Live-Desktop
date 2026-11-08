@@ -105,3 +105,16 @@ func TestLittleLegendFromTheLobbyOnly(t *testing.T) {
 		t.Fatalf("companion %q", s.Companion)
 	}
 }
+
+func TestArenaFromTheLoadingWorldOnly(t *testing.T) {
+	var s State
+	s.feed(strings.NewReader(`[2026.11.08-12.08.35:668][1]LogStreaming: Display: UWorld::AddToWorld: computing time limit for /Arena_Backstage/Day/SubLevels/1_0_Backstage_Day_DefaultLighting took (less than) 122.17 ms
+[2026.11.08-12.08.37:446][400]TFT: [Client] TFTLobbySubsystem_2147482177: Entering LobbyState[ETFTLobbyState::InGame]
+[2026.11.08-12.10.00:000][1]LogStreaming: Display: UWorld::AddToWorld: computing time limit for /Arena_ZaunCity/Night/SubLevels/1_0_ZaunCity_Night_DefaultLighting took (less than) 99 ms
+[2026.11.08-12.12.27:454][110]TFT: [Standalone] TFTLobbySubsystem_2147482177: Entering LobbyState[ETFTLobbyState::EndOfGameInterstitial]
+[2026.11.08-12.15.50:408][152]TFT: [Client] TFTLobbySubsystem_2147482177: Entering LobbyState[ETFTLobbyState::InGame]
+`))
+	if s.Arena != "Backstage_Day" {
+		t.Fatalf("arena %q", s.Arena)
+	}
+}

@@ -57,6 +57,9 @@ type State struct {
 	// Your Little Legend as the client names its art
 	// ("StyleTwoAhri_Base_Classic_Tier1"), seen in the lobby.
 	Companion string
+	// Your arena as its art is named ("Backstage_Day"), from the world that
+	// loads before a game starts; kept for later games, which load it silently.
+	Arena string
 
 	tick int
 }
@@ -70,6 +73,8 @@ var (
 	modeRe  = regexp.MustCompile(`queueId_(\d{1,5})`)
 	// Only lobby lines ("[Standalone]"): in a game every player's Little
 	// Legend is on the map.
+	// "/Arena_Backstage/Day/SubLevels/...": the arena and its time of day.
+	arenaRe  = regexp.MustCompile(`/Arena_([A-Za-z0-9]{2,40})/([A-Za-z0-9]{1,30})/`)
 	petRe    = regexp.MustCompile(`\[Standalone\].*BP_Pet[A-Za-z0-9_]*_C_\d+ \{DA_([A-Za-z0-9]+_[A-Za-z0-9_]{1,80}_Tier\d)\}`)
 	soundMod = "TFTAudioEventSubsystem"
 )
@@ -90,6 +95,14 @@ func (s *State) feed(r io.Reader) {
 		}
 		if m := petRe.FindStringSubmatch(line); m != nil {
 			s.Companion = m[1]
+			continue
+		}
+		// Only while a game loads: in one, opponents' arenas load too.
+		if m := arenaRe.FindStringSubmatch(line); m != nil && s.Phase != PhaseInGame && m[1] != "Shared" && strings.Contains(line, "AddToWorld") {
+			s.Arena = m[1]
+			if m[2] != "SubLevels" && m[2] != "Maps" {
+				s.Arena += "_" + m[2]
+			}
 			continue
 		}
 		if s.Phase == PhaseInGame && strings.Contains(line, soundMod) {
