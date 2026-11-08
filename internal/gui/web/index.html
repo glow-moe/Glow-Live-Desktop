@@ -598,8 +598,12 @@
           $("st-sub").textContent = st.detail || "";
         } else if (st.inGame) {
           // Each game by its name (this used to say League for anything but Forza).
-          const names = { lol: "League", league: "League", forza: "Forza", fh6: "Forza", valorant: "VALORANT", fortnite: "Fortnite", dota2: "Dota 2" };
+          const names = { lol: "League", league: "League", forza: "Forza", fh6: "Forza", valorant: "VALORANT", fortnite: "Fortnite", dota2: "Dota 2", tft: "TFT" };
           $("st-main").textContent = "LIVE - " + (names[st.game] || st.gameName || "your game");
+          $("st-sub").textContent = st.detail || "";
+        } else if (st.game === "tft") {
+          // The TFT client is open, not in a game: menus, queue, end screen.
+          $("st-main").textContent = "In Teamfight Tactics";
           $("st-sub").textContent = st.detail || "";
         } else if (st.game === "league") {
           // Client up, not in a match: lobby / champ select / post-game / client.

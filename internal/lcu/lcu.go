@@ -651,9 +651,8 @@ func fetchLoading(c *conn, lob *Lobby, selfPuuid string) {
 	var s struct {
 		GameData struct {
 			Queue struct {
-				ID       int    `json:"id"`
-				MapID    int    `json:"mapId"`
-				GameMode string `json:"gameMode"`
+				ID    int `json:"id"`
+				MapID int `json:"mapId"`
 			} `json:"queue"`
 			PlayerChampionSelections []gamePlayer `json:"playerChampionSelections"`
 			TeamOne                  []gamePlayer `json:"teamOne"`
@@ -666,10 +665,6 @@ func fetchLoading(c *conn, lob *Lobby, selfPuuid string) {
 	lob.PhaseLabel = "Loading into game"
 	lob.QueueName = c.queueLabel(s.GameData.Queue.ID)
 	lob.MapName = mapName(s.GameData.Queue.MapID)
-	// TFT has no rosters to show: everyone is a Little Legend.
-	if strings.EqualFold(s.GameData.Queue.GameMode, tftMode) {
-		return
-	}
 	// Champs may live on the team entries or in playerChampionSelections - index
 	// the selections by internal name and fall back to them.
 	byName := map[string]gamePlayer{}
@@ -890,7 +885,7 @@ func phaseLabel(p string) string {
 	return "Champion select"
 }
 
-var rankedQueues = map[int]bool{420: true, 440: true, 470: true, 1100: true, 1160: true, 1700: false}
+var rankedQueues = map[int]bool{420: true, 440: true, 470: true, 1700: false}
 
 func rankedQueue(q int) bool { return rankedQueues[q] }
 
@@ -902,10 +897,6 @@ var queueNames = map[int]string{
 	450:  "ARAM",
 	490:  "Quickplay",
 	700:  "Clash",
-	1090: "Normal TFT",
-	1100: "Ranked TFT",
-	1130: "Hyper Roll",
-	1160: "Double Up",
 	1700: "Arena",
 	1750: "Arena",
 	1900: "URF",
@@ -1054,7 +1045,7 @@ func availabilityLabel(a string) string {
 	return "Online"
 }
 
-var mapNames = map[int]string{11: "Summoner's Rift", 12: "Howling Abyss", 22: "Convergence", 30: "Arena", 453: "Summoner's Rift"}
+var mapNames = map[int]string{11: "Summoner's Rift", 12: "Howling Abyss", 30: "Arena", 453: "Summoner's Rift"}
 
 func mapName(id int) string {
 	if n := siteName(siteMaps, fmt.Sprint(id)); n != "" {

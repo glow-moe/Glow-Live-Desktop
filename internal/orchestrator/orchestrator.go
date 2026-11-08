@@ -32,6 +32,7 @@ import (
 	"github.com/glow-moe/glow-collector/internal/roblox"
 	"github.com/glow-moe/glow-collector/internal/snapshot"
 	"github.com/glow-moe/glow-collector/internal/steam"
+	"github.com/glow-moe/glow-collector/internal/tft"
 	"github.com/glow-moe/glow-collector/internal/valorant"
 )
 
@@ -1027,9 +1028,6 @@ type Orchestrator struct {
 	// the overlay + status instead of blanking them for a tick.
 	lobbyAt    time.Time
 	lobbyLabel string
-	// The client's read for the current TFT game; it hardly changes in a match.
-	tft   *lcu.TFTInfo
-	tftAt time.Time
 	// Hide on Discord (tray menu): until a moment, or until the game it was
 	// turned on in ends. The profile keeps updating; only Discord goes quiet.
 	dcHideUntil time.Time
@@ -1402,6 +1400,18 @@ func (o *Orchestrator) tick() {
 		return
 	}
 
+	// Teamfight Tactics: its own client (not League's), from the Riot Client
+	// presence and the game's log. Menus and the end screen go too, as a frame
+	// that isn't live.
+	if t, ok := tft.Current(); ok {
+		snap := snapshot.FromTFT(t, time.Now())
+		st := Status{Game: "tft", InGame: snap.Live, Detail: tftDetail(snap.Tft, snap.Clock), GameName: "Teamfight Tactics", Pushes: o.pushes, Delay: effDelay}
+		o.push(cfg, effDelay, snap, &st)
+		o.presence(o.appFor("lol-tft", orGlow("")), o.styled("lol-tft", tftActivity(snap, t.StartedAt, uname), tftVars(snap)))
+		o.set(st)
+		return
+	}
+
 	// Fortnite: from the game's own log (mode, match phase, its status line),
 	// while glow.moe has it on for this account. The Discord status is a
 	// "Competing in" card beside Fortnite's own (see fortniteActivity).
@@ -1417,14 +1427,6 @@ func (o *Orchestrator) tick() {
 
 	// League: in a live game. (Windows only; see leagueSupported.)
 	if data, err := live.Fetch(); leagueSupported && err == nil {
-		if snapshot.IsTFT(data) {
-			snap := snapshot.BuildTFT(data, o.tftInfo(cfg.LeaguePath), ddragon.Version(), time.Now().UnixMilli())
-			st := Status{Game: "league", InGame: true, Detail: leagueDetail("TFT", snap.Clock), Pushes: o.pushes, Delay: effDelay}
-			o.push(cfg, effDelay, snap, &st)
-			o.presence(o.appFor("lol-tft", orGlow(appLoL)), o.styled("lol-tft", tftActivity(snap, data.GameData.GameTime, uname), tftVars(snap)))
-			o.set(st)
-			return
-		}
 		snap := snapshot.Build(data, ddragon.Version(), time.Now().UnixMilli())
 		// Names are pushed raw; glow.moe masks them at read time per the user's
 		// current L!VE privacy settings, so toggling takes effect immediately.
@@ -2043,29 +2045,32 @@ func forzaActivity(s *forza.Snapshot, gameID, username string, startMs int64) di
 	return a
 }
 
-// tftActivity is the in-game TFT presence: the Little Legend as the big image,
-// the queue, your level and your rank in it.
-func tftActivity(s snapshot.Snapshot, gameSeconds float64, username string) discord.Activity {
+// tftActivity is the TFT presence: the queue, and in a game your best
+// champions with their stars.
+func tftActivity(s snapshot.Snapshot, started time.Time, username string) discord.Activity {
 	t := s.Tft
-	details := t.Queue
-	if details == "" {
-		details = "Teamfight Tactics"
+	details := "Teamfight Tactics"
+	if t.Queue != "" {
+		details += " · " + t.Queue
 	}
-	state := fmt.Sprintf("Level %d", s.Me.Level)
-	if r := tftRank(t); r != "" {
-		state += "  |  " + r
+	state := tftStateLabel(t.State)
+	if t.State == tft.PhaseInGame {
+		state = tftUnits(t, 3)
+		if state == "" && t.Set > 0 {
+			state = fmt.Sprintf("Set %d", t.Set)
+		}
 	}
-	large, largeText := t.CompanionIcon, t.Companion
-	if large == "" {
-		large = glowIcon
-	}
-	if largeText == "" {
-		largeText = "Teamfight Tactics"
+	// Your Little Legend as the big picture; without it, your strongest
+	// champion in a game.
+	large, largeText := glowIcon, "Teamfight Tactics"
+	if t.CompanionIcon != "" {
+		large = t.CompanionIcon
+	} else if t.State == tft.PhaseInGame && len(t.Units) > 0 {
+		large, largeText = ddragon.TileURL(t.Units[0].ChampKey, 0), t.Units[0].ChampKey
 	}
 	a := discord.Activity{
-		Details:    details,
-		State:      state,
-		Timestamps: &discord.Timestamps{Start: (time.Now().Unix() - int64(gameSeconds)) * 1000},
+		Details: details,
+		State:   state,
 		Assets: &discord.Assets{
 			LargeImage: large,
 			LargeText:  largeText,
@@ -2073,43 +2078,50 @@ func tftActivity(s snapshot.Snapshot, gameSeconds float64, username string) disc
 			SmallText:  "glow.moe",
 		},
 	}
+	if !started.IsZero() {
+		a.Timestamps = &discord.Timestamps{Start: started.UnixMilli()}
+	}
 	if username != "" {
 		a.Buttons = []discord.Button{
-			{Label: "U0001F534 Live game", URL: "https://glow.moe/" + username + "/league"},
+			{Label: "Watch my game on Glow", URL: "https://glow.moe/" + username + "/league"},
 			{Label: "View my Glow profile", URL: "https://glow.moe/" + username},
 		}
 	}
 	return a
 }
 
-// tftRank reads "Gold II 45 LP"; empty when unranked.
-func tftRank(t *snapshot.TFT) string {
-	if t.Tier == "" {
-		return ""
+// tftStateLabel is where you are in the TFT client.
+func tftStateLabel(state string) string {
+	switch state {
+	case tft.PhaseInGame:
+		return "In a game"
+	case tft.PhaseQueue:
+		return "In queue"
+	case tft.PhasePostGame:
+		return "Game over"
 	}
-	r := strings.ToUpper(t.Tier[:1]) + strings.ToLower(t.Tier[1:])
-	if t.Division != "" {
-		r += " " + t.Division
-	}
-	return fmt.Sprintf("%s %d LP", r, t.LP)
+	return "In the menus"
 }
 
-// tftInfo is the client's read for the TFT game, refreshed once a minute. A
-// failed read keeps the last one.
-func (o *Orchestrator) tftInfo(leaguePath string) *lcu.TFTInfo {
-	o.mu.Lock()
-	info, at := o.tft, o.tftAt
-	o.mu.Unlock()
-	if info != nil && time.Since(at) < time.Minute {
-		return info
+// tftUnits reads "2★ Varus · 2★ Akali · Xayah": the first n champions.
+func tftUnits(t *snapshot.TFT, n int) string {
+	var parts []string
+	for i, u := range t.Units {
+		if i == n {
+			break
+		}
+		if u.Stars > 1 {
+			parts = append(parts, fmt.Sprintf("%d★ %s", u.Stars, u.ChampKey))
+		} else {
+			parts = append(parts, u.ChampKey)
+		}
 	}
-	if fresh, err := lcu.FetchTFT(leaguePath); err == nil {
-		info = fresh
-		o.mu.Lock()
-		o.tft, o.tftAt = info, time.Now()
-		o.mu.Unlock()
-	}
-	return info
+	return strings.Join(parts, " · ")
+}
+
+// tftDetail is the app's status line for TFT.
+func tftDetail(t *snapshot.TFT, clock string) string {
+	return joinDots(tftStateLabel(t.State), t.Queue, clock)
 }
 
 // leagueActivity is the rich in-game LoL presence: the champion skin tile (or an

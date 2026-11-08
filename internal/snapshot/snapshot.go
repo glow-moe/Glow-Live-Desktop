@@ -891,10 +891,8 @@ func mapLabel(g live.GameData) string {
 		return "Summoner's Rift"
 	case 12:
 		return "Howling Abyss"
-	case 21:
+	case 21, 22:
 		return "Nexus Blitz"
-	case 22:
-		return "Convergence"
 	case 30:
 		return "Arena"
 	}

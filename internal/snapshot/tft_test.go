@@ -4,52 +4,34 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/glow-moe/glow-collector/internal/lcu"
-	"github.com/glow-moe/glow-collector/internal/live"
+	"github.com/glow-moe/glow-collector/internal/tft"
 )
 
-func tftGame() *live.AllGameData {
-	d := &live.AllGameData{}
-	d.GameData.GameMode = "TFT"
-	d.GameData.MapNumber = 22
-	d.GameData.GameTime = 754
-	d.ActivePlayer.RiotID = "Melisa#TR1"
-	d.ActivePlayer.Level = 7
-	return d
-}
-
-func TestIsTFT(t *testing.T) {
-	if !IsTFT(tftGame()) {
-		t.Fatal("TFT not recognized")
+func TestFromTFTInGame(t *testing.T) {
+	start := time.Date(2026, 11, 8, 12, 8, 37, 0, time.UTC)
+	s := tft.State{Name: "Melisa", Tag: "TR1", Phase: tft.PhaseInGame, QueueID: 1100, Set: 18, StartedAt: start, Companion: "StyleTwoAhri_Base_Classic_Tier1",
+		Units: []tft.Unit{{Champ: "Xayah", Stars: 1}, {Champ: "Varus", Stars: 2}}}
+	snap := FromTFT(s, start.Add(12*time.Minute+34*time.Second))
+	if !snap.Live || snap.Phase != "inGame" || snap.Clock != "12:34" || snap.Me.RiotName != "Melisa" {
+		t.Fatalf("got %+v", snap)
 	}
-	if IsTFT(&live.AllGameData{GameData: live.GameData{GameMode: "CLASSIC"}}) {
-		t.Fatal("a Rift game read as TFT")
+	if snap.Tft.Queue != "Ranked" || snap.Tft.Set != 18 || snap.Tft.Units[0].ChampKey != "Varus" || snap.Tft.Units[0].Stars != 2 {
+		t.Fatalf("got %+v", snap.Tft)
 	}
-}
-
-func TestBuildTFT(t *testing.T) {
-	s := BuildTFT(tftGame(), &lcu.TFTInfo{Queue: "Ranked TFT", Companion: "Ossia", Tier: "GOLD", Division: "II", LP: 45}, "26.22.1", 1)
-	if s.Clock != "12:34" || s.Me.Level != 7 || s.Me.RiotName != "Melisa" || s.Me.RiotTag != "TR1" {
-		t.Fatalf("unexpected me: %+v clock %q", s.Me, s.Clock)
+	if snap.Tft.CompanionIcon != "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/loadouts/companions/tooltip_styletwoahri_base_classic_tier1.png" {
+		t.Fatalf("icon %s", snap.Tft.CompanionIcon)
 	}
-	if s.MapName != "Convergence" {
-		t.Fatalf("map %q", s.MapName)
-	}
-	if s.Tft == nil || s.Tft.Tier != "GOLD" || s.Tft.Companion != "Ossia" {
-		t.Fatalf("tft %+v", s.Tft)
-	}
-	b, err := json.Marshal(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(b), `"blue":[]`) || !strings.Contains(string(b), `"tft":{`) {
+	b, _ := json.Marshal(snap)
+	if !strings.Contains(string(b), `"tft":{"state":"inGame","queue":"Ranked","queueId":1100,"set":18,"units":[{"champKey":"Varus","stars":2}`) {
 		t.Fatalf("json %s", b)
 	}
 }
 
-func TestBuildTFTWithoutTheClient(t *testing.T) {
-	if s := BuildTFT(tftGame(), nil, "", 0); s.Tft == nil {
-		t.Fatal("a TFT game must still read as TFT")
+func TestFromTFTMenusIsNotTimePlayed(t *testing.T) {
+	snap := FromTFT(tft.State{Phase: tft.PhaseMenus, QueueID: 4242}, time.Now())
+	if snap.Live || snap.Phase != "lobby" || snap.Clock != "" || snap.Tft.State != "menus" || snap.Tft.Queue != "" || snap.Tft.Units != nil {
+		t.Fatalf("got %+v %+v", snap, snap.Tft)
 	}
 }

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/glow-moe/glow-collector/internal/riotclient"
 )
 
 // The match you're in, read from Riot's game servers with your own Riot Client
@@ -325,7 +327,7 @@ func (st *State) session() (*session, error) {
 		Token       string `json:"token"`
 		Subject     string `json:"subject"`
 	}
-	if err := get(st.port, st.password, "/entitlements/v1/token", 64<<10, &ent); err != nil || ent.AccessToken == "" || ent.Token == "" {
+	if err := (riotclient.Local{Port: st.port, Password: st.password}).Get("/entitlements/v1/token", 64<<10, &ent); err != nil || ent.AccessToken == "" || ent.Token == "" {
 		return nil, ErrNoGame
 	}
 	h := readHosts()

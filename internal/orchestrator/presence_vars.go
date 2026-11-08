@@ -48,8 +48,8 @@ func leagueVars(s snapshot.Snapshot) map[string]string {
 func tftVars(s snapshot.Snapshot) map[string]string {
 	t := s.Tft
 	return map[string]string{
-		"queue": t.Queue, "level": itoa(s.Me.Level), "clock": s.Clock, "rank": tftRank(t),
-		"companion": t.Companion, "companionIcon": t.CompanionIcon,
+		"queue": t.Queue, "state": tftStateLabel(t.State), "clock": s.Clock,
+		"set": itoa(t.Set), "units": tftUnits(t, 3), "companionIcon": t.CompanionIcon,
 	}
 }
 

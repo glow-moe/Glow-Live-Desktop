@@ -11,16 +11,11 @@
 package valorant
 
 import (
-	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
-	"time"
+
+	"github.com/glow-moe/glow-collector/internal/riotclient"
 )
 
 // ErrNoGame means VALORANT isn't running (no Riot Client, or you're in another
@@ -52,90 +47,24 @@ type State struct {
 	port, password, puuid string
 }
 
-func lockfilePath() string {
-	base := os.Getenv("LOCALAPPDATA")
-	if base == "" {
-		return ""
-	}
-	return filepath.Join(base, "Riot Games", "Riot Client", "Config", "lockfile")
-}
-
-// One small pool, like the League client's (lcu.go): a fresh transport per call
-// leaks sockets until the local API starts refusing.
-var client = &http.Client{
-	Timeout: 4 * time.Second,
-	Transport: &http.Transport{
-		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true}, // #nosec G402 - localhost Riot cert
-		MaxIdleConnsPerHost: 2,
-		MaxConnsPerHost:     4,
-		IdleConnTimeout:     30 * time.Second,
-	},
-}
-
-func get(port, password, path string, max int64, out any) error {
-	req, err := http.NewRequest(http.MethodGet, "https://127.0.0.1:"+port+path, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("riot:"+password)))
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return errors.New(resp.Status)
-	}
-	return json.NewDecoder(io.LimitReader(resp.Body, max)).Decode(out)
-}
-
 // Fetch returns your VALORANT presence, or ErrNoGame.
 func Fetch() (*State, error) {
-	lf := lockfilePath()
-	if lf == "" {
-		return nil, ErrNoGame
-	}
-	b, err := os.ReadFile(lf)
+	l, err := riotclient.Open()
 	if err != nil {
 		return nil, ErrNoGame
 	}
-	parts := strings.Split(strings.TrimSpace(string(b)), ":")
-	if len(parts) < 5 {
+	self, err := l.Self()
+	if err != nil {
 		return nil, ErrNoGame
 	}
-	port, password := parts[2], parts[3]
-
-	var sess struct {
-		PUUID    string `json:"puuid"`
-		GameName string `json:"game_name"`
-		GameTag  string `json:"game_tag"`
-	}
-	if err := get(port, password, "/chat/v1/session", 64<<10, &sess); err != nil || sess.PUUID == "" {
+	p, ok := l.Own(self, "valorant")
+	dec := riotclient.Decode(p.Private)
+	if !ok || dec == nil {
 		return nil, ErrNoGame
 	}
-	var pr struct {
-		Presences []struct {
-			PUUID   string `json:"puuid"`
-			Product string `json:"product"`
-			Private string `json:"private"`
-		} `json:"presences"`
-	}
-	if err := get(port, password, "/chat/v4/presences", 4<<20, &pr); err != nil {
-		return nil, ErrNoGame
-	}
-	for _, p := range pr.Presences {
-		if p.PUUID != sess.PUUID || p.Product != "valorant" || p.Private == "" {
-			continue
-		}
-		dec, err := base64.StdEncoding.DecodeString(p.Private)
-		if err != nil || !json.Valid(dec) || len(dec) > 64<<10 {
-			continue
-		}
-		st := &State{Name: sess.GameName, Tag: sess.GameTag, Private: dec, port: port, password: password, puuid: sess.PUUID}
-		st.read(dec)
-		return st, nil
-	}
-	return nil, ErrNoGame
+	st := &State{Name: self.Name, Tag: self.Tag, Private: dec, port: l.Port, password: l.Password, puuid: self.PUUID}
+	st.read(dec)
+	return st, nil
 }
 
 // read pulls the basics out of the blob. Current clients nest them under
