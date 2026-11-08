@@ -2083,7 +2083,7 @@ func tftActivity(s snapshot.Snapshot, started time.Time, username string) discor
 	}
 	if username != "" {
 		a.Buttons = []discord.Button{
-			{Label: "Watch my game on Glow", URL: "https://glow.moe/" + username + "/league"},
+			{Label: "Watch my game on Glow", URL: "https://glow.moe/" + username + "/tft"},
 			{Label: "View my Glow profile", URL: "https://glow.moe/" + username},
 		}
 	}

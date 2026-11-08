@@ -19,7 +19,7 @@ func TestTFTActivityInAGame(t *testing.T) {
 	if !strings.Contains(a.Assets.LargeImage, "/tiles/Varus_0.jpg") || a.Assets.LargeText != "Varus" || a.Timestamps.Start != started.UnixMilli() {
 		t.Fatalf("got %+v %+v", a.Assets, a.Timestamps)
 	}
-	if !strings.HasSuffix(a.Buttons[0].URL, "/melocet/league") {
+	if !strings.HasSuffix(a.Buttons[0].URL, "/melocet/tft") {
 		t.Fatalf("buttons %+v", a.Buttons)
 	}
 	if d := tftDetail(s.Tft, s.Clock); d != "In a game · Ranked · 4:10" {

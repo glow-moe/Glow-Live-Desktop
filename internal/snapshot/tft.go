@@ -8,8 +8,8 @@ import (
 )
 
 // TFT is Teamfight Tactics, from its own client: where you are, the queue,
-// the set and the champions you bought this game. With this set, the page
-// and Discord show these instead of a League match.
+// the set and the champions you bought this game. Sent as its own game
+// ("tft"), shown at glow.moe/<you>/tft.
 type TFT struct {
 	State   string    `json:"state"` // menus | queue | inGame | postGame
 	Queue   string    `json:"queue,omitempty"`
@@ -68,7 +68,7 @@ func FromTFT(s tft.State, now time.Time) Snapshot {
 		phase = "inGame"
 	}
 	return Snapshot{
-		Game:      "lol",
+		Game:      "tft",
 		Live:      s.Phase == tft.PhaseInGame,
 		Phase:     phase,
 		UpdatedAt: now.UnixMilli(),
