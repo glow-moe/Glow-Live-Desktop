@@ -139,11 +139,7 @@ func fortniteActivity(f fortnite.State, username string) discord.Activity {
 	if large == "" {
 		large = glowIcon
 	}
-	place := "glow.moe"
-	if username != "" {
-		place = "glow.moe/" + username
-	}
-	a.Assets = &discord.Assets{LargeImage: large, LargeText: place, SmallImage: glowIcon, SmallText: "glow.moe"}
+	a.Assets = &discord.Assets{LargeImage: large, LargeText: fortniteLine(f, fortnite.OutfitName(f.Loadout.Character), username), SmallImage: glowIcon, SmallText: "glow.moe"}
 	if username != "" {
 		a.Buttons = []discord.Button{
 			{Label: "View my lobby", URL: "https://glow.moe/" + username + "/fortnite"},
@@ -153,11 +149,32 @@ func fortniteActivity(f fortnite.State, username string) discord.Activity {
 	return a
 }
 
+// fortniteLine is the card's third line (the big picture's text): in the
+// lobby, how the last match ended; otherwise the outfit's name; glow.moe/<you>
+// until either is known.
+func fortniteLine(f fortnite.State, outfit, username string) string {
+	if !f.InMatch && f.Last != nil && f.Last.Left > 0 {
+		return fmt.Sprintf("Last match: out with %d left", f.Last.Left)
+	}
+	if outfit != "" {
+		return atLeast2(outfit, "")
+	}
+	if username != "" {
+		return "glow.moe/" + username
+	}
+	return "glow.moe"
+}
+
 func fortniteVars(f fortnite.State) map[string]string {
 	mode, left := fortniteMode(f.Status)
+	lastLeft := ""
+	if f.Last != nil && f.Last.Left > 0 {
+		lastLeft = fmt.Sprint(f.Last.Left)
+	}
 	return map[string]string{
 		"mode": mode, "left": left, "status": f.Status, "playlist": f.Playlist, "phase": f.Phase,
 		"phaseName": fortnitePhases[f.Phase], "island": f.Island, "outfit": fortniteOutfit(f.Loadout.Character),
+		"outfitName": fortnite.OutfitName(f.Loadout.Character), "lastLeft": lastLeft,
 		"party": fmt.Sprint(len(f.Others()) + 1),
 	}
 }
