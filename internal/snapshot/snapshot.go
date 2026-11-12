@@ -887,7 +887,7 @@ func splitRiotID(riotID, gameName, summoner string) (name, tag string) {
 
 func mapLabel(g live.GameData) string {
 	switch g.MapNumber {
-	case 11:
+	case 11, 453: // 453: Classic Rift's new map (mode "JADE")
 		return "Summoner's Rift"
 	case 12:
 		return "Howling Abyss"
