@@ -417,7 +417,13 @@ func Build(d *live.AllGameData, patch string, now int64) Snapshot {
 	// Events refer to players by their in-game name, which is riotIdGameName for
 	// humans but "<Champ> Bot" for bots - index both so team lookup always hits.
 	teamOf := map[string]string{}
+	// A bot's event name is a nickname ("Pro as Heck Bot" for Master Yi): the
+	// feed calls it by its champion, like the rows do.
+	bots := map[string]string{}
 	for _, p := range d.AllPlayers {
+		if p.IsBot {
+			bots[strings.TrimSpace(p.SummonerName)], bots[strings.TrimSpace(p.RiotIDName)] = botName(p), botName(p)
+		}
 		me := isSelf(p)
 		row := mapPlayer(p, me)
 		if p.RiotIDName != "" {
@@ -459,7 +465,7 @@ func Build(d *live.AllGameData, patch string, now int64) Snapshot {
 		Me:        mapMe(d, selfChampKey),
 		Blue:      blue,
 		Red:       red,
-		Feed:      mapFeed(d, selfFeedName, selfTeam, teamOf),
+		Feed:      mapFeed(d, selfFeedName, selfTeam, teamOf, bots),
 	}
 }
 
@@ -474,6 +480,9 @@ func mapPlayer(p live.Player, isMe bool) Player {
 		name = p.SummonerName
 	}
 	ck := champKey(p.RawChampionName, p.ChampionName)
+	if p.IsBot {
+		name = botName(p)
+	}
 	spells := playerSpells(p)
 	return Player{
 		Summoner:  name,
@@ -729,12 +738,12 @@ func shardLabel(r live.Rune) string {
 // history, at roughly 100 bytes per event.
 const maxFeed = 120
 
-func mapFeed(d *live.AllGameData, selfName, selfTeam string, teamOf map[string]string) []FeedEvent {
+func mapFeed(d *live.AllGameData, selfName, selfTeam string, teamOf, bots map[string]string) []FeedEvent {
 	evs := d.Events.Events
 	out := []FeedEvent{} // an empty feed goes out as [], not null
 	// newest first, cap at maxFeed
 	for i := len(evs) - 1; i >= 0 && len(out) < maxFeed; i-- {
-		if fe, ok := feedLine(evs[i], selfName, selfTeam, teamOf); ok {
+		if fe, ok := feedLine(evs[i], selfName, selfTeam, teamOf, bots); ok {
 			out = append(out, fe)
 		}
 	}
@@ -742,6 +751,31 @@ func mapFeed(d *live.AllGameData, selfName, selfTeam string, teamOf map[string]s
 }
 
 func cleanName(s string) string { return strings.TrimSuffix(strings.TrimSpace(s), " Bot") }
+
+// botName is a bot as the rows and feed show it: "Ryze bot", not the game's
+// "Jade_Ryze bot".
+func botName(p live.Player) string {
+	if c := strings.TrimSpace(p.ChampionName); c != "" {
+		return c + " bot"
+	}
+	return cleanName(p.SummonerName) + " bot"
+}
+
+// feedName is who did it, as a person reads it: a bot by its champion, a
+// structure by what it is ("Turret_TChaos_L1_P0_1017949901_0" is a turret).
+func feedName(s string, bots map[string]string) string {
+	s = strings.TrimSpace(s)
+	if n, ok := bots[s]; ok {
+		return n
+	}
+	switch {
+	case strings.HasPrefix(s, "Turret_"):
+		return "A turret"
+	case strings.HasPrefix(s, "Inhib_"), strings.HasPrefix(s, "Barracks_"):
+		return "An inhibitor"
+	}
+	return cleanName(s)
+}
 
 // feedColor tints a feed line by the actor's side: amber = you, blue = ally,
 // red = enemy, muted = neutral/unknown.
@@ -758,8 +792,9 @@ func feedColor(actor, selfName, selfTeam string, teamOf map[string]string) (stri
 	return mute, muteD
 }
 
-func feedLine(e live.Event, selfName, selfTeam string, teamOf map[string]string) (FeedEvent, bool) {
+func feedLine(e live.Event, selfName, selfTeam string, teamOf, bots map[string]string) (FeedEvent, bool) {
 	t := fmtClock(e.EventTime)
+	cleanName := func(s string) string { return feedName(s, bots) }
 	color := func(actor string) (string, string) {
 		return feedColor(actor, selfName, selfTeam, teamOf)
 	}
