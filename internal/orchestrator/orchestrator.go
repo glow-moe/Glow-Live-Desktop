@@ -40,9 +40,15 @@ import (
 // dashboard's L!VE tab). The collector reads them from /api/live/settings so the
 // GUI never needs its own copy - the site is the single source of truth.
 type liveSettings struct {
-	HideEnemyNames bool `json:"hideEnemyNames"`
-	HideMyName     bool `json:"hideMyName"`
-	DelaySec       int  `json:"delaySec"`
+	// Sv names this version of the member's own settings; a push answer with a
+	// different one means they changed on glow.moe. RefreshSec is how often to
+	// read them anyway, QuietSec how often a frame goes out with nobody watching.
+	Sv             string `json:"sv"`
+	RefreshSec     int    `json:"refreshSec"`
+	QuietSec       int    `json:"quietSec"`
+	HideEnemyNames bool   `json:"hideEnemyNames"`
+	HideMyName     bool   `json:"hideMyName"`
+	DelaySec       int    `json:"delaySec"`
 	// The OBS overlay's look (accent + which blocks show + render scale). The
 	// self-contained /overlay page reads these from /live.json so changing them in
 	// the dashboard themes the overlay on the next refresh - no URL to re-copy.
@@ -243,29 +249,39 @@ type overlayShow struct {
 // fetchSettings reads the member's L!VE settings. err is poster.ErrUnlinked
 // when glow.moe turns the key down (401), so an app that isn't pushing (no
 // game open) still finds out its PC was unlinked.
-func fetchSettings(endpoint, token string) (liveSettings, error) {
+// errSettingsSame: the settings haven't changed since the copy the app has
+// (the server answered 304 to its ETag).
+var errSettingsSame = errors.New("settings unchanged")
+
+func fetchSettings(endpoint, token, etag string) (liveSettings, string, error) {
 	var s liveSettings
 	req, err := http.NewRequest(http.MethodGet, pair.BaseFrom(endpoint)+"/api/live/settings", nil)
 	if err != nil {
-		return s, err
+		return s, "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
+	}
 	// The server's release gate applies here too: without the version the read
 	// looks like a pre-26.5 build and is answered 426 (26.6 and 26.6.1 did this).
 	req.Header.Set("X-Glow-Live-Version", poster.Version())
 	resp, err := poster.Do(&http.Client{Timeout: 6 * time.Second}, req)
 	if err != nil {
-		return s, err
+		return s, "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
-		return s, poster.ErrUnlinked
+		return s, "", poster.ErrUnlinked
+	}
+	if resp.StatusCode == http.StatusNotModified && etag != "" {
+		return s, etag, errSettingsSame
 	}
 	if resp.StatusCode != http.StatusOK {
-		return s, fmt.Errorf("settings returned %s", resp.Status)
+		return s, "", fmt.Errorf("settings returned %s", resp.Status)
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
-		return s, err
+		return s, "", err
 	}
 	poster.SetFallback(s.FallbackBase)
 	if s.DotaNames != nil {
@@ -274,7 +290,33 @@ func fetchSettings(endpoint, token string) (liveSettings, error) {
 	if s.LolNames != nil {
 		lcu.SetNames(s.LolNames.Queues, s.LolNames.Modes, s.LolNames.Maps)
 	}
-	return s, nil
+	return s, resp.Header.Get("ETag"), nil
+}
+
+// settingsDue: time to read the settings again. Every RefreshSec (a minute
+// on servers that don't say), or at once when a push answer named a newer
+// version of them; never within 15s of the last try.
+func settingsDue(s liveSettings, at, triedAt time.Time, named string, now time.Time) bool {
+	if now.Sub(triedAt) <= 15*time.Second {
+		return false
+	}
+	if named != "" && s.Sv != "" && named != s.Sv {
+		return true
+	}
+	every := 60 * time.Second
+	if s.RefreshSec >= 60 && s.RefreshSec <= 1800 {
+		every = time.Duration(s.RefreshSec) * time.Second
+	}
+	return now.Sub(at) > every
+}
+
+// quietEvery is how often a frame goes out while nobody is watching (and how
+// often an unchanged one is sent again): the site's QuietSec, 10s to 30s.
+func quietEvery(s liveSettings) time.Duration {
+	if s.QuietSec >= 10 && s.QuietSec <= 30 {
+		return time.Duration(s.QuietSec) * time.Second
+	}
+	return heartbeat
 }
 
 // animeSnap is the "now watching" the browser extension pushes to glow.moe. The
@@ -1024,6 +1066,9 @@ type Orchestrator struct {
 	// settingsTriedAt is the last read attempt, so a failing read (server down,
 	// 426, timeout) retries every 15s instead of on every tick.
 	settingsTriedAt time.Time
+	// settingsTag is the ETag of the settings the app has, sent back so an
+	// unchanged read costs the server (and the line) almost nothing.
+	settingsTag string
 	// Last successful out-of-game (client) read, so a transient LCU hiccup keeps
 	// the overlay + status instead of blanking them for a tick.
 	lobbyAt    time.Time
@@ -1318,7 +1363,8 @@ func (o *Orchestrator) tick() {
 	start := o.startMs
 	uid := o.userID
 	settings := o.settings
-	stale := time.Since(o.settingsAt) > 60*time.Second && time.Since(o.settingsTriedAt) > 15*time.Second
+	stale := settingsDue(settings, o.settingsAt, o.settingsTriedAt, poster.SettingsVersion(), time.Now())
+	etag := o.settingsTag
 	o.mu.Unlock()
 
 	// Pull the site's L!VE settings (delay + name masking) periodically, so what
@@ -1327,13 +1373,18 @@ func (o *Orchestrator) tick() {
 		o.mu.Lock()
 		o.settingsTriedAt = time.Now()
 		o.mu.Unlock()
-		s, err := fetchSettings(cfg.Endpoint, cfg.Token)
+		s, tag, err := fetchSettings(cfg.Endpoint, cfg.Token, etag)
 		if err == nil {
 			o.mu.Lock()
 			o.settings = s
 			o.settingsAt = time.Now()
+			o.settingsTag = tag
 			o.mu.Unlock()
 			settings = s
+		} else if errors.Is(err, errSettingsSame) {
+			o.mu.Lock()
+			o.settingsAt = time.Now()
+			o.mu.Unlock()
 		} else if errors.Is(err, poster.ErrUnlinked) {
 			o.unlinked(cfg.Token)
 			return

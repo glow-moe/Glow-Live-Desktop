@@ -14,16 +14,16 @@ import (
 // those ticks (a lobby, the client, a Steam game) carry the same frame as the
 // last one, so:
 //   - a frame identical to the last one sent is skipped, with a resend every
-//     heartbeat so the site doesn't count you as gone (it waits 15s);
+//     quiet beat so the site doesn't count you as gone (newer sites wait 35s);
 //   - outside a match, at most one frame every outOfGameEvery;
 //   - the raw League reads only go out when they changed (the site keeps the
 //     rest), with a full set every rawFullEvery and after a failed push.
 //
 // In a match every tick goes out while someone has the live view open on
 // glow.moe (the ingest answer says so); with nobody watching, a frame at most
-// every heartbeat, which keeps the site's "live" state and the stored cards
-// current at a fraction of the requests. Discord and the OBS overlay are
-// local and don't wait on this.
+// every quiet beat (the site's quietSec, else heartbeat), which keeps the
+// site's "live" state and the stored cards current at a fraction of the
+// requests. Discord and the OBS overlay are local and don't wait on this.
 const (
 	heartbeat      = 10 * time.Second
 	outOfGameEvery = 3 * time.Second
@@ -128,10 +128,11 @@ func (o *Orchestrator) gate(snap any, inGame bool, now time.Time) ([]byte, bool)
 		if !inGame && now.Sub(g.at) < outOfGameEvery {
 			return nil, false
 		}
-		if !poster.Watched() && now.Sub(g.at) < heartbeat {
+		quiet := quietEvery(o.settings)
+		if !poster.Watched() && now.Sub(g.at) < quiet {
 			return nil, false
 		}
-		if h == g.hash && !rawChanged && now.Sub(g.at) < heartbeat {
+		if h == g.hash && !rawChanged && now.Sub(g.at) < quiet {
 			return nil, false
 		}
 	}

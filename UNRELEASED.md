@@ -10,3 +10,4 @@ and gets cleared.
 - VALORANT on Discord shows your agent in a match, your player card in the menus, lobby and queue with party size, and a match and queue clock. Deathmatch no longer shows a team score.
 - Fortnite on Discord shows your outfit's name, and how your last match ended while you're in the lobby.
 - League on Riot's new Classic Rift: the map reads Summoner's Rift, bots go by their champion ("Ryze bot"), and the match feed names turrets and inhibitors instead of their object ids.
+- L!VE talks to glow.moe less: it reads your settings every few minutes (instantly when you change them during a game) and sends a frame every 20s when nobody is watching your match.

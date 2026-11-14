@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/glow-moe/glow-collector/internal/poster"
 )
@@ -27,7 +28,7 @@ func TestFetchSettingsSendsVersionHeader(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	s, err := fetchSettings(srv.URL+"/api/live/ingest", "tok")
+	s, _, err := fetchSettings(srv.URL+"/api/live/ingest", "tok", "")
 	if err != nil {
 		t.Fatalf("fetchSettings failed against a 200 server: %v", err)
 	}
@@ -53,7 +54,7 @@ func TestFetchSettingsUnlinkedOn401(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if _, err := fetchSettings(srv.URL+"/api/live/ingest", "gone"); !errors.Is(err, poster.ErrUnlinked) {
+	if _, _, err := fetchSettings(srv.URL+"/api/live/ingest", "gone", ""); !errors.Is(err, poster.ErrUnlinked) {
 		t.Fatalf("err = %v, want poster.ErrUnlinked", err)
 	}
 }
@@ -64,8 +65,56 @@ func TestFetchSettingsServerErrorIsNotUnlinked(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := fetchSettings(srv.URL+"/api/live/ingest", "tok")
+	_, _, err := fetchSettings(srv.URL+"/api/live/ingest", "tok", "")
 	if err == nil || errors.Is(err, poster.ErrUnlinked) {
 		t.Fatalf("err = %v, want a plain error", err)
+	}
+}
+
+// An unchanged read is a 304 to the ETag the app sent back: no body, and the
+// app keeps the settings it has.
+func TestFetchSettingsSendsItsTagAndKeepsOnNotModified(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("If-None-Match") == `"v1"` {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("ETag", `"v1"`)
+		_ = json.NewEncoder(w).Encode(map[string]any{"delaySec": 7, "sv": "abc", "refreshSec": 300, "quietSec": 20})
+	}))
+	defer srv.Close()
+
+	s, tag, err := fetchSettings(srv.URL+"/api/live/ingest", "tok", "")
+	if err != nil || tag != `"v1"` || s.Sv != "abc" || s.RefreshSec != 300 || s.QuietSec != 20 {
+		t.Fatalf("first read: %+v %q %v", s, tag, err)
+	}
+	if _, tag, err = fetchSettings(srv.URL+"/api/live/ingest", "tok", tag); !errors.Is(err, errSettingsSame) || tag != `"v1"` {
+		t.Fatalf("second read: %q %v", tag, err)
+	}
+}
+
+func TestSettingsDue(t *testing.T) {
+	now := time.Now()
+	s := liveSettings{Sv: "a", RefreshSec: 300}
+	if settingsDue(s, now.Add(-2*time.Minute), now.Add(-2*time.Minute), "a", now) {
+		t.Fatal("read again before the site's refresh time")
+	}
+	if !settingsDue(s, now.Add(-2*time.Minute), now.Add(-2*time.Minute), "b", now) {
+		t.Fatal("a push named newer settings: read them")
+	}
+	if settingsDue(s, now.Add(-2*time.Minute), now.Add(-5*time.Second), "b", now) {
+		t.Fatal("never within 15s of the last try")
+	}
+	if !settingsDue(liveSettings{}, now.Add(-61*time.Second), now.Add(-61*time.Second), "", now) {
+		t.Fatal("an older site (no refreshSec) keeps the minute")
+	}
+	if !settingsDue(liveSettings{RefreshSec: 99999}, now.Add(-61*time.Second), now.Add(-61*time.Second), "", now) {
+		t.Fatal("an out-of-range refresh falls back to the minute")
+	}
+}
+
+func TestQuietEvery(t *testing.T) {
+	if quietEvery(liveSettings{QuietSec: 20}) != 20*time.Second || quietEvery(liveSettings{}) != heartbeat || quietEvery(liveSettings{QuietSec: 300}) != heartbeat {
+		t.Fatal("quietEvery bounds")
 	}
 }

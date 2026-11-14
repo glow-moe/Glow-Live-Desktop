@@ -26,6 +26,16 @@ var watched atomic.Bool
 
 func init() { watched.Store(true) }
 
+// settingsVersion is the version of the member's L!VE settings the last push's
+// answer named; the app reads its settings again when it differs from theirs.
+var settingsVersion atomic.Value
+
+// SettingsVersion is the settings version glow.moe last named ("" before any).
+func SettingsVersion() string {
+	v, _ := settingsVersion.Load().(string)
+	return v
+}
+
 // Watched reports whether glow.moe last said someone is watching.
 func Watched() bool { return watched.Load() }
 
@@ -75,10 +85,16 @@ func Post(endpoint, token string, delaySec int, snap any) error {
 		return fmt.Errorf("ingest returned %s", resp.Status)
 	}
 	var ans struct {
-		Watched *bool `json:"watched"`
+		Watched *bool  `json:"watched"`
+		Sv      string `json:"sv"`
 	}
-	if json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&ans) == nil && ans.Watched != nil {
-		watched.Store(*ans.Watched)
+	if json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&ans) == nil {
+		if ans.Watched != nil {
+			watched.Store(*ans.Watched)
+		}
+		if ans.Sv != "" && len(ans.Sv) <= 64 {
+			settingsVersion.Store(ans.Sv)
+		}
 	}
 	return nil
 }
