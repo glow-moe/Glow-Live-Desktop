@@ -28,3 +28,16 @@ func TestCS2Names(t *testing.T) {
 		t.Errorf("%+v", a)
 	}
 }
+
+func TestCS2MapArt(t *testing.T) {
+	if got := cs2MapArt("de_dust2"); got != "https://glow.moe/cs2/maps/de_dust2.jpg" {
+		t.Fatalf("dust2 = %q", got)
+	}
+	if got := cs2MapArt("workshop/123/aim_map"); got != "" {
+		t.Fatalf("workshop = %q", got)
+	}
+	a := cs2Activity(cs2.Summary{Map: "de_mirage", Phase: "live"}, "")
+	if a.Assets == nil || a.Assets.LargeImage != "https://glow.moe/cs2/maps/de_mirage.jpg" {
+		t.Fatalf("activity image = %+v", a.Assets)
+	}
+}

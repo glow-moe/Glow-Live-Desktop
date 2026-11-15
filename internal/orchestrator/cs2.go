@@ -92,6 +92,27 @@ func cs2MapName(raw string) string {
 	return strings.Join(words, " ")
 }
 
+// cs2MapArts are the maps glow.moe has a screenshot of (public/cs2/maps there,
+// taken from the game's own files).
+var cs2MapArts = map[string]bool{
+	"ar_baggage": true, "ar_pool_day": true, "ar_shoots": true, "ar_shoots_night": true, "cs_italy": true, "cs_office": true,
+	"cs_shelter": true, "de_ancient": true, "de_ancient_night": true, "de_anubis": true, "de_boulder": true, "de_cache": true,
+	"de_debris": true, "de_dust": true, "de_dust2": true, "de_eldorado": true, "de_fachwerk": true, "de_inferno": true,
+	"de_mirage": true, "de_nuke": true, "de_overpass": true, "de_poseidon": true, "de_train": true, "de_vertigo": true,
+}
+
+// cs2MapArt is the map's screenshot on glow.moe for the Discord status, "" for
+// a map without one (workshop maps).
+func cs2MapArt(raw string) string {
+	if i := strings.LastIndex(raw, "/"); i >= 0 {
+		raw = raw[i+1:]
+	}
+	if !cs2MapArts[raw] {
+		return ""
+	}
+	return "https://glow.moe/cs2/maps/" + raw + ".jpg"
+}
+
 func cs2ModeName(m string) string {
 	if n, ok := cs2Modes[m]; ok {
 		return n
@@ -119,7 +140,10 @@ func cs2Activity(s cs2.Summary, username string) discord.Activity {
 			details = fmt.Sprintf("%s · Lost %d – %d", cs2MapName(s.Map), s.Mine, s.Theirs)
 		}
 	}
-	large := steam.CoverImage(cs2.AppID)
+	large := cs2MapArt(s.Map)
+	if large == "" {
+		large = steam.CoverImage(cs2.AppID)
+	}
 	if large == "" {
 		large = glowIcon
 	}
