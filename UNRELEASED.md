@@ -15,3 +15,4 @@ and gets cleared.
 - Games outside Steam (Genshin Impact, Honkai: Star Rail, osu!, Overwatch, Minecraft for Windows and more) show on your Glow page while you play them. glow.moe keeps the list, so new ones come without an update.
 - An ace in CS2 or a penta kill in League shows on your Discord status for 30 seconds.
 - If CS2 was already open when L!VE set it up, L!VE tells you to restart CS2 once.
+- League in Practice Tool keeps working after you spawn a target dummy (the match stopped showing before).
