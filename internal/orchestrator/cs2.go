@@ -10,6 +10,7 @@ import (
 	"github.com/glow-moe/glow-collector/internal/cs2"
 	"github.com/glow-moe/glow-collector/internal/discord"
 	"github.com/glow-moe/glow-collector/internal/proc"
+	"github.com/glow-moe/glow-collector/internal/rocketleague"
 	"github.com/glow-moe/glow-collector/internal/steam"
 )
 
@@ -208,6 +209,53 @@ type pcPayload struct {
 	Game      string `json:"game"`
 	Title     string `json:"title"`
 	UpdatedAt int64  `json:"updatedAt"`
+	// Match is Rocket League's, from its Stats API (internal/rocketleague).
+	Match *rocketleague.Match `json:"match,omitempty"`
+}
+
+const rocketLeague = "Rocket League"
+
+// rlMatch turns Rocket League's Stats API on (once; the game needs a restart
+// the first time) and keeps a reader on it, returning the match being played.
+func (o *Orchestrator) rlMatch() (*rocketleague.Match, bool) {
+	if time.Since(o.rlTriedAt) > 5*time.Minute {
+		o.rlTriedAt = time.Now()
+		if changed, err := rocketleague.Install(); err == nil && changed {
+			o.rlRestart = true
+		}
+	}
+	if o.rlReader == nil {
+		o.rlReader = &rocketleague.Reader{}
+		r := o.rlReader
+		go func() {
+			for {
+				r.Run()
+				time.Sleep(5 * time.Second)
+			}
+		}()
+	}
+	m, ok := o.rlReader.Latest(15 * time.Second)
+	if ok {
+		o.rlRestart = false
+		return &m, true
+	}
+	return nil, false
+}
+
+// rlDetail is the status line: "Rocket League · 3–2 · 1:14", or the restart
+// hint when the Stats API was just switched on with the game already open.
+func (o *Orchestrator) rlDetail(m *rocketleague.Match) string {
+	if m == nil {
+		if o.rlRestart {
+			return "Rocket League · restart it once so L!VE can read your match"
+		}
+		return rocketLeague
+	}
+	clock := fmt.Sprintf("%d:%02d", m.Clock/60, m.Clock%60)
+	if m.Overtime {
+		clock = "OT " + clock
+	}
+	return fmt.Sprintf("Rocket League · %d–%d · %s", m.Mine, m.Theirs, clock)
 }
 
 // pcGame is the first running game from the site's list (exe -> name), read

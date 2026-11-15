@@ -31,6 +31,7 @@ import (
 	"github.com/glow-moe/glow-collector/internal/pair"
 	"github.com/glow-moe/glow-collector/internal/poster"
 	"github.com/glow-moe/glow-collector/internal/roblox"
+	"github.com/glow-moe/glow-collector/internal/rocketleague"
 	"github.com/glow-moe/glow-collector/internal/snapshot"
 	"github.com/glow-moe/glow-collector/internal/steam"
 	"github.com/glow-moe/glow-collector/internal/tft"
@@ -1054,6 +1055,9 @@ type Orchestrator struct {
 	flash               momentFlash          // a big play on the Discord status (moments.go)
 	flashSeen           map[string]time.Time // moments already flashed, by key
 	pcScanAt            time.Time            // last process list read for PcGames (tick goroutine only)
+	rlReader            *rocketleague.Reader // Rocket League's Stats API, started the first time it runs
+	rlTriedAt           time.Time
+	rlRestart           bool // the Stats API was just switched on with the game open
 	pcFound             string
 	mirrorsAt           time.Time
 	steamID             uint32 // Steam account id signed in on this machine (0 = none)
@@ -1635,7 +1639,12 @@ func (o *Orchestrator) tick() {
 	// site: Discord already shows these games by itself.
 	if title, ok := o.pcGame(settings.PcGames); ok {
 		st := Status{Game: "pc", InGame: true, Detail: title, GameName: title, Pushes: o.pushes, Delay: effDelay}
-		o.push(cfg, effDelay, pcPayload{Game: "pc", Title: title, UpdatedAt: time.Now().UnixMilli()}, &st)
+		push := pcPayload{Game: "pc", Title: title, UpdatedAt: time.Now().UnixMilli()}
+		if title == rocketLeague {
+			push.Match, _ = o.rlMatch()
+			st.Detail = o.rlDetail(push.Match)
+		}
+		o.push(cfg, effDelay, push, &st)
 		o.clearPresence()
 		o.set(st)
 		return
