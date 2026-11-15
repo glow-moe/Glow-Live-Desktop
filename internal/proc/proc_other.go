@@ -6,3 +6,6 @@ package proc
 
 // Running is Windows only; the games it's asked about are Windows only too.
 func Running(...string) bool { return false }
+
+// Names is Windows and macOS only.
+func Names() map[string]bool { return nil }

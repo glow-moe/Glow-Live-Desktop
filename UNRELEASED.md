@@ -11,3 +11,5 @@ and gets cleared.
 - Fortnite on Discord shows your outfit's name, and how your last match ended while you're in the lobby.
 - League on Riot's new Classic Rift: the map reads Summoner's Rift, bots go by their champion ("Ryze bot"), and the match feed names turrets and inhibitors instead of their object ids.
 - L!VE talks to glow.moe less: it reads your settings every few minutes (instantly when you change them during a game) and sends a frame every 20s when nobody is watching your match.
+- Counter-Strike 2: your match on glow.moe/<you>/cs2 (map, score, health, money, K/D/A, your weapons) and on Discord, from CS2's own game state. Nothing to set up: the app adds its config file to CS2 by itself.
+- Games outside Steam (Genshin Impact, Honkai: Star Rail, osu!, Overwatch, Minecraft for Windows and more) show on your Glow page while you play them. glow.moe keeps the list, so new ones come without an update.

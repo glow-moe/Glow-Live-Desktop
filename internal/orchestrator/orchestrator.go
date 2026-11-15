@@ -20,6 +20,7 @@ import (
 
 	"github.com/glow-moe/glow-collector/internal/applog"
 	"github.com/glow-moe/glow-collector/internal/config"
+	"github.com/glow-moe/glow-collector/internal/cs2"
 	"github.com/glow-moe/glow-collector/internal/ddragon"
 	"github.com/glow-moe/glow-collector/internal/discord"
 	"github.com/glow-moe/glow-collector/internal/dota"
@@ -80,6 +81,12 @@ type liveSettings struct {
 	DiscordApps map[string]string `json:"discordApps"`
 	// DotaNames name Dota heroes whose internal key doesn't ("queenofpain").
 	DotaNames map[string]string `json:"dotaNames"`
+	// CS2 turns on Counter-Strike 2's game state (internal/cs2): the app writes
+	// its cfg and listens only while this is on.
+	CS2 bool `json:"cs2"`
+	// PcGames are games spotted by their exe when Steam doesn't know them
+	// (exe, lowercase -> name); empty = off.
+	PcGames map[string]string `json:"pcGames"`
 	// FallbackBase is a glow.moe address that skips Cloudflare, tried when
 	// glow.moe can't be reached (poster/fallback.go).
 	FallbackBase string `json:"fallbackBase"`
@@ -1040,6 +1047,11 @@ type Orchestrator struct {
 	dotaTriedAt  time.Time
 	dotaSince    time.Time // when this Dota session was first seen running (tick goroutine only)
 	dotaSeenAt   time.Time
+	cs2Recv      *cs2.Receiver
+	cs2TriedAt   time.Time
+	cs2Last      cs2.Summary // the member's own numbers, kept while they spectate (tick goroutine only)
+	pcScanAt     time.Time   // last process list read for PcGames (tick goroutine only)
+	pcFound      string
 	mirrorsAt    time.Time
 	steamID      uint32 // Steam account id signed in on this machine (0 = none)
 	steamIDAt    time.Time
@@ -1432,6 +1444,22 @@ func (o *Orchestrator) tick() {
 		}
 	}
 
+	// Counter-Strike 2: the game's GSI frames while you're on a map (warmup,
+	// the match, the end screen); the menus go through Steam below. Same Steam
+	// switches as Dota, and only while glow.moe has it on for this account.
+	if settings.CS2 && cfg.SteamPresence && !o.gameHidden(cs2.AppID) {
+		if frame, ok := o.ensureCS2().Latest(15 * time.Second); ok {
+			if sum := o.cs2Own(cs2.Summarize(frame)); sum.Playing {
+				st := Status{Game: "cs2", InGame: true, Detail: cs2Detail(sum), AppID: cs2.AppID, GameName: "Counter-Strike 2", Pushes: o.pushes, Delay: effDelay}
+				o.push(cfg, effDelay, cs2Push{Game: "cs2", Live: true, UpdatedAt: time.Now().UnixMilli(), Raw: frame}, &st)
+				app, _ := steamApp(cs2.AppID)
+				o.presence(o.appFor("cs2", app), o.styled("cs2", cs2Activity(sum, uname), cs2Vars(sum)))
+				o.set(st)
+				return
+			}
+		}
+	}
+
 	// VALORANT: your own presence from the Riot Client (menus, agent select,
 	// the match). Checked before League: when League is up instead, the Riot
 	// Client presence says so and this is skipped.
@@ -1593,6 +1621,16 @@ func (o *Orchestrator) tick() {
 			o.set(st)
 			return
 		}
+	}
+
+	// A game outside Steam, spotted by its exe (the site's list). Only to the
+	// site: Discord already shows these games by itself.
+	if title, ok := o.pcGame(settings.PcGames); ok {
+		st := Status{Game: "pc", InGame: true, Detail: title, GameName: title, Pushes: o.pushes, Delay: effDelay}
+		o.push(cfg, effDelay, pcPayload{Game: "pc", Title: title, UpdatedAt: time.Now().UnixMilli()}, &st)
+		o.clearPresence()
+		o.set(st)
+		return
 	}
 
 	// No game this tick: keep sending the delayed tail of the last one.

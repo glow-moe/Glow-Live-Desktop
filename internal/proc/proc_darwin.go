@@ -7,6 +7,21 @@ import (
 	"strings"
 )
 
+// Names lists the running processes' executable names, lowercase.
+func Names() map[string]bool {
+	out, err := exec.Command("/bin/ps", "-axco", "comm=").Output()
+	if err != nil {
+		return nil
+	}
+	names := map[string]bool{}
+	for _, line := range strings.Split(string(out), "\n") {
+		if n := strings.TrimSpace(line); n != "" {
+			names[strings.ToLower(n)] = true
+		}
+	}
+	return names
+}
+
 // Running reports whether a process with one of these names is running. macOS
 // has no /proc and no Toolhelp snapshot; ps -c lists each process's executable
 // name, which is what the callers pass ("RobloxPlayer").

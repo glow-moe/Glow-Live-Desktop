@@ -11,6 +11,22 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// Names lists the running processes' exe names, lowercase ("starrail.exe").
+func Names() map[string]bool {
+	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
+	if err != nil {
+		return nil
+	}
+	defer windows.CloseHandle(snap)
+	out := map[string]bool{}
+	var e windows.ProcessEntry32
+	e.Size = uint32(unsafe.Sizeof(e))
+	for err = windows.Process32First(snap, &e); err == nil; err = windows.Process32Next(snap, &e) {
+		out[strings.ToLower(windows.UTF16ToString(e.ExeFile[:]))] = true
+	}
+	return out
+}
+
 // Running reports whether a process with one of these exe names is running.
 func Running(exes ...string) bool {
 	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
