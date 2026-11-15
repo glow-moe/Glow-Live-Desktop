@@ -93,7 +93,7 @@ type Player struct {
 	IsBot           bool    `json:"isBot"`
 	IsDead          bool    `json:"isDead"`
 	RespawnTimer    float64 `json:"respawnTimer"`
-	Items           []Item  `json:"items"`
+	Items           Items   `json:"items"`
 	Level           int     `json:"level"`
 	// "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY", or "" when the queue has none.
 	Position       string        `json:"position"`
@@ -110,6 +110,21 @@ type Player struct {
 type Item struct {
 	ItemID int `json:"itemID"`
 	Slot   int `json:"slot"`
+}
+
+// Items is a player's items. For a player the game can't look up (Practice
+// Tool's target dummy) Riot sends {"error": "Unable to find player"} instead
+// of a list: that reads as no items rather than failing the whole frame.
+type Items []Item
+
+func (it *Items) UnmarshalJSON(b []byte) error {
+	var list []Item
+	if json.Unmarshal(b, &list) != nil {
+		*it = nil
+		return nil
+	}
+	*it = list
+	return nil
 }
 
 type Scores struct {
@@ -174,6 +189,15 @@ func Parse(b []byte) (*AllGameData, error) {
 	if err := json.Unmarshal(b, &d); err != nil {
 		return nil, err
 	}
+	// Practice Tool's target dummies are in allPlayers with no champion; they
+	// aren't players.
+	players := d.AllPlayers[:0]
+	for _, p := range d.AllPlayers {
+		if p.ChampionName != "" || p.RawChampionName != "" {
+			players = append(players, p)
+		}
+	}
+	d.AllPlayers = players
 	return &d, nil
 }
 
