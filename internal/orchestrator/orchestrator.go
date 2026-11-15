@@ -1040,33 +1040,34 @@ type Orchestrator struct {
 	valLast      *valorant.State
 	valAt        time.Time
 	// The VALORANT stage on screen and when it started, for the Discord clock.
-	valStage     string
-	valStageAt   time.Time
-	valMatch     valorant.Tracker
-	dotaRecv     *dota.Receiver
-	dotaTriedAt  time.Time
-	dotaSince    time.Time // when this Dota session was first seen running (tick goroutine only)
-	dotaSeenAt   time.Time
-	cs2Recv      *cs2.Receiver
-	cs2TriedAt   time.Time
-	cs2Last      cs2.Summary // the member's own numbers, kept while they spectate (tick goroutine only)
-	pcScanAt     time.Time   // last process list read for PcGames (tick goroutine only)
-	pcFound      string
-	mirrorsAt    time.Time
-	steamID      uint32 // Steam account id signed in on this machine (0 = none)
-	steamIDAt    time.Time
-	steamSnap    steam.Snap // last good Steam answer
-	steamSnapAt  time.Time  // when that answer arrived
-	steamPollAt  time.Time  // when the endpoint was last asked
-	steamForced  int        // appid the poll interval was last skipped for
-	steamLocalID int        // what the machine reported last tick, for quit detection
-	steamGameID  int        // appid the current session is for
-	steamGameAt  time.Time  // when that game first appeared
-	startMs      int64
-	lastPresence time.Time
-	presenceOn   bool
-	lastPushAt   time.Time
-	outdated     bool
+	valStage            string
+	valStageAt          time.Time
+	valMatch            valorant.Tracker
+	dotaRecv            *dota.Receiver
+	dotaTriedAt         time.Time
+	dotaSince           time.Time // when this Dota session was first seen running (tick goroutine only)
+	dotaSeenAt          time.Time
+	cs2Recv             *cs2.Receiver
+	cs2TriedAt          time.Time
+	cs2Last             cs2.Summary // the member's own numbers, kept while they spectate (tick goroutine only)
+	cs2SeenAt, cs2Since time.Time   // CS2 open per Steam, for the restart hint
+	pcScanAt            time.Time   // last process list read for PcGames (tick goroutine only)
+	pcFound             string
+	mirrorsAt           time.Time
+	steamID             uint32 // Steam account id signed in on this machine (0 = none)
+	steamIDAt           time.Time
+	steamSnap           steam.Snap // last good Steam answer
+	steamSnapAt         time.Time  // when that answer arrived
+	steamPollAt         time.Time  // when the endpoint was last asked
+	steamForced         int        // appid the poll interval was last skipped for
+	steamLocalID        int        // what the machine reported last tick, for quit detection
+	steamGameID         int        // appid the current session is for
+	steamGameAt         time.Time  // when that game first appeared
+	startMs             int64
+	lastPresence        time.Time
+	presenceOn          bool
+	lastPushAt          time.Time
+	outdated            bool
 	// Stream-snipe delay: snapshots wait here and go out delaySec later, so the
 	// public live page runs behind the stream. The local OBS overlay is not
 	// delayed (it is part of the stream itself).
@@ -1588,6 +1589,9 @@ func (o *Orchestrator) tick() {
 				st := Status{Game: "steam", InGame: true, Detail: steamDetail(s), AppID: s.AppID, GameName: s.Game, Pushes: o.pushes, Delay: effDelay}
 				if s.AppID == dota.AppID && o.dotaNeedsLaunchOption() {
 					st.Detail = dotaLaunchHint
+				}
+				if s.AppID == cs2.AppID && settings.CS2 && o.cs2NeedsRestart() {
+					st.Detail = cs2RestartHint
 				}
 				o.push(cfg, effDelay, o.steamSnapshotPayload(s), &st)
 				app, named := steamApp(s.AppID)

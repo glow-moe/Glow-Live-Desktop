@@ -41,3 +41,18 @@ func TestCS2MapArt(t *testing.T) {
 		t.Fatalf("activity image = %+v", a.Assets)
 	}
 }
+
+func TestCS2DeathmatchHasNoTeamScore(t *testing.T) {
+	s := cs2.Summary{Map: "de_mirage", Mode: "deathmatch", Phase: "live", Kills: 14, Deaths: 6, Assists: 2, Mine: 0, Theirs: 0}
+	a := cs2Activity(s, "")
+	if a.Details != "Mirage · Deathmatch" || a.State != "14 / 6 / 2" {
+		t.Fatalf("deathmatch = %q / %q", a.Details, a.State)
+	}
+	s.Phase = "gameover"
+	if a := cs2Activity(s, ""); a.Details != "Mirage · Deathmatch" {
+		t.Fatalf("deathmatch end = %q", a.Details)
+	}
+	if d := cs2Detail(s); d != "CS2 · Mirage · Deathmatch · 14/6/2" {
+		t.Fatalf("detail = %q", d)
+	}
+}

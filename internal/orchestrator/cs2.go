@@ -47,6 +47,26 @@ func (o *Orchestrator) ensureCS2() *cs2.Receiver {
 	return r
 }
 
+const cs2RestartHint = "Counter-Strike 2 · no live match? Restart CS2 once so it sees L!VE"
+
+// cs2NeedsRestart reports CS2 open for a while (45s) with nothing from its game
+// state: CS2 reads the cfg only when it starts, so a CS2 opened before L!VE put
+// the cfg there sends nothing (it sends a heartbeat every 10s otherwise, menus
+// included). Called on the tick while Steam says CS2 is open.
+func (o *Orchestrator) cs2NeedsRestart() bool {
+	now := time.Now()
+	if now.Sub(o.cs2SeenAt) > 15*time.Second {
+		o.cs2Since = now
+	}
+	o.cs2SeenAt = now
+	r := o.ensureCS2()
+	if r == nil {
+		return false
+	}
+	_, ok := r.Latest(45 * time.Second)
+	return !ok && now.Sub(o.cs2Since) > 45*time.Second
+}
+
 // cs2Own keeps the member's own side and K/D/A while CS2 sends a teammate
 // they spectate after dying (tick goroutine only).
 func (o *Orchestrator) cs2Own(s cs2.Summary) cs2.Summary {
@@ -120,7 +140,13 @@ func cs2ModeName(m string) string {
 	return "Counter-Strike 2"
 }
 
+// cs2NoTeams is a mode without a team score worth showing (Deathmatch, Arms Race).
+func cs2NoTeams(mode string) bool { return mode == "deathmatch" || mode == "gungameprogressive" }
+
 func cs2Detail(s cs2.Summary) string {
+	if cs2NoTeams(s.Mode) {
+		return fmt.Sprintf("CS2 · %s · %s · %d/%d/%d", cs2MapName(s.Map), cs2ModeName(s.Mode), s.Kills, s.Deaths, s.Assists)
+	}
 	return fmt.Sprintf("CS2 · %s · %d–%d · %d/%d/%d", cs2MapName(s.Map), s.Mine, s.Theirs, s.Kills, s.Deaths, s.Assists)
 }
 
@@ -128,11 +154,18 @@ func cs2Detail(s cs2.Summary) string {
 func cs2Activity(s cs2.Summary, username string) discord.Activity {
 	details := fmt.Sprintf("%s · %d – %d", cs2MapName(s.Map), s.Mine, s.Theirs)
 	state := fmt.Sprintf("%d / %d / %d  ·  %s", s.Kills, s.Deaths, s.Assists, cs2ModeName(s.Mode))
+	if cs2NoTeams(s.Mode) { // everyone for themselves: the team score means nothing
+		details = cs2MapName(s.Map) + " · " + cs2ModeName(s.Mode)
+		state = fmt.Sprintf("%d / %d / %d", s.Kills, s.Deaths, s.Assists)
+	}
 	switch s.Phase {
 	case "warmup":
 		details = cs2MapName(s.Map) + " · Warmup"
 		state = cs2ModeName(s.Mode)
 	case "gameover":
+		if cs2NoTeams(s.Mode) {
+			break
+		}
 		switch {
 		case s.Mine > s.Theirs:
 			details = fmt.Sprintf("%s · Won %d – %d", cs2MapName(s.Map), s.Mine, s.Theirs)
