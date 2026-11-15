@@ -13,3 +13,5 @@ and gets cleared.
 - L!VE talks to glow.moe less: it reads your settings every few minutes (instantly when you change them during a game) and sends a frame every 20s when nobody is watching your match.
 - Counter-Strike 2: your match on glow.moe/<you>/cs2 (map, score, health, money, K/D/A, your weapons) and on Discord, from CS2's own game state. Nothing to set up: the app adds its config file to CS2 by itself.
 - Games outside Steam (Genshin Impact, Honkai: Star Rail, osu!, Overwatch, Minecraft for Windows and more) show on your Glow page while you play them. glow.moe keeps the list, so new ones come without an update.
+- An ace in CS2 or a penta kill in League shows on your Discord status for 30 seconds.
+- If CS2 was already open when L!VE set it up, L!VE tells you to restart CS2 once.
