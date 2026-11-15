@@ -16,3 +16,4 @@ and gets cleared.
 - An ace in CS2 or a penta kill in League shows on your Discord status for 30 seconds.
 - If CS2 was already open when L!VE set it up, L!VE tells you to restart CS2 once.
 - League in Practice Tool keeps working after you spawn a target dummy (the match stopped showing before).
+- League: stealing Baron or a Dragon, and finishing your team's Ace, show as big plays on your Glow page.

@@ -160,6 +160,9 @@ type Event struct {
 	TurretKilled string   `json:"TurretKilled"`
 	KillStreak   int      `json:"KillStreak"`
 	Stolen       string   `json:"Stolen"`
+	// Ace: the player who killed the last enemy, and their team ("ORDER" / "CHAOS").
+	Acer      string `json:"Acer"`
+	AcingTeam string `json:"AcingTeam"`
 }
 
 type GameData struct {

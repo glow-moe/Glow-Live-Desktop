@@ -810,10 +810,10 @@ func feedLine(e live.Event, selfName, selfTeam string, teamOf, bots map[string]s
 		return FeedEvent{"💥", cleanName(e.KillerName), multikill(e.KillStreak), c, dot, t}, true
 	case "DragonKill":
 		c, dot := color(e.KillerName)
-		return FeedEvent{"🐉", cleanName(e.KillerName), "slayed " + dragon(e.DragonType), c, dot, t}, true
+		return FeedEvent{"🐉", cleanName(e.KillerName), slayOrSteal(e) + dragon(e.DragonType), c, dot, t}, true
 	case "BaronKill":
 		c, dot := color(e.KillerName)
-		return FeedEvent{"🟣", cleanName(e.KillerName), "slayed Baron Nashor", c, dot, t}, true
+		return FeedEvent{"🟣", cleanName(e.KillerName), slayOrSteal(e) + "Baron Nashor", c, dot, t}, true
 	case "HeraldKill":
 		c, dot := color(e.KillerName)
 		return FeedEvent{"🐌", cleanName(e.KillerName), "slayed Rift Herald", c, dot, t}, true
@@ -827,11 +827,25 @@ func feedLine(e live.Event, selfName, selfTeam string, teamOf, bots map[string]s
 		c, dot := color(e.KillerName)
 		return FeedEvent{"🏛️", cleanName(e.KillerName), "destroyed an inhibitor", c, dot, t}, true
 	case "Ace":
+		// Who finished it and for which team; glow.moe makes a big play of the
+		// member's own ("stole" and "scored an Ace" are what it reads).
+		if e.Acer != "" {
+			c, dot := color(e.Acer)
+			return FeedEvent{"🅰️", cleanName(e.Acer), "scored an Ace", c, dot, t}, true
+		}
 		return FeedEvent{"🅰️", "Team", "scored an Ace", amber, amber, t}, true
 	case "GameStart":
 		return FeedEvent{"🎮", "Game", "Match started", mute, muteD, t}, true
 	}
 	return FeedEvent{}, false
+}
+
+// slayOrSteal is how an objective went: the game marks a steal with Stolen "True".
+func slayOrSteal(e live.Event) string {
+	if strings.EqualFold(e.Stolen, "true") {
+		return "stole "
+	}
+	return "slayed "
 }
 
 func multikill(streak int) string {
