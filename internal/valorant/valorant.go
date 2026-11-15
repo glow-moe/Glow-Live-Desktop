@@ -15,6 +15,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/glow-moe/glow-collector/internal/jsonx"
 	"github.com/glow-moe/glow-collector/internal/riotclient"
 )
 
@@ -105,7 +106,7 @@ func (s *State) read(dec []byte) {
 		MaxPartySize     int    `json:"maxPartySize"`
 		PlayerCardID     string `json:"playerCardId"`
 	}
-	if json.Unmarshal(dec, &pb) != nil {
+	if jsonx.Unmarshal(dec, &pb) != nil {
 		return
 	}
 	s.Phase = or(pb.Match.SessionLoopState, pb.SessionLoopState)

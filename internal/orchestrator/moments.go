@@ -55,15 +55,41 @@ func (o *Orchestrator) cs2Ace(s cs2.Summary, now time.Time) {
 	o.flashMoment(fmt.Sprintf("cs2:%s:%d", s.Map, s.Kills-s.RoundKills), "ACE on "+cs2MapName(s.Map), now)
 }
 
-// leaguePenta flashes the member's own penta kill from the match feed.
+// leaguePenta flashes the member's own big plays from the match feed: a penta
+// kill, a stolen Baron or Dragon, the team's ace when they finished it (the
+// same lines glow.moe's server/live-moments reads).
 func (o *Orchestrator) leaguePenta(s snapshot.Snapshot, now time.Time) {
 	me := strings.TrimSpace(s.Me.RiotName)
 	if me == "" {
 		return
 	}
+	as := " as " + s.Me.ChampName
 	for _, e := range s.Feed {
-		if e.Text == "Penta Kill" && strings.EqualFold(strings.TrimSpace(e.Who), me) {
-			o.flashMoment("lol:"+s.Me.ChampKey+":"+e.Time, "PENTA KILL as "+s.Me.ChampName, now)
+		if !strings.EqualFold(strings.TrimSpace(e.Who), me) {
+			continue
+		}
+		key := "lol:" + s.Me.ChampKey + ":" + e.Time
+		switch {
+		case e.Text == "Penta Kill":
+			o.flashMoment(key+":penta", "PENTA KILL"+as, now)
+		case e.Text == "scored an Ace":
+			o.flashMoment(key+":ace", "ACE"+as, now)
+		case strings.HasPrefix(e.Text, "stole "):
+			o.flashMoment(key+":steal", stealLine(e.Text)+as, now)
 		}
 	}
+}
+
+// stealLine is the big line for "stole Baron Nashor" / "stole a Cloud Drake".
+func stealLine(text string) string {
+	t := strings.ToLower(text)
+	switch {
+	case strings.Contains(t, "baron"):
+		return "BARON STEAL"
+	case strings.Contains(t, "elder"):
+		return "ELDER STEAL"
+	case strings.Contains(t, "herald"):
+		return "HERALD STEAL"
+	}
+	return "DRAGON STEAL"
 }

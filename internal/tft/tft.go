@@ -13,7 +13,6 @@ package tft
 
 import (
 	"bufio"
-	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/glow-moe/glow-collector/internal/jsonx"
 	"github.com/glow-moe/glow-collector/internal/logtail"
 	"github.com/glow-moe/glow-collector/internal/proc"
 	"github.com/glow-moe/glow-collector/internal/riotclient"
@@ -185,7 +185,7 @@ func (s *State) presence(packed []byte) {
 			} `json:"progress"`
 		} `json:"activity"`
 	}
-	if json.Unmarshal(packed, &p) != nil {
+	if jsonx.Unmarshal(packed, &p) != nil {
 		return
 	}
 	if m := modeRe.FindStringSubmatch(p.Activity.Mode); m != nil && s.QueueID == 0 {

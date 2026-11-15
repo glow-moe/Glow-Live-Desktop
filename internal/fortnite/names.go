@@ -1,13 +1,14 @@
 package fortnite
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/glow-moe/glow-collector/internal/jsonx"
 )
 
 // Outfit names ("character_hammervice" -> "Coastal Catwoman") from fortnite-api.com,
@@ -72,7 +73,7 @@ func fetchName(id string) string {
 			Name string `json:"name"`
 		} `json:"data"`
 	}
-	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&doc) != nil {
+	if jsonx.Decode(io.LimitReader(resp.Body, 1<<20), &doc) != nil {
 		return ""
 	}
 	n := []rune(doc.Data.Name)

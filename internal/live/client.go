@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/glow-moe/glow-collector/internal/jsonx"
 )
 
 const endpoint = "https://127.0.0.1:2999/liveclientdata/allgamedata"
@@ -189,7 +191,7 @@ func FetchRaw() ([]byte, error) {
 // Parse decodes raw /allgamedata bytes into the subset we use.
 func Parse(b []byte) (*AllGameData, error) {
 	var d AllGameData
-	if err := json.Unmarshal(b, &d); err != nil {
+	if err := jsonx.Unmarshal(b, &d); err != nil {
 		return nil, err
 	}
 	// Practice Tool's target dummies are in allPlayers with no champion; they

@@ -51,3 +51,23 @@ func TestLeaguePentaFlash(t *testing.T) {
 		t.Fatalf("penta = %q", got)
 	}
 }
+
+func TestLeagueStealAndAceFlash(t *testing.T) {
+	now := time.Unix(1000, 0)
+	var s snapshot.Snapshot
+	s.Me.RiotName, s.Me.ChampName, s.Me.ChampKey = "Melocet", "Akali", "Akali"
+	s.Feed = []snapshot.FeedEvent{{Who: "Melocet", Text: "stole Baron Nashor", Time: "25:10"}}
+	o := &Orchestrator{}
+	o.leaguePenta(s, now)
+	if got := o.withFlash(discord.Activity{}, now).State; got != "BARON STEAL as Akali" {
+		t.Fatalf("steal = %q", got)
+	}
+	s.Feed = []snapshot.FeedEvent{{Who: "Melocet", Text: "scored an Ace", Time: "26:00"}}
+	o.leaguePenta(s, now.Add(40*time.Second))
+	if got := o.withFlash(discord.Activity{}, now.Add(41*time.Second)).State; got != "ACE as Akali" {
+		t.Fatalf("ace = %q", got)
+	}
+	if stealLine("stole a Cloud Drake") != "DRAGON STEAL" || stealLine("stole the Elder Dragon") != "ELDER STEAL" {
+		t.Fatal("steal lines")
+	}
+}

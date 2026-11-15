@@ -7,7 +7,6 @@ package lcu
 import (
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/glow-moe/glow-collector/internal/jsonx"
 )
 
 // Member is one person in a party lobby.
@@ -253,7 +254,7 @@ func (c *conn) get(path string, out any) error {
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(b, out)
+	return jsonx.Unmarshal(b, out)
 }
 
 // Fetch returns the current out-of-game state, or ErrNoClient if the client
@@ -348,7 +349,7 @@ func fetchClientProfile(c *conn, p *ClientProfile, puuid string) {
 				HotStreak bool   `json:"isHotStreak"`
 			} `json:"queueMap"`
 		}
-		if json.Unmarshal(raw, &rs) == nil {
+		if jsonx.Unmarshal(raw, &rs) == nil {
 			for _, q := range []struct{ key, label string }{
 				{"RANKED_SOLO_5x5", "Solo/Duo"},
 				{"RANKED_FLEX_SR", "Flex"},
@@ -369,7 +370,7 @@ func fetchClientProfile(c *conn, p *ClientProfile, puuid string) {
 		var h struct {
 			HonorLevel int `json:"honorLevel"`
 		}
-		if json.Unmarshal(raw, &h) == nil {
+		if jsonx.Unmarshal(raw, &h) == nil {
 			p.HonorLevel = h.HonorLevel
 		}
 	} else {
@@ -400,7 +401,7 @@ func fetchClientProfile(c *conn, p *ClientProfile, puuid string) {
 				NextThreshold float64 `json:"nextThreshold"`
 			} `json:"topChallenges"`
 		}
-		if json.Unmarshal(raw, &ch) == nil {
+		if jsonx.Unmarshal(raw, &ch) == nil {
 			p.ChallengeScore = ch.TotalPoints.Current
 			if p.ChallengeScore == 0 {
 				p.ChallengeScore = ch.TotalChallengeScore
@@ -431,7 +432,7 @@ func fetchClientProfile(c *conn, p *ClientProfile, puuid string) {
 			var cat map[string]struct {
 				Name string `json:"name"`
 			}
-			if json.Unmarshal(raw, &cat) == nil {
+			if jsonx.Unmarshal(raw, &cat) == nil {
 				for i := range p.Challenges {
 					if e, ok := cat[fmt.Sprint(p.Challenges[i].ID)]; ok {
 						p.Challenges[i].Name = e.Name
@@ -460,7 +461,7 @@ func fetchClientProfile(c *conn, p *ClientProfile, puuid string) {
 			continue
 		}
 		var rows []masteryRow
-		if json.Unmarshal(raw, &rows) == nil && len(rows) > 0 {
+		if jsonx.Unmarshal(raw, &rows) == nil && len(rows) > 0 {
 			saveRaw("lcu-mastery.json", raw)
 			sort.Slice(rows, func(i, j int) bool { return rows[i].ChampionPoints > rows[j].ChampionPoints })
 			for i, m := range rows {
@@ -486,7 +487,7 @@ func fetchClientProfile(c *conn, p *ClientProfile, puuid string) {
 	for _, path := range scorePaths {
 		if raw, err := c.getRaw(path); err == nil {
 			var score int
-			if json.Unmarshal(raw, &score) == nil {
+			if jsonx.Unmarshal(raw, &score) == nil {
 				p.MasteryScore = score
 				break
 			}
@@ -517,7 +518,7 @@ func fetchClientProfile(c *conn, p *ClientProfile, puuid string) {
 				} `json:"games"`
 			} `json:"games"`
 		}
-		if json.Unmarshal(raw, &mh) == nil {
+		if jsonx.Unmarshal(raw, &mh) == nil {
 			for _, g := range mh.Games.Games {
 				if len(g.Participants) == 0 {
 					break
@@ -543,7 +544,7 @@ func fetchClientProfile(c *conn, p *ClientProfile, puuid string) {
 			var pr struct {
 				BackgroundSkinID int `json:"backgroundSkinId"`
 			}
-			if json.Unmarshal(raw, &pr) == nil {
+			if jsonx.Unmarshal(raw, &pr) == nil {
 				p.BannerSkinID = pr.BackgroundSkinID
 			}
 		}
@@ -561,7 +562,7 @@ func fetchClientProfile(c *conn, p *ClientProfile, puuid string) {
 			Availability  string `json:"availability"`
 			StatusMessage string `json:"statusMessage"`
 		}
-		if json.Unmarshal(raw, &me) == nil {
+		if jsonx.Unmarshal(raw, &me) == nil {
 			p.Availability = availabilityLabel(me.Availability)
 			p.StatusMessage = me.StatusMessage
 		}
@@ -604,7 +605,7 @@ func fetchLobby(c *conn, lob *Lobby, puuid string, sumID int64) {
 			SecondPos     string `json:"secondPositionPreference"`
 		} `json:"members"`
 	}
-	if json.Unmarshal(raw, &lb) != nil {
+	if jsonx.Unmarshal(raw, &lb) != nil {
 		return
 	}
 	gc := lb.GameConfig
@@ -659,7 +660,7 @@ func fetchLoading(c *conn, lob *Lobby, selfPuuid string) {
 			TeamTwo                  []gamePlayer `json:"teamTwo"`
 		} `json:"gameData"`
 	}
-	if json.Unmarshal(raw, &s) != nil {
+	if jsonx.Unmarshal(raw, &s) != nil {
 		return
 	}
 	lob.PhaseLabel = "Loading into game"
@@ -721,7 +722,7 @@ func fetchChampSelect(c *conn, lob *Lobby) {
 			TheirTeamBans []int `json:"theirTeamBans"`
 		} `json:"bans"`
 	}
-	if json.Unmarshal(raw, &s) != nil {
+	if jsonx.Unmarshal(raw, &s) != nil {
 		return
 	}
 	lob.PhaseLabel = phaseLabel(s.Timer.Phase)

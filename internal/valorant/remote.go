@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/glow-moe/glow-collector/internal/jsonx"
 	"github.com/glow-moe/glow-collector/internal/riotclient"
 )
 
@@ -362,7 +363,7 @@ func (s *session) do(method, url string, body any, max int64, out any) error {
 	if resp.StatusCode != http.StatusOK {
 		return errors.New(resp.Status)
 	}
-	return json.NewDecoder(io.LimitReader(resp.Body, max)).Decode(out)
+	return jsonx.Decode(io.LimitReader(resp.Body, max), out)
 }
 
 // ── which servers: the game's own log ─────────────────────────────────────────

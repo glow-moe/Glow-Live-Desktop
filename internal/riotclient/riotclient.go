@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/glow-moe/glow-collector/internal/jsonx"
 )
 
 // ErrNoClient means the Riot Client isn't up (no lockfile, or it doesn't answer).
@@ -90,7 +92,7 @@ func (l Local) Get(path string, max int64, out any) error {
 	if resp.StatusCode != http.StatusOK {
 		return errors.New(resp.Status)
 	}
-	return json.NewDecoder(io.LimitReader(resp.Body, max)).Decode(out)
+	return jsonx.Decode(io.LimitReader(resp.Body, max), out)
 }
 
 // Self is who's signed in to the client's chat.

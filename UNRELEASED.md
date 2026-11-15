@@ -18,3 +18,5 @@ and gets cleared.
 - League in Practice Tool keeps working after you spawn a target dummy (the match stopped showing before).
 - League: stealing Baron or a Dragon, and finishing your team's Ace, show as big plays on your Glow page.
 - Rocket League: your match (score, clock, goals, saves) shows on your Glow page from the game's own Stats API. L!VE switches it on in the game's settings by itself; restart Rocket League once after.
+- One odd value from a game no longer stops L!VE from reading the whole match (League, TFT, VALORANT, Dota, CS2).
+- A stolen Baron or Dragon, and an Ace you finish, show on your Discord status for 30 seconds too.

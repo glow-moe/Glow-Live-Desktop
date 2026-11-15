@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/glow-moe/glow-collector/internal/jsonx"
 	"github.com/glow-moe/glow-collector/internal/steam"
 )
 
@@ -251,7 +252,7 @@ func Summarize(frame json.RawMessage) Summary {
 			} `json:"match_stats"`
 		} `json:"player"`
 	}
-	if json.Unmarshal(frame, &f) != nil {
+	if jsonx.Unmarshal(frame, &f) != nil {
 		return Summary{}
 	}
 	s := Summary{Map: f.Map.Name, Mode: f.Map.Mode, Phase: f.Map.Phase, Round: f.Map.Round, Self: f.Self}
