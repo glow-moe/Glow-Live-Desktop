@@ -219,6 +219,8 @@ type Summary struct {
 	Kills   int
 	Deaths  int
 	Assists int
+	// RoundKills is this round's kills (5 in a 5v5 mode is an ace).
+	RoundKills int
 }
 
 // Summarize reads a frame's basics.
@@ -239,6 +241,9 @@ func Summarize(frame json.RawMessage) Summary {
 		} `json:"map"`
 		Player struct {
 			Team  string `json:"team"`
+			State struct {
+				RoundKills int `json:"round_kills"`
+			} `json:"state"`
 			Stats struct {
 				Kills   int `json:"kills"`
 				Deaths  int `json:"deaths"`
@@ -257,6 +262,7 @@ func Summarize(frame json.RawMessage) Summary {
 	if f.Self {
 		s.Side = f.Player.Team
 		s.Kills, s.Deaths, s.Assists = f.Player.Stats.Kills, f.Player.Stats.Deaths, f.Player.Stats.Assists
+		s.RoundKills = f.Player.State.RoundKills
 	}
 	switch s.Side {
 	case "CT":

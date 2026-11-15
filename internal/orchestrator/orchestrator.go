@@ -1049,9 +1049,11 @@ type Orchestrator struct {
 	dotaSeenAt          time.Time
 	cs2Recv             *cs2.Receiver
 	cs2TriedAt          time.Time
-	cs2Last             cs2.Summary // the member's own numbers, kept while they spectate (tick goroutine only)
-	cs2SeenAt, cs2Since time.Time   // CS2 open per Steam, for the restart hint
-	pcScanAt            time.Time   // last process list read for PcGames (tick goroutine only)
+	cs2Last             cs2.Summary          // the member's own numbers, kept while they spectate (tick goroutine only)
+	cs2SeenAt, cs2Since time.Time            // CS2 open per Steam, for the restart hint
+	flash               momentFlash          // a big play on the Discord status (moments.go)
+	flashSeen           map[string]time.Time // moments already flashed, by key
+	pcScanAt            time.Time            // last process list read for PcGames (tick goroutine only)
 	pcFound             string
 	mirrorsAt           time.Time
 	steamID             uint32 // Steam account id signed in on this machine (0 = none)
@@ -1454,7 +1456,8 @@ func (o *Orchestrator) tick() {
 				st := Status{Game: "cs2", InGame: true, Detail: cs2Detail(sum), AppID: cs2.AppID, GameName: "Counter-Strike 2", Pushes: o.pushes, Delay: effDelay}
 				o.push(cfg, effDelay, cs2Push{Game: "cs2", Live: true, UpdatedAt: time.Now().UnixMilli(), Raw: frame}, &st)
 				app, _ := steamApp(cs2.AppID)
-				o.presence(o.appFor("cs2", app), o.styled("cs2", cs2Activity(sum, uname), cs2Vars(sum)))
+				o.cs2Ace(sum, time.Now())
+				o.presence(o.appFor("cs2", app), o.withFlash(o.styled("cs2", cs2Activity(sum, uname), cs2Vars(sum)), time.Now()))
 				o.set(st)
 				return
 			}
@@ -1514,7 +1517,8 @@ func (o *Orchestrator) tick() {
 		o.push(cfg, effDelay, snap, &st)
 		o.cacheOverlay(snap)
 		leagueOverlay = true
-		o.presence(o.appFor("lol-game", orGlow(appLoL)), o.styled("lol-game", leagueActivity(snap, data.GameData.GameTime, uname), leagueVars(snap)))
+		o.leaguePenta(snap, time.Now())
+		o.presence(o.appFor("lol-game", orGlow(appLoL)), o.withFlash(o.styled("lol-game", leagueActivity(snap, data.GameData.GameTime, uname), leagueVars(snap)), time.Now()))
 		o.set(st)
 		return
 	}
