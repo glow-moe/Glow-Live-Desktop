@@ -234,12 +234,44 @@ func (o *Orchestrator) rlMatch() (*rocketleague.Match, bool) {
 			}
 		}()
 	}
+	// The game listening means it read the config: no restart needed any more.
+	if o.rlReader.Connected() {
+		o.rlRestart = false
+	}
 	m, ok := o.rlReader.Latest(15 * time.Second)
 	if ok {
-		o.rlRestart = false
 		return &m, true
 	}
 	return nil, false
+}
+
+// rlState is the match for Discord's state line: "DFH Stadium · 3–2 · 1:14".
+func rlState(m *rocketleague.Match) string {
+	if m == nil {
+		return ""
+	}
+	clock := fmt.Sprintf("%d:%02d", m.Clock/60, m.Clock%60)
+	if m.Overtime {
+		clock = "OT +" + clock
+	}
+	if m.Ended {
+		if m.Won {
+			return fmt.Sprintf("%s · won %d–%d", m.Arena, m.Mine, m.Theirs)
+		}
+		return fmt.Sprintf("%s · lost %d–%d", m.Arena, m.Mine, m.Theirs)
+	}
+	return fmt.Sprintf("%s · %d–%d · %s", m.Arena, m.Mine, m.Theirs, clock)
+}
+
+// rlListed reports whether the site's PC game list has Rocket League: then
+// the app reads its match (the site sends the list to who may see it).
+func rlListed(games map[string]string) bool {
+	for _, name := range games {
+		if name == rocketLeague {
+			return true
+		}
+	}
+	return false
 }
 
 // rlDetail is the status line: "Rocket League · 3–2 · 1:14", or the restart

@@ -1601,7 +1601,19 @@ func (o *Orchestrator) tick() {
 				if s.AppID == cs2.AppID && settings.CS2 && o.cs2NeedsRestart() {
 					st.Detail = cs2RestartHint
 				}
-				o.push(cfg, effDelay, o.steamSnapshotPayload(s), &st)
+				var payload any = o.steamSnapshotPayload(s)
+				// Rocket League on Steam: its match comes from the game's Stats
+				// API, sent the way the Epic copy is (a PC game with its match),
+				// and the score goes on Discord's state line.
+				if s.AppID == rocketleague.SteamAppID && rlListed(settings.PcGames) {
+					m, _ := o.rlMatch()
+					st.Detail = o.rlDetail(m)
+					if m != nil {
+						s.Detail = rlState(m)
+					}
+					payload = pcPayload{Game: "pc", Title: rocketLeague, Match: m, UpdatedAt: time.Now().UnixMilli()}
+				}
+				o.push(cfg, effDelay, payload, &st)
 				app, named := steamApp(s.AppID)
 				hints := steamGameHints(cfg.Endpoint, s.AppID)
 				if hints.SelfRP {

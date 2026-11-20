@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/glow-moe/glow-collector/internal/steam"
@@ -149,7 +150,14 @@ type Reader struct {
 	at    time.Time
 	me    string // the member's name in this match: the car the camera follows
 	guid  string
+	// up: connected to the game's feed now. The game only listens once the
+	// Stats API is on, so a connection means it already read the config.
+	up atomic.Bool
 }
+
+// Connected reports whether the reader is on the game's feed right now (the
+// game is open with the Stats API on, in a match or not).
+func (r *Reader) Connected() bool { return r.up.Load() }
 
 // Run connects while the game is up and reads until it closes; call it again
 // after it returns (the caller retries every few seconds).
@@ -158,14 +166,17 @@ func (r *Reader) Run() {
 	if err != nil {
 		return
 	}
-	defer c.Close()
+	r.up.Store(true)
+	defer func() { r.up.Store(false); c.Close() }()
 	dec := json.NewDecoder(bufio.NewReader(c))
 	for {
 		var msg struct {
 			Event string          `json:"Event"`
 			Data  json.RawMessage `json:"Data"`
 		}
-		_ = c.SetReadDeadline(time.Now().Add(30 * time.Second))
+		// Out of a match the game sends nothing for as long as the menus are
+		// open; the deadline only catches a game that went away.
+		_ = c.SetReadDeadline(time.Now().Add(10 * time.Minute))
 		if err := dec.Decode(&msg); err != nil {
 			return
 		}
