@@ -120,8 +120,8 @@ var appFortnite = "1402418703554842694"
 // players left (or the phase) under it, the match clock, and buttons to the
 // lobby page and the profile.
 func fortniteActivity(f fortnite.State, username string) discord.Activity {
-	if place, zone, ok := stwPlace(f); ok {
-		return stwActivity(f, place, zone, username)
+	if w, ok := stwPlace(f); ok {
+		return stwActivity(f, w, username)
 	}
 	mode, left := fortniteMode(f.Status)
 	a := discord.Activity{Type: 5, Details: atLeast2(mode, "Fortnite")}
@@ -172,44 +172,52 @@ func fortniteLine(f fortnite.State, outfit, username string) string {
 
 // stwLine is Fortnite's status line in Save the World ("Save the World:
 // Stonewood (15)", "Save the World: Homebase (1 - Normal)"). It follows the
-// game's language, so another language keeps the Battle Royale card. What the
-// number in brackets means isn't known, so it stays off the card (as on the site).
-var stwLine = regexp.MustCompile(`(?i)^Save the World(?::\s*(.+?))?(?:\s*\(.*\))?$`)
+// game's language, so another language keeps the Battle Royale card. The
+// number in brackets is the zone's power level (Stonewood 15); at Homebase it
+// reads "1 - Normal" and stays off the card.
+var stwLine = regexp.MustCompile(`(?i)^Save the World(?::\s*(.+?))?(?:\s*\((?:(\d{1,3})\)|.*\)))?$`)
 
 var stwZones = map[string]string{"homebase": "homebase", "stonewood": "stonewood", "plankerton": "plankerton", "canny valley": "canny", "twine peaks": "twine"}
 
-// stwPlace is where they are in Save the World: the place's name and the
-// zone glow.moe draws a sky for ("other" for a place it doesn't know).
-func stwPlace(f fortnite.State) (place, zone string, ok bool) {
+// stwWhere is where they are in Save the World: the place's name, the zone
+// glow.moe draws a sky for ("other" for a place it doesn't know) and its power
+// level ("" when the line has none).
+type stwWhere struct{ place, zone, level string }
+
+func stwPlace(f fortnite.State) (stwWhere, bool) {
 	if !f.InMatch {
-		return "", "", false
+		return stwWhere{}, false
 	}
 	m := stwLine.FindStringSubmatch(strings.TrimSpace(f.Status))
 	if m == nil {
-		return "", "", false
+		return stwWhere{}, false
 	}
-	place = strings.TrimSpace(m[1])
-	if place == "" {
-		place = "Homebase"
+	w := stwWhere{place: strings.TrimSpace(m[1]), level: m[2]}
+	if w.place == "" {
+		w.place = "Homebase"
 	}
-	zone = stwZones[strings.ToLower(place)]
-	if zone == "" {
-		zone = "other"
+	if w.zone = stwZones[strings.ToLower(w.place)]; w.zone == "" {
+		w.zone = "other"
 	}
-	return place, zone, true
+	if w.zone == "homebase" || w.level == "0" {
+		w.level = ""
+	}
+	return w, true
 }
 
 // stwActivity is the Fortnite card in Save the World: the zone on top and
-// whether they're on a mission or at Homebase (with the party) under it, their
+// whether they're on a mission (with the zone's power level) or at Homebase,
+// and the party, under it, their
 // outfit standing under that zone's sky as the big picture (glow.moe draws it,
 // the sky from their live page), glow in the corner, the clock and the buttons.
-func stwActivity(f fortnite.State, place, zone, username string) discord.Activity {
+func stwActivity(f fortnite.State, w stwWhere, username string) discord.Activity {
+	place, zone := w.place, w.zone
 	home := zone == "homebase"
 	a := discord.Activity{Type: 5, Details: "Save the World"}
 	where := "At Homebase"
 	if !home {
 		a.Details = atLeast2("Save the World · "+place, "Save the World")
-		where = "On a mission"
+		where = joinDots("On a mission", stwLevel(w.level))
 	}
 	if n := len(f.Others()); n > 0 {
 		where = fmt.Sprintf("%s · party of %d", where, n+1)
@@ -236,6 +244,14 @@ func stwActivity(f fortnite.State, place, zone, username string) discord.Activit
 	return a
 }
 
+// stwLevel is the power level as the card shows it ("Power level 15").
+func stwLevel(level string) string {
+	if level == "" {
+		return ""
+	}
+	return "Power level " + level
+}
+
 func fortniteVars(f fortnite.State) map[string]string {
 	mode, left := fortniteMode(f.Status)
 	lastLeft := ""
@@ -249,9 +265,10 @@ func fortniteVars(f fortnite.State) map[string]string {
 		"party": fmt.Sprint(len(f.Others()) + 1),
 	}
 	// Save the World only: {stwPlace} ("Stonewood"), {stwZone} ("stonewood",
-	// "canny", "other"), {stwHome} "yes" at Homebase; empty anywhere else.
-	if place, zone, ok := stwPlace(f); ok {
-		v["stwPlace"], v["stwZone"], v["stwHome"] = place, zone, yes(zone == "homebase")
+	// "canny", "other"), {stwHome} "yes" at Homebase, {stwLevel} the zone's
+	// power level ("15"); empty anywhere else.
+	if w, ok := stwPlace(f); ok {
+		v["stwPlace"], v["stwZone"], v["stwHome"], v["stwLevel"] = w.place, w.zone, yes(w.zone == "homebase"), w.level
 	}
 	return v
 }

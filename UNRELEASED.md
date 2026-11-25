@@ -20,4 +20,4 @@ and gets cleared.
 - Rocket League (Steam or Epic): your match (score, clock, goals, saves) shows on your Glow page and on Discord from the game's own Stats API. L!VE switches it on in the game's settings by itself; restart Rocket League once after.
 - One odd value from a game no longer stops L!VE from reading the whole match (League, TFT, VALORANT, Dota, CS2).
 - A stolen Baron or Dragon, and an Ace you finish, show on your Discord status for 30 seconds too.
-- Fortnite Save the World on Discord: the zone and whether you're on a mission or at Homebase, with your outfit under that zone's sky as the picture.
+- Fortnite Save the World on Discord: the zone and whether you're on a mission (with its power level) or at Homebase, with your outfit under that zone's sky as the picture.
