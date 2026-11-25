@@ -2,6 +2,8 @@ package orchestrator
 
 import (
 	"fmt"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -118,6 +120,9 @@ var appFortnite = "1402418703554842694"
 // players left (or the phase) under it, the match clock, and buttons to the
 // lobby page and the profile.
 func fortniteActivity(f fortnite.State, username string) discord.Activity {
+	if place, zone, ok := stwPlace(f); ok {
+		return stwActivity(f, place, zone, username)
+	}
 	mode, left := fortniteMode(f.Status)
 	a := discord.Activity{Type: 5, Details: atLeast2(mode, "Fortnite")}
 	switch {
@@ -165,16 +170,88 @@ func fortniteLine(f fortnite.State, outfit, username string) string {
 	return "glow.moe"
 }
 
+// stwLine is Fortnite's status line in Save the World ("Save the World:
+// Stonewood (15)", "Save the World: Homebase (1 - Normal)"). It follows the
+// game's language, so another language keeps the Battle Royale card. What the
+// number in brackets means isn't known, so it stays off the card (as on the site).
+var stwLine = regexp.MustCompile(`(?i)^Save the World(?::\s*(.+?))?(?:\s*\(.*\))?$`)
+
+var stwZones = map[string]string{"homebase": "homebase", "stonewood": "stonewood", "plankerton": "plankerton", "canny valley": "canny", "twine peaks": "twine"}
+
+// stwPlace is where they are in Save the World: the place's name and the
+// zone glow.moe draws a sky for ("other" for a place it doesn't know).
+func stwPlace(f fortnite.State) (place, zone string, ok bool) {
+	if !f.InMatch {
+		return "", "", false
+	}
+	m := stwLine.FindStringSubmatch(strings.TrimSpace(f.Status))
+	if m == nil {
+		return "", "", false
+	}
+	place = strings.TrimSpace(m[1])
+	if place == "" {
+		place = "Homebase"
+	}
+	zone = stwZones[strings.ToLower(place)]
+	if zone == "" {
+		zone = "other"
+	}
+	return place, zone, true
+}
+
+// stwActivity is the Fortnite card in Save the World: the zone on top and
+// whether they're on a mission or at Homebase (with the party) under it, their
+// outfit standing under that zone's sky as the big picture (glow.moe draws it,
+// the sky from their live page), glow in the corner, the clock and the buttons.
+func stwActivity(f fortnite.State, place, zone, username string) discord.Activity {
+	home := zone == "homebase"
+	a := discord.Activity{Type: 5, Details: "Save the World"}
+	where := "At Homebase"
+	if !home {
+		a.Details = atLeast2("Save the World · "+place, "Save the World")
+		where = "On a mission"
+	}
+	if n := len(f.Others()); n > 0 {
+		where = fmt.Sprintf("%s · party of %d", where, n+1)
+	}
+	a.State = where
+	if !f.JoinedAt.IsZero() && time.Since(f.JoinedAt) >= 0 && time.Since(f.JoinedAt) < 6*time.Hour {
+		a.Timestamps = &discord.Timestamps{Start: f.JoinedAt.UnixMilli()}
+	}
+	art := "https://glow.moe/api/live/rpc-art/stw?zone=" + zone
+	if id := f.Loadout.Character; id != "" && !strings.ContainsAny(id, "/?#&") {
+		art += "&outfit=" + url.QueryEscape(strings.ToLower(id))
+	}
+	text := atLeast2(fortnite.OutfitName(f.Loadout.Character), "")
+	if text == "" {
+		text = atLeast2(place, "Save the World")
+	}
+	a.Assets = &discord.Assets{LargeImage: art, LargeText: text, SmallImage: glowIcon, SmallText: "glow.moe"}
+	if username != "" {
+		a.Buttons = []discord.Button{
+			{Label: "View my lobby", URL: "https://glow.moe/" + username + "/fortnite"},
+			{Label: "View my Glow profile", URL: "https://glow.moe/" + username},
+		}
+	}
+	return a
+}
+
 func fortniteVars(f fortnite.State) map[string]string {
 	mode, left := fortniteMode(f.Status)
 	lastLeft := ""
 	if f.Last != nil && f.Last.Left > 0 {
 		lastLeft = fmt.Sprint(f.Last.Left)
 	}
-	return map[string]string{
+	v := map[string]string{
 		"mode": mode, "left": left, "status": f.Status, "playlist": f.Playlist, "phase": f.Phase,
 		"phaseName": fortnitePhases[f.Phase], "island": f.Island, "outfit": fortniteOutfit(f.Loadout.Character),
 		"outfitName": fortnite.OutfitName(f.Loadout.Character), "lastLeft": lastLeft,
 		"party": fmt.Sprint(len(f.Others()) + 1),
 	}
+	// Save the World only: {stwPlace} ("Stonewood"), {stwZone} ("stonewood",
+	// "canny", "other"), {stwHome} "yes" at Homebase; empty anywhere else.
+	if place, zone, ok := stwPlace(f); ok {
+		v["stwPlace"], v["stwZone"], v["stwHome"] = place, zone, yes(zone == "homebase")
+	}
+	return v
 }
