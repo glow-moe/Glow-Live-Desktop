@@ -25,3 +25,4 @@ and gets cleared.
 - glow.moe can pick a status card's verb (Playing, Competing, Watching, Listening) per game, starting with Fortnite.
 - Fortnite Save the World on Discord: in a Storm Shield the card says which wave you're on.
 - A test build of L!VE now updates to the real release of the same month (a 26.12 test build took itself for 26.12 and never updated).
+- Fortnite on Discord no longer puts your glow.moe link on the card's third line before your outfit is known (the button already opens your page).

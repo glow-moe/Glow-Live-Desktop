@@ -205,7 +205,7 @@ func fortniteActivity(f fortnite.State, username string) discord.Activity {
 	if large == "" {
 		large = glowIcon
 	}
-	a.Assets = &discord.Assets{LargeImage: large, LargeText: fortniteLine(f, fortnite.OutfitName(f.Loadout.Character), username), SmallImage: glowIcon, SmallText: "glow.moe"}
+	a.Assets = &discord.Assets{LargeImage: large, LargeText: fortniteLine(f, fortnite.OutfitName(f.Loadout.Character)), SmallImage: glowIcon, SmallText: "glow.moe"}
 	if username != "" {
 		a.Buttons = []discord.Button{
 			{Label: "View my lobby", URL: "https://glow.moe/" + username + "/fortnite"},
@@ -216,19 +216,13 @@ func fortniteActivity(f fortnite.State, username string) discord.Activity {
 }
 
 // fortniteLine is the card's third line (the big picture's text): in the
-// lobby, how the last match ended; otherwise the outfit's name; glow.moe/<you>
-// until either is known.
-func fortniteLine(f fortnite.State, outfit, username string) string {
+// lobby, how the last match ended; otherwise the outfit's name; no line until
+// either is known (the page link is the card's button already).
+func fortniteLine(f fortnite.State, outfit string) string {
 	if !f.InMatch && f.Last != nil && f.Last.Left > 0 {
 		return fmt.Sprintf("Last match: out with %d left", f.Last.Left)
 	}
-	if outfit != "" {
-		return atLeast2(outfit, "")
-	}
-	if username != "" {
-		return "glow.moe/" + username
-	}
-	return "glow.moe"
+	return atLeast2(outfit, "")
 }
 
 // stwLine is Fortnite's status line in Save the World ("Save the World:
