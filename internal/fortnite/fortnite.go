@@ -23,17 +23,19 @@ import (
 // State is what the log has said so far.
 type State struct {
 	InMatch  bool
-	Map      string    // map asset, "Athena_Terrain_S10"
-	Playlist string    // "Playlist_FigmentNoBuildSolo"
-	Phase    string    // Setup, Warmup, Aircraft, SafeZones, EndGame
-	Status   string    // Fortnite's own status line
-	Island   string    // the selected experience or island code
-	JoinedAt time.Time // when the match loaded
-	Last     *Final    // the match before, once you're back in the lobby
-	Loadout  Loadout   // what you have equipped
-	Name     string    // your Epic display name (glow.moe looks up public stats by it)
-	ID       string    // your Epic account id
-	Party    []Member  // everyone in your lobby, you included, in join order
+	Map      string     // map asset, "Athena_Terrain_S10"
+	Playlist string     // "Playlist_FigmentNoBuildSolo"
+	Phase    string     // Setup, Warmup, Aircraft, SafeZones, EndGame
+	Status   string     // Fortnite's own status line
+	Island   string     // the selected experience or island code
+	JoinedAt time.Time  // when the match loaded
+	Last     *Final     // the match before, once you're back in the lobby
+	Loadout  Loadout    // what you have equipped
+	Name     string     // your Epic display name (glow.moe looks up public stats by it)
+	ID       string     // your Epic account id
+	Party    []Member   // everyone in your lobby, you included, in join order
+	Stw      StwRun     // Save the World: the mission you're in
+	StwLast  *StwResult // Save the World: the last mission you finished
 
 	ids map[string]bool // full Epic account ids the log has named
 
@@ -41,6 +43,13 @@ type State struct {
 	// "Local Player ... loadout changed" line)
 	inBlock bool
 	slot    string
+
+	// Save the World lines being read (stw.go)
+	stwBar           stwBar
+	stwReports       []StwScore
+	stwAuthoritative bool
+	stwXPMine        bool
+	stwLevelBefore   int
 }
 
 // Member is someone in the lobby: the name Fortnite shows (a console name
@@ -113,6 +122,9 @@ func (s *State) feed(r io.Reader) {
 				continue
 			}
 		}
+		if s.stwFeed(line) {
+			continue
+		}
 		if strings.Contains(line, "LogFortPlayerLoadout:") && strings.Contains(line, "Local Player") && strings.Contains(line, "loadout changed") {
 			s.inBlock, s.slot, s.Loadout = true, "", Loadout{}
 			continue
@@ -132,11 +144,13 @@ func (s *State) feed(r io.Reader) {
 					s.Last = f
 				}
 				s.InMatch, s.Map, s.Playlist, s.Phase, s.JoinedAt = false, "", "", "", time.Time{}
+				s.Stw = StwRun{}
 				continue
 			}
 			// "<server>:<port>/<plugin>/<map>": a match. The server stays here.
 			if i := strings.IndexByte(path, '/'); i > 0 && strings.Contains(path[:i], ":") {
 				s.InMatch, s.Map, s.Playlist, s.Phase, s.JoinedAt = true, filepath.Base(path[i:]), "", "", stamp(line)
+				s.stwStart(path[i:])
 			}
 			continue
 		}

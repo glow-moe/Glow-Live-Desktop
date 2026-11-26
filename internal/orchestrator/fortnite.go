@@ -27,7 +27,66 @@ type fortniteSnap struct {
 	Name      string         `json:"name,omitempty"`
 	ID        string         `json:"id,omitempty"`
 	Party     []fortniteMate `json:"party,omitempty"`
+	Stw       *fortniteStw   `json:"stw,omitempty"`
 	UpdatedAt int64          `json:"updatedAt"`
+}
+
+// fortniteStw is Save the World from the log: the mission's map and kind, the
+// wave, the three medals, and the last finished mission's scores and XP.
+type fortniteStw struct {
+	Map     string            `json:"map,omitempty"`
+	Mission string            `json:"mission,omitempty"`
+	Wave    int               `json:"wave,omitempty"`
+	Medals  []fortniteMedal   `json:"medals,omitempty"`
+	Last    *fortniteStwFinal `json:"last,omitempty"`
+}
+
+type fortniteMedal struct {
+	Kind  string `json:"kind"`
+	Score int    `json:"score"`
+	Tier  int    `json:"tier"`
+	Next  int    `json:"next,omitempty"`
+}
+
+type fortniteStwFinal struct {
+	Map     string             `json:"map,omitempty"`
+	Mission string             `json:"mission,omitempty"`
+	Players []fortniteStwScore `json:"players"`
+	XP      int                `json:"xp,omitempty"`
+	Level   int                `json:"level,omitempty"`
+	LevelUp int                `json:"levelUp,omitempty"`
+	EndedAt int64              `json:"endedAt,omitempty"`
+}
+
+type fortniteStwScore struct {
+	Name     string `json:"name"`
+	Me       bool   `json:"me,omitempty"`
+	Combat   int    `json:"combat"`
+	Building int    `json:"building"`
+	Utility  int    `json:"utility"`
+	Total    int    `json:"total"`
+}
+
+// stwPayload is the frame's Save the World part, nil outside it (and the last
+// mission once it's 3 hours old).
+func stwPayload(f fortnite.State) *fortniteStw {
+	if _, ok := stwPlace(f); !ok {
+		return nil
+	}
+	out := &fortniteStw{Map: f.Stw.Map, Mission: f.Stw.Mission, Wave: f.Stw.Wave}
+	for i, m := range f.Stw.Medals {
+		if m.Score > 0 {
+			out.Medals = append(out.Medals, fortniteMedal{Kind: fortnite.StwMedalKinds[i], Score: m.Score, Tier: m.Tier, Next: m.Next})
+		}
+	}
+	if l := f.StwLast; l != nil && time.Since(l.EndedAt) < 3*time.Hour {
+		fin := &fortniteStwFinal{Map: l.Map, Mission: l.Mission, XP: l.XP, Level: l.Level, LevelUp: l.LevelUp, EndedAt: ms(l.EndedAt)}
+		for _, p := range l.Players {
+			fin.Players = append(fin.Players, fortniteStwScore{p.Name, p.Me, p.Combat, p.Building, p.Utility, p.Total})
+		}
+		out.Last = fin
+	}
+	return out
 }
 
 // fortniteMate is someone else in the lobby; the site names them by id.
@@ -70,6 +129,7 @@ func fortnitePayload(f fortnite.State) fortniteSnap {
 	if g := f.Loadout; g.Character != "" {
 		p.Loadout = &fortniteGear{g.Character, g.Backpack, g.Pickaxe, g.Glider, g.Contrail, g.Pet, g.PetName}
 	}
+	p.Stw = stwPayload(f)
 	if l := f.Last; l != nil {
 		p.Last = &fortniteFinal{Playlist: l.Playlist, Status: l.Status, Left: l.Left, StartedAt: ms(l.JoinedAt), EndedAt: ms(l.EndedAt)}
 	}

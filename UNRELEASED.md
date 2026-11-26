@@ -21,3 +21,4 @@ and gets cleared.
 - One odd value from a game no longer stops L!VE from reading the whole match (League, TFT, VALORANT, Dota, CS2).
 - A stolen Baron or Dragon, and an Ace you finish, show on your Discord status for 30 seconds too.
 - Fortnite Save the World on Discord: the zone and whether you're on a mission (with its power level) or at Homebase, with your outfit under that zone's sky as the picture.
+- Fortnite Save the World on your Glow page: your three mission medals as they fill, the map, the wave in a Storm Shield, and after a mission everyone's score with the XP you earned and your commander level.
