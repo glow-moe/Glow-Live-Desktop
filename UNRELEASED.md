@@ -23,3 +23,5 @@ and gets cleared.
 - Fortnite Save the World on Discord: the zone and whether you're on a mission (with its power level) or at Homebase, with your outfit under that zone's sky as the picture.
 - Fortnite Save the World on your Glow page: your three mission medals as they fill, the map, the wave in a Storm Shield, and after a mission everyone's score with the XP you earned and your commander level.
 - glow.moe can pick a status card's verb (Playing, Competing, Watching, Listening) per game, starting with Fortnite.
+- Fortnite Save the World on Discord: in a Storm Shield the card says which wave you're on.
+- A test build of L!VE now updates to the real release of the same month (a 26.12 test build took itself for 26.12 and never updated).

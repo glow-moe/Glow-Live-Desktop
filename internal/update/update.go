@@ -6,6 +6,7 @@ package update
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -130,9 +131,11 @@ func IsRelease(version string) bool { return strings.HasPrefix(version, "v") }
 func Compare(a, b string) int { return cmpVer(strings.TrimSpace(a), strings.TrimSpace(b)) }
 
 // cmpVer compares dotted versions ("v1.2" vs "v1.3"), ignoring a leading "v".
+// A test build ("v26.12.DEV6") sorts below its release ("v26.12") and by its
+// number among the others, so a PC running one takes the real release.
 func cmpVer(a, b string) int {
 	pa, pb := parts(a), parts(b)
-	for i := 0; i < 3; i++ {
+	for i := range pa {
 		if pa[i] != pb[i] {
 			if pa[i] < pb[i] {
 				return -1
@@ -143,13 +146,22 @@ func cmpVer(a, b string) int {
 	return 0
 }
 
-func parts(v string) [3]int {
-	var out [3]int
-	for i, s := range strings.SplitN(strings.TrimPrefix(v, "v"), ".", 3) {
-		if i > 2 {
-			break
+// parts reads up to three numbers, then the test build's number (a release
+// has none and gets the highest).
+func parts(v string) [4]int {
+	out := [4]int{0, 0, 0, math.MaxInt}
+	for i, s := range strings.SplitN(strings.TrimPrefix(v, "v"), ".", 4) {
+		if n, err := strconv.Atoi(s); err == nil && i < 3 {
+			out[i] = n
+			continue
 		}
-		out[i], _ = strconv.Atoi(s)
+		// "DEV6": the digits at its end.
+		j := len(s)
+		for j > 0 && s[j-1] >= '0' && s[j-1] <= '9' {
+			j--
+		}
+		out[3], _ = strconv.Atoi(s[j:])
+		break
 	}
 	return out
 }

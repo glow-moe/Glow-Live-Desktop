@@ -274,8 +274,8 @@ func stwActivity(f fortnite.State, w stwWhere, username string) discord.Activity
 	place, zone := w.place, w.zone
 	home := zone == "homebase"
 	a := discord.Activity{Type: 5, Details: "Save the World"}
-	// The second line stays short (Discord cuts it): the power level stands in
-	// for "On a mission" when the status line has one.
+	// The second line stays short (Discord cuts it): a Storm Shield's wave, else
+	// the power level, stands in for "On a mission".
 	where, doing := "At Homebase", "At Homebase"
 	if !home {
 		a.Details = atLeast2("Save the World · "+place, "Save the World")
@@ -283,6 +283,9 @@ func stwActivity(f fortnite.State, w stwWhere, username string) discord.Activity
 		where = doing
 		if w.level != "" {
 			where = stwLevel(w.level)
+		}
+		if f.Stw.Mission != "" && f.Stw.Wave > 0 {
+			where = fmt.Sprintf("Storm Shield · Wave %d", f.Stw.Wave)
 		}
 	}
 	if n := len(f.Others()); n > 0 {
@@ -333,9 +336,12 @@ func fortniteVars(f fortnite.State) map[string]string {
 	}
 	// Save the World only: {stwPlace} ("Stonewood"), {stwZone} ("stonewood",
 	// "canny", "other"), {stwHome} "yes" at Homebase, {stwLevel} the zone's
-	// power level ("15"); empty anywhere else.
+	// power level ("15"), {stwWave} a Storm Shield's wave ("3"); empty anywhere else.
 	if w, ok := stwPlace(f); ok {
 		v["stwPlace"], v["stwZone"], v["stwHome"], v["stwLevel"] = w.place, w.zone, yes(w.zone == "homebase"), w.level
+		if f.Stw.Wave > 0 {
+			v["stwWave"] = fmt.Sprint(f.Stw.Wave)
+		}
 	}
 	return v
 }

@@ -46,6 +46,12 @@ func TestFortniteSaveTheWorldCard(t *testing.T) {
 		t.Fatalf("party: %q", p.State)
 	}
 
+	shield := party
+	shield.Stw = fortnite.StwRun{Mission: "Storm Shield Defense", Wave: 3}
+	if p := fortniteActivity(shield, ""); p.State != "Storm Shield · Wave 3 · party of 2" || fortniteVars(shield)["stwWave"] != "3" {
+		t.Fatalf("storm shield: %q", p.State)
+	}
+
 	odd := fortniteActivity(fortnite.State{InMatch: true, Status: "Save the World: Ventures"}, "")
 	if odd.Details != "Save the World · Ventures" || odd.State != "On a mission" || odd.Assets.LargeText != "On a mission" || odd.Assets.LargeImage != "https://glow.moe/api/live/rpc-art/stw?zone=other" || odd.Buttons != nil {
 		t.Fatalf("unknown place: %+v", odd)
