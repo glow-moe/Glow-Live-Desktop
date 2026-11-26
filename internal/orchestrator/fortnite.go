@@ -79,8 +79,9 @@ func stwPayload(f fortnite.State) *fortniteStw {
 			out.Medals = append(out.Medals, fortniteMedal{Kind: fortnite.StwMedalKinds[i], Score: m.Score, Tier: m.Tier, Next: m.Next})
 		}
 	}
-	if l := f.StwLast; l != nil && time.Since(l.EndedAt) < 3*time.Hour {
-		fin := &fortniteStwFinal{Map: l.Map, Mission: l.Mission, XP: l.XP, Level: l.Level, LevelUp: l.LevelUp, EndedAt: ms(l.EndedAt)}
+	if f.StwLast != nil && time.Since(f.StwLast.EndedAt) < 3*time.Hour {
+		l, xp := f.StwLast.Mine(f.ID, f.Name)
+		fin := &fortniteStwFinal{Map: l.Map, Mission: l.Mission, XP: xp.XP, Level: xp.Level, LevelUp: xp.LevelUp, EndedAt: ms(l.EndedAt)}
 		for _, p := range l.Players {
 			fin.Players = append(fin.Players, fortniteStwScore{p.Name, p.Me, p.Combat, p.Building, p.Utility, p.Total})
 		}

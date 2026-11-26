@@ -48,7 +48,7 @@ type State struct {
 	stwBar           stwBar
 	stwReports       []StwScore
 	stwAuthoritative bool
-	stwXPMine        bool
+	stwXPName        string
 	stwLevelBefore   int
 }
 

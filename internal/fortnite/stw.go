@@ -36,15 +36,19 @@ var StwMedalKinds = [3]string{"combat", "building", "utility"}
 type StwResult struct {
 	Map, Mission string
 	Players      []StwScore
-	XP           int // XP the mission gave you
-	Level        int // your commander level after it
-	LevelUp      int // levels it gave you
 	EndedAt      time.Time
+	// The results screen's XP, by player name (read before your own name may
+	// be known: the app can start mid-log). Mine picks yours.
+	xp map[string]StwXP
 }
+
+// StwXP is what a mission gave one player: XP and their commander level after.
+type StwXP struct{ XP, Level, LevelUp int }
 
 // StwScore is one player's end-of-mission report.
 type StwScore struct {
 	Name                             string
+	ID                               string // the Epic account id the report named (may be "5cea7...145f2")
 	Me                               bool
 	Combat, Building, Utility, Total int
 }
@@ -156,8 +160,7 @@ func (s *State) stwFeed(line string) bool {
 		return true
 	}
 	if m := stwReportRe.FindStringSubmatch(line); m != nil && len(s.stwReports) < 4 {
-		me := (s.ID != "" && full(m[2], s.ID)) || (s.Name != "" && m[1] == s.Name)
-		s.stwReports = append(s.stwReports, StwScore{Name: m[1], Me: me})
+		s.stwReports = append(s.stwReports, StwScore{Name: m[1], ID: m[2]})
 		return true
 	}
 	if m := stwScoreRe.FindStringSubmatch(line); m != nil && len(s.stwReports) > 0 {
@@ -177,35 +180,48 @@ func (s *State) stwFeed(line string) bool {
 	return true
 }
 
-// stwXP reads the results screen's XP block, only your own player's lines.
-// "Delta XP" is the bar's new value (it restarts at a level up), so the XP
-// earned is the sum of the parts.
+// stwXP reads the results screen's XP block, by player. "Delta XP" is the
+// bar's new value (it restarts at a level up), so the XP earned is the sum of
+// the parts.
 func (s *State) stwXP(key, val string) {
+	l := s.StwLast
 	if key == "Player Name" {
-		s.stwXPMine = false
-		for _, p := range s.StwLast.Players {
-			if p.Me && p.Name == strings.TrimSpace(val) {
-				s.stwXPMine = true
-			}
-		}
-		if !s.stwXPMine && s.Name != "" && strings.TrimSpace(val) == s.Name {
-			s.stwXPMine = true
-		}
+		s.stwXPName = strings.TrimSpace(val)
 		return
 	}
-	if !s.stwXPMine {
+	if s.stwXPName == "" {
 		return
 	}
+	if l.xp == nil {
+		l.xp = map[string]StwXP{}
+	}
+	x := l.xp[s.stwXPName]
 	n := atoiComma(val)
 	switch key {
 	case "Initial Level":
 		s.stwLevelBefore = n
 	case "Delta Level":
-		s.StwLast.Level = n
+		x.Level = n
 		if s.stwLevelBefore > 0 && n >= s.stwLevelBefore {
-			s.StwLast.LevelUp = n - s.stwLevelBefore
+			x.LevelUp = n - s.stwLevelBefore
 		}
 	default: // what the mission gave: base, bonus, boost, rest and group boost XP
-		s.StwLast.XP += n
+		x.XP += n
 	}
+	l.xp[s.stwXPName] = x
+}
+
+// Mine is the result as you saw it: your report marked by your account id or
+// name, and your XP.
+func (r StwResult) Mine(id, name string) (StwResult, StwXP) {
+	out := r
+	out.Players = append([]StwScore(nil), r.Players...)
+	var mine StwXP
+	for i, p := range out.Players {
+		if (id != "" && full(p.ID, id)) || (name != "" && p.Name == name) {
+			out.Players[i].Me = true
+			mine = r.xp[p.Name]
+		}
+	}
+	return out, mine
 }

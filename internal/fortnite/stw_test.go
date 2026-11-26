@@ -45,7 +45,7 @@ const stwLog = `[2026.11.25-18.15.03:056][ 25]LogLoad: LoadMap: 18.157.35.184:90
 `
 
 func TestStwMissionMedalsAndResult(t *testing.T) {
-	s := State{ID: "5cea7bb9ccf2494a9633a45241e145f2"}
+	s := State{} // the app started mid-log: who I am is learned later
 	lines := strings.Split(stwLog, "\n")
 	// Up to the end of the medals: in the mission.
 	s.feed(strings.NewReader(strings.Join(lines[:10], "\n")))
@@ -56,8 +56,11 @@ func TestStwMissionMedalsAndResult(t *testing.T) {
 		t.Fatalf("combat medal: %+v", m)
 	}
 	s.feed(strings.NewReader(strings.Join(lines[10:], "\n")))
-	l := s.StwLast
-	if l == nil || len(l.Players) != 2 || l.Map != "Suburban" {
+	if s.StwLast == nil {
+		t.Fatal("no result")
+	}
+	l, xp := s.StwLast.Mine("5cea7bb9ccf2494a9633a45241e145f2", "")
+	if len(l.Players) != 2 || l.Map != "Suburban" {
 		t.Fatalf("result: %+v", l)
 	}
 	if p := l.Players[0]; !p.Me || p.Combat != 267789 || p.Building != 41184 || p.Utility != 43376 || p.Total != 352349 {
@@ -66,8 +69,11 @@ func TestStwMissionMedalsAndResult(t *testing.T) {
 	if p := l.Players[1]; p.Me || p.Name != "ioi-telpa" || p.Total != 134073 {
 		t.Fatalf("their report (the cached copy must not count): %+v", p)
 	}
-	if l.XP != 86839+86838 || l.Level != 311 || l.LevelUp != 1 {
-		t.Fatalf("xp: %+v", l)
+	if xp.XP != 86839+86838 || xp.Level != 311 || xp.LevelUp != 1 {
+		t.Fatalf("xp: %+v", xp)
+	}
+	if _, x := s.StwLast.Mine("", "ioi-telpa"); x.XP != 317361 {
+		t.Fatalf("their xp by name: %+v", x)
 	}
 	// Back at Homebase: a fresh run, the result stays.
 	if s.Stw.Map != "" || s.Stw.Medals[0].Score != 0 || s.StwLast == nil {
