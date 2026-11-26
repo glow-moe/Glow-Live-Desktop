@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/glow-moe/glow-collector/internal/discord"
@@ -75,5 +76,23 @@ func TestSteamAppKindKeepsDotaOnItsOwnApp(t *testing.T) {
 	}
 	if got := o.appFor(steamAppKind(440), "tf2"); got != "tf2" {
 		t.Fatalf("another Steam game ran under %q", got)
+	}
+}
+
+func TestPresenceTemplateType(t *testing.T) {
+	competing := discord.Activity{Type: 5, Details: "Solo"}
+	playing, bad := 0, 1
+	if got := applyTpl(competing, presenceTpl{Type: &playing}, nil); got.Type != 0 {
+		t.Fatalf("switched to Playing: %d", got.Type)
+	}
+	if got := applyTpl(competing, presenceTpl{}, nil); got.Type != 5 {
+		t.Fatalf("left out keeps it: %d", got.Type)
+	}
+	if got := applyTpl(competing, presenceTpl{Type: &bad}, nil); got.Type != 5 {
+		t.Fatalf("1 (Streaming) needs a stream url, so it's ignored: %d", got.Type)
+	}
+	var tpl presenceTpl
+	if err := json.Unmarshal([]byte(`{"type":0}`), &tpl); err != nil || tpl.Type == nil || *tpl.Type != 0 {
+		t.Fatalf("type 0 from the site: %v %v", err, tpl.Type)
 	}
 }

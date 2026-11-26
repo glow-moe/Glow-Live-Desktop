@@ -27,6 +27,10 @@ type presenceTpl struct {
 	Buttons    []tplButton `json:"buttons"`
 	// NoTime drops the elapsed timer / progress bar.
 	NoTime bool `json:"noTime"`
+	// Type is the card's verb when set: 0 Playing, 2 Listening, 3 Watching,
+	// 5 Competing (nil keeps the built-in one). Fortnite is Competing by default
+	// because the game sets its own Playing card; glow.moe can switch it.
+	Type *int `json:"type"`
 }
 
 type tplButton struct {
@@ -134,6 +138,9 @@ func applyTpl(a discord.Activity, t presenceTpl, vars map[string]string) discord
 	}
 	if t.NoTime {
 		a.Timestamps = nil
+	}
+	if t.Type != nil && (*t.Type == 0 || *t.Type == 2 || *t.Type == 3 || *t.Type == 5) {
+		a.Type = *t.Type
 	}
 	return a
 }
