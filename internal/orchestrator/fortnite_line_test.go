@@ -26,7 +26,7 @@ func TestFortniteThirdLine(t *testing.T) {
 func TestFortniteSaveTheWorldCard(t *testing.T) {
 	mission := fortnite.State{InMatch: true, Status: "Save the World: Canny Valley (15)", Loadout: fortnite.Loadout{Character: "Character_CovertShadow"}}
 	a := fortniteActivity(mission, "melocet")
-	if a.Details != "Save the World · Canny Valley" || a.State != "On a mission · Power level 15" {
+	if a.Details != "Save the World · Canny Valley" || a.State != "Power level 15" {
 		t.Fatalf("mission: %q / %q", a.Details, a.State)
 	}
 	if a.Assets.LargeImage != "https://glow.moe/api/live/rpc-art/stw?zone=canny&outfit=character_covertshadow" {
@@ -37,12 +37,17 @@ func TestFortniteSaveTheWorldCard(t *testing.T) {
 	}
 
 	home := fortniteActivity(fortnite.State{InMatch: true, Status: "Save the World: Homebase (1 - Normal)"}, "melocet")
-	if home.Details != "Save the World" || home.State != "At Homebase" || fortniteVars(fortnite.State{InMatch: true, Status: "Save the World: Homebase (1 - Normal)"})["stwLevel"] != "" || home.Assets.LargeImage != "https://glow.moe/api/live/rpc-art/stw?zone=homebase" || home.Assets.LargeText != "Homebase" {
+	if home.Details != "Save the World" || home.State != "At Homebase" || fortniteVars(fortnite.State{InMatch: true, Status: "Save the World: Homebase (1 - Normal)"})["stwLevel"] != "" || home.Assets.LargeImage != "https://glow.moe/api/live/rpc-art/stw?zone=homebase" || home.Assets.LargeText != "At Homebase" {
 		t.Fatalf("homebase: %+v %+v", home, home.Assets)
 	}
 
+	party := fortnite.State{InMatch: true, ID: "a", Status: "Save the World: Plankerton (19)", Party: []fortnite.Member{{Name: "me", ID: "a"}, {Name: "you", ID: "b"}}}
+	if p := fortniteActivity(party, ""); p.State != "Power level 19 · party of 2" {
+		t.Fatalf("party: %q", p.State)
+	}
+
 	odd := fortniteActivity(fortnite.State{InMatch: true, Status: "Save the World: Ventures"}, "")
-	if odd.Details != "Save the World · Ventures" || odd.State != "On a mission" || odd.Assets.LargeImage != "https://glow.moe/api/live/rpc-art/stw?zone=other" || odd.Buttons != nil {
+	if odd.Details != "Save the World · Ventures" || odd.State != "On a mission" || odd.Assets.LargeText != "On a mission" || odd.Assets.LargeImage != "https://glow.moe/api/live/rpc-art/stw?zone=other" || odd.Buttons != nil {
 		t.Fatalf("unknown place: %+v", odd)
 	}
 

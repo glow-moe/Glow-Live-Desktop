@@ -205,19 +205,24 @@ func stwPlace(f fortnite.State) (stwWhere, bool) {
 	return w, true
 }
 
-// stwActivity is the Fortnite card in Save the World: the zone on top and
-// whether they're on a mission (with the zone's power level) or at Homebase,
-// and the party, under it, their
+// stwActivity is the Fortnite card in Save the World: the zone on top, the
+// zone's power level (or "On a mission", "At Homebase") and the party under it, their
 // outfit standing under that zone's sky as the big picture (glow.moe draws it,
 // the sky from their live page), glow in the corner, the clock and the buttons.
 func stwActivity(f fortnite.State, w stwWhere, username string) discord.Activity {
 	place, zone := w.place, w.zone
 	home := zone == "homebase"
 	a := discord.Activity{Type: 5, Details: "Save the World"}
-	where := "At Homebase"
+	// The second line stays short (Discord cuts it): the power level stands in
+	// for "On a mission" when the status line has one.
+	where, doing := "At Homebase", "At Homebase"
 	if !home {
 		a.Details = atLeast2("Save the World · "+place, "Save the World")
-		where = joinDots("On a mission", stwLevel(w.level))
+		doing = "On a mission"
+		where = doing
+		if w.level != "" {
+			where = stwLevel(w.level)
+		}
 	}
 	if n := len(f.Others()); n > 0 {
 		where = fmt.Sprintf("%s · party of %d", where, n+1)
@@ -230,9 +235,10 @@ func stwActivity(f fortnite.State, w stwWhere, username string) discord.Activity
 	if id := f.Loadout.Character; id != "" && !strings.ContainsAny(id, "/?#&") {
 		art += "&outfit=" + url.QueryEscape(strings.ToLower(id))
 	}
+	// The third line: the outfit's name once it's looked up, else what they're doing.
 	text := atLeast2(fortnite.OutfitName(f.Loadout.Character), "")
 	if text == "" {
-		text = atLeast2(place, "Save the World")
+		text = doing
 	}
 	a.Assets = &discord.Assets{LargeImage: art, LargeText: text, SmallImage: glowIcon, SmallText: "glow.moe"}
 	if username != "" {
