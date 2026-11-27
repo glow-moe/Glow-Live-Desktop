@@ -30,14 +30,14 @@ func TestTFTActivityInAGame(t *testing.T) {
 
 func TestTFTActivityOutOfAGame(t *testing.T) {
 	a := tftActivity(snapshot.Snapshot{Tft: &snapshot.TFT{State: "menus"}}, time.Time{}, "")
-	if a.Details != "Teamfight Tactics" || a.State != "In the menus" || a.Assets.LargeImage != glowIcon || a.Timestamps != nil || a.Buttons != nil {
+	if a.Details != "Teamfight Tactics" || a.State != "In the menus" || a.Assets.LargeImage != tftLogo || a.Timestamps != nil || a.Buttons != nil {
 		t.Fatalf("got %+v", a)
 	}
 	early := tftActivity(snapshot.Snapshot{Tft: &snapshot.TFT{State: "inGame", Set: 18}}, time.Time{}, "")
 	if early.State != "Set 18" {
 		t.Fatalf("no units yet: %q", early.State)
 	}
-	if over := tftActivity(snapshot.Snapshot{Tft: &snapshot.TFT{State: "postGame", Units: []snapshot.TFTUnit{{ChampKey: "Varus", Stars: 3}}}}, time.Time{}, ""); over.State != "Game over" || over.Assets.LargeImage != glowIcon {
+	if over := tftActivity(snapshot.Snapshot{Tft: &snapshot.TFT{State: "postGame", Units: []snapshot.TFTUnit{{ChampKey: "Varus", Stars: 3}}}}, time.Time{}, ""); over.State != "Game over" || over.Assets.LargeImage != tftLogo {
 		t.Fatalf("end screen: %+v", over)
 	}
 }
@@ -52,11 +52,11 @@ func TestTFTActivityShowsTheLittleLegend(t *testing.T) {
 	}
 }
 
-func TestTFTMenusNoDoubleGlowAndAClock(t *testing.T) {
+func TestTFTMenusLogoAndAClock(t *testing.T) {
 	opened := time.UnixMilli(1795770000000)
 	a := tftActivity(snapshot.Snapshot{Tft: &snapshot.TFT{State: "menus"}}, tftSince(tft.State{Phase: "menus", OpenedAt: opened}), "")
-	if a.Assets.LargeImage != glowIcon || a.Assets.SmallImage != "" {
-		t.Fatalf("glow twice: %+v", a.Assets)
+	if a.Assets.LargeImage != tftLogo || a.Assets.SmallImage != glowIcon {
+		t.Fatalf("TFT logo with the glow badge: %+v", a.Assets)
 	}
 	if a.Timestamps == nil || a.Timestamps.Start != opened.UnixMilli() {
 		t.Fatalf("menus clock: %+v", a.Timestamps)

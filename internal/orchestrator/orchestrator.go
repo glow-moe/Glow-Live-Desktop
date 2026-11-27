@@ -2179,8 +2179,8 @@ func tftActivity(s snapshot.Snapshot, started time.Time, username string) discor
 		}
 	}
 	// Your Little Legend as the big picture; without it, your strongest
-	// champion in a game.
-	large, largeText := glowIcon, "Teamfight Tactics"
+	// champion in a game, and the TFT logo otherwise.
+	large, largeText := tftLogo, "Teamfight Tactics"
 	if t.CompanionIcon != "" {
 		large = t.CompanionIcon
 	} else if t.State == tft.PhaseInGame && len(t.Units) > 0 {
@@ -2206,6 +2206,9 @@ func tftActivity(s snapshot.Snapshot, started time.Time, username string) discor
 	}
 	return a
 }
+
+// tftLogo is TFT's own logo (from the Riot Client's icon), hosted on glow.moe.
+const tftLogo = "https://glow.moe/live/tft-logo.png"
 
 // tftSince is the card's clock: the game's own start in a game, otherwise
 // since the client opened (Discord shows a fresh 0:00 with no start).
