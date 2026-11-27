@@ -28,3 +28,4 @@ and gets cleared.
 - Teamfight Tactics in the menus: your Little Legend from your last lobby (the home screen doesn't say which it is), the TFT logo until L!VE has seen one, and a clock since you opened the game instead of 0:00.
 - Teamfight Tactics after a game: your place, your real final board with items, and the lobby by place, from TFT's own end of game file. On the end screen and in the menus for half an hour after, on your Glow page; Discord says "Finished 2nd".
 - VALORANT: when a match ends, its rounds go to your Glow page: who won each round and how, every kill in order with the agents and the weapon, your headshots, and your aces and clutches as big plays.
+- Steam: the built-in game table refreshed (20490 games) so new releases get their own "Playing <game>" headline offline too.
