@@ -629,7 +629,9 @@ func (s *session) details(id string, hidden map[string]bool) (*Final, bool) {
 			Won       bool   `json:"won"`
 			RoundsWon int    `json:"roundsWon"`
 		} `json:"teams"`
-		RoundResults []roundResult `json:"roundResults"`
+		// Read on its own below: a round shape Riot changes must never cost
+		// the scoreboard.
+		RoundResults json.RawMessage `json:"roundResults"`
 	}
 	// Not there yet (404) or a blip: try again on the next round.
 	if err := s.do(http.MethodGet, s.pd+"/match-details/v1/matches/"+id, nil, 8<<20, &r); err != nil {
@@ -672,8 +674,9 @@ func (s *session) details(id string, hidden map[string]bool) (*Final, bool) {
 			subjects = append(subjects, p.Subject)
 		}
 	}
-	if len(subjects) == len(f.Players) {
-		f.Rounds, f.Weapons = rounds(r.RoundResults, f.Players, subjects)
+	var rr []roundResult
+	if len(subjects) == len(f.Players) && json.Unmarshal(r.RoundResults, &rr) == nil {
+		f.Rounds, f.Weapons = rounds(rr, f.Players, subjects)
 	}
 	return f, true
 }

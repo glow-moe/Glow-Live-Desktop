@@ -45,3 +45,22 @@ func TestRoundsClutchAceAndFeed(t *testing.T) {
 		t.Fatal("deathmatch has no rounds")
 	}
 }
+
+// Riot changing a round's shape (a number where a name was) loses the rounds,
+// never the match: the scoreboard still decodes.
+func TestRoundsCantBreakTheScoreboard(t *testing.T) {
+	body := []byte(`{"matchInfo":{"isCompleted":true,"mapId":"/Game/Maps/Triad/Triad"},"players":[{"subject":"me","teamId":"Red","stats":{"kills":3}}],"teams":[],"roundResults":[{"roundNum":"one","playerStats":5}]}`)
+	var r struct {
+		MatchInfo struct {
+			IsCompleted bool `json:"isCompleted"`
+		} `json:"matchInfo"`
+		RoundResults json.RawMessage `json:"roundResults"`
+	}
+	if err := json.Unmarshal(body, &r); err != nil || !r.MatchInfo.IsCompleted {
+		t.Fatalf("the match itself must decode: %v", err)
+	}
+	var rr []roundResult
+	if json.Unmarshal(r.RoundResults, &rr) == nil {
+		t.Fatal("a bad round should fail on its own")
+	}
+}
