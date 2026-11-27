@@ -1494,7 +1494,7 @@ func (o *Orchestrator) tick() {
 		snap := snapshot.FromTFT(t, time.Now())
 		st := Status{Game: "tft", InGame: snap.Live, Detail: tftDetail(snap.Tft, snap.Clock), GameName: "Teamfight Tactics", Pushes: o.pushes, Delay: effDelay}
 		o.push(cfg, effDelay, snap, &st)
-		o.presence(o.appFor("lol-tft", orGlow("")), o.styled("lol-tft", tftActivity(snap, t.StartedAt, uname), tftVars(snap)))
+		o.presence(o.appFor("lol-tft", orGlow("")), o.styled("lol-tft", tftActivity(snap, tftSince(t), uname), tftVars(snap)))
 		o.set(st)
 		return
 	}
@@ -2189,12 +2189,11 @@ func tftActivity(s snapshot.Snapshot, started time.Time, username string) discor
 	a := discord.Activity{
 		Details: details,
 		State:   state,
-		Assets: &discord.Assets{
-			LargeImage: large,
-			LargeText:  largeText,
-			SmallImage: glowIcon,
-			SmallText:  "glow.moe",
-		},
+		Assets:  &discord.Assets{LargeImage: large, LargeText: largeText},
+	}
+	// The glow badge in the corner, unless the big picture is glow already.
+	if large != glowIcon {
+		a.Assets.SmallImage, a.Assets.SmallText = glowIcon, "glow.moe"
 	}
 	if !started.IsZero() {
 		a.Timestamps = &discord.Timestamps{Start: started.UnixMilli()}
@@ -2206,6 +2205,15 @@ func tftActivity(s snapshot.Snapshot, started time.Time, username string) discor
 		}
 	}
 	return a
+}
+
+// tftSince is the card's clock: the game's own start in a game, otherwise
+// since the client opened (Discord shows a fresh 0:00 with no start).
+func tftSince(t tft.State) time.Time {
+	if !t.StartedAt.IsZero() {
+		return t.StartedAt
+	}
+	return t.OpenedAt
 }
 
 // tftStateLabel is where you are in the TFT client.

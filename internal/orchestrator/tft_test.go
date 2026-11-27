@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/glow-moe/glow-collector/internal/snapshot"
+	"github.com/glow-moe/glow-collector/internal/tft"
 )
 
 func TestTFTActivityInAGame(t *testing.T) {
@@ -48,5 +49,24 @@ func TestTFTActivityShowsTheLittleLegend(t *testing.T) {
 		if a.Assets.LargeImage != icon || a.Assets.LargeText != "Teamfight Tactics" {
 			t.Fatalf("%s: %+v", state, a.Assets)
 		}
+	}
+}
+
+func TestTFTMenusNoDoubleGlowAndAClock(t *testing.T) {
+	opened := time.UnixMilli(1795770000000)
+	a := tftActivity(snapshot.Snapshot{Tft: &snapshot.TFT{State: "menus"}}, tftSince(tft.State{Phase: "menus", OpenedAt: opened}), "")
+	if a.Assets.LargeImage != glowIcon || a.Assets.SmallImage != "" {
+		t.Fatalf("glow twice: %+v", a.Assets)
+	}
+	if a.Timestamps == nil || a.Timestamps.Start != opened.UnixMilli() {
+		t.Fatalf("menus clock: %+v", a.Timestamps)
+	}
+	game := time.UnixMilli(1795771000000)
+	if got := tftSince(tft.State{StartedAt: game, OpenedAt: opened}); !got.Equal(game) {
+		t.Fatalf("in a game the clock is the game's: %v", got)
+	}
+	icon := snapshot.TFTCompanionIcon("StyleTwoAhri_Base_Classic_Tier1")
+	if b := tftActivity(snapshot.Snapshot{Tft: &snapshot.TFT{State: "menus", CompanionIcon: icon}}, time.Time{}, ""); b.Assets.SmallImage != glowIcon {
+		t.Fatalf("badge with a Little Legend: %+v", b.Assets)
 	}
 }

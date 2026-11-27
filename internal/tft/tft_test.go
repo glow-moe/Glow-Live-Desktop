@@ -138,3 +138,25 @@ func TestFromHeadFindsTheLegendAndArena(t *testing.T) {
 		t.Fatal("a missing log gives nothing")
 	}
 }
+
+func TestLittleLegendIsRemembered(t *testing.T) {
+	dir := t.TempDir()
+	old := rememberPath
+	rememberPath = func() string { return dir + "/tft-companion.txt" }
+	defer func() { rememberPath, remembered, rememberedRead = old, "", false }()
+	remembered, rememberedRead = "", false
+
+	if recall() != "" {
+		t.Fatal("nothing seen yet")
+	}
+	remember("StyleTwoAhri_Base_Classic_Tier1")
+	remembered, rememberedRead = "", false // a new run
+	if got := recall(); got != "StyleTwoAhri_Base_Classic_Tier1" {
+		t.Fatalf("got %q", got)
+	}
+	os.WriteFile(dir+"/tft-companion.txt", []byte("../../evil"), 0o644)
+	remembered, rememberedRead = "", false
+	if got := recall(); got != "" {
+		t.Fatalf("junk on disk read as %q", got)
+	}
+}

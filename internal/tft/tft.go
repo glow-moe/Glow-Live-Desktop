@@ -54,6 +54,9 @@ type State struct {
 	Set       int
 	Units     []Unit    // in the order you first bought them
 	StartedAt time.Time // when this game loaded; zero out of a game
+	// OpenedAt is when L!VE first saw the client open this time, so the menus
+	// get a clock that keeps running instead of starting over.
+	OpenedAt time.Time
 	// Your Little Legend as the client names its art
 	// ("StyleTwoAhri_Base_Classic_Tier1"), seen in the lobby.
 	Companion string
@@ -222,15 +225,63 @@ var (
 	tail     logtail.Follower
 	state    State
 	headRead bool
+	opened   time.Time
+	// The last Little Legend seen, kept on disk: the home screen never writes
+	// it to the log or the presence, only a lobby does.
+	remembered     string
+	rememberedRead bool
 )
+
+// rememberPath is where the last Little Legend is kept (a var for tests).
+var rememberPath = func() string {
+	base, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(base, "glow-collector", "tft-companion.txt")
+}
+
+// remember keeps c as the last Little Legend seen (written only on a change).
+func remember(c string) {
+	if c == "" || c == remembered {
+		return
+	}
+	remembered, rememberedRead = c, true
+	if p := rememberPath(); p != "" {
+		_ = os.MkdirAll(filepath.Dir(p), 0o755)
+		_ = os.WriteFile(p, []byte(c), 0o644)
+	}
+}
+
+// recall is the last Little Legend seen, from any earlier run.
+func recall() string {
+	if !rememberedRead {
+		rememberedRead = true
+		if p := rememberPath(); p != "" {
+			if b, err := os.ReadFile(p); err == nil && petName.MatchString(strings.TrimSpace(string(b))) {
+				remembered = strings.TrimSpace(string(b))
+			}
+		}
+	}
+	return remembered
+}
+
+// petName is what a Little Legend's art name looks like ("StyleTwoAhri_Base_Classic_Tier1").
+var petName = regexp.MustCompile(`^[A-Za-z0-9]+_[A-Za-z0-9_]{1,80}_Tier\d$`)
 
 // Current is the TFT state, or ok=false when the game isn't open.
 func Current() (State, bool) {
 	if !proc.Running("TFTClient-Win64-Shipping.exe") {
+		mu.Lock()
+		opened = time.Time{}
+		mu.Unlock()
 		return State{}, false
 	}
 	mu.Lock()
 	defer mu.Unlock()
+	if opened.IsZero() {
+		opened = time.Now()
+	}
 	if p := logPath(); p != "" {
 		_ = tail.Read(p, func(lines io.Reader, fresh bool) {
 			if fresh {
@@ -254,6 +305,12 @@ func Current() (State, bool) {
 	}
 	out := state
 	out.Units = append([]Unit(nil), state.Units...)
+	out.OpenedAt = opened
+	if out.Companion != "" {
+		remember(out.Companion)
+	} else {
+		out.Companion = recall()
+	}
 	if out.Phase == "" {
 		out.Phase = PhaseMenus
 	}
