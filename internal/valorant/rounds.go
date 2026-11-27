@@ -129,3 +129,14 @@ func rounds(in []roundResult, players []FinalPlayer, subjects []string) ([]Final
 	}
 	return out, weapons
 }
+
+// safeRounds is rounds that gives up on a panic: the scoreboard still goes
+// out without its rounds.
+func safeRounds(in []roundResult, players []FinalPlayer, subjects []string) (rs []FinalRound, ws []string) {
+	defer func() {
+		if recover() != nil {
+			rs, ws = nil, nil
+		}
+	}()
+	return rounds(in, players, subjects)
+}

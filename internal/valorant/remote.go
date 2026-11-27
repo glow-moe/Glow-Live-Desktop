@@ -209,6 +209,9 @@ func (t *Tracker) Tick(st *State) {
 	t.mu.Unlock()
 	go func() {
 		defer func() {
+			// A read that panics (a shape Riot changed) skips this turn; it
+			// must never take the whole app down from a background goroutine.
+			_ = recover()
 			t.mu.Lock()
 			t.busy = false
 			t.mu.Unlock()
@@ -676,7 +679,7 @@ func (s *session) details(id string, hidden map[string]bool) (*Final, bool) {
 	}
 	var rr []roundResult
 	if len(subjects) == len(f.Players) && json.Unmarshal(r.RoundResults, &rr) == nil {
-		f.Rounds, f.Weapons = rounds(rr, f.Players, subjects)
+		f.Rounds, f.Weapons = safeRounds(rr, f.Players, subjects)
 	}
 	return f, true
 }

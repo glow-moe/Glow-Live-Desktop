@@ -158,8 +158,19 @@ func endOfGame(since time.Time, name, tag string) (EndOfGame, bool) {
 		eogMod = fi.ModTime()
 		eogOK = false
 		if b, err := os.ReadFile(p); err == nil {
-			eogLast, eogOK = parseEndOfGame(b, name, tag)
+			eogLast, eogOK = safeParse(b, name, tag)
 		}
 	}
 	return eogLast, eogOK
+}
+
+// safeParse is parseEndOfGame that gives up on a panic: TFT's file is the
+// game's own, and the app reads it every few seconds on the end screen.
+func safeParse(b []byte, name, tag string) (e EndOfGame, ok bool) {
+	defer func() {
+		if recover() != nil {
+			e, ok = EndOfGame{}, false
+		}
+	}()
+	return parseEndOfGame(b, name, tag)
 }
