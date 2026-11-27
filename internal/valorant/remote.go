@@ -99,6 +99,29 @@ type Final struct {
 	LengthMs int64         `json:"lengthMs"`
 	Teams    []FinalTeam   `json:"teams,omitempty"`
 	Players  []FinalPlayer `json:"players"`
+	// Rounds is the match round by round (team modes only), for the match
+	// feed and big plays (ace, clutch) on glow.moe.
+	Rounds []FinalRound `json:"rounds,omitempty"`
+	// Weapons are the weapon ids the rounds' kills point at.
+	Weapons []string `json:"weapons,omitempty"`
+}
+
+// FinalRound is one round: who won it and how, your part in it, and its kills
+// in order. Players are by their place in Final.Players.
+type FinalRound struct {
+	N       int    `json:"n"`
+	Won     bool   `json:"won,omitempty"` // your team
+	How     string `json:"how,omitempty"` // "Eliminated", "Bomb detonated", "Bomb defused", "Round timer expired"
+	Kills   int    `json:"kills,omitempty"`
+	HS      int    `json:"hs,omitempty"`     // your headshots that round
+	Clutch  int    `json:"clutch,omitempty"` // won it as your team's last one alive against this many
+	Planted bool   `json:"planted,omitempty"`
+	Defused bool   `json:"defused,omitempty"`
+	Died    bool   `json:"died,omitempty"`
+	// Feed is each kill as [ms into the round, killer, victim, weapon]: the
+	// players by index (-1 none), the weapon by index in Final.Weapons, -1
+	// for an ability or the spike.
+	Feed [][4]int `json:"feed,omitempty"`
 }
 
 // Tracker keeps the current match and the last scoreboard. Tick starts a read
@@ -606,6 +629,7 @@ func (s *session) details(id string, hidden map[string]bool) (*Final, bool) {
 			Won       bool   `json:"won"`
 			RoundsWon int    `json:"roundsWon"`
 		} `json:"teams"`
+		RoundResults []roundResult `json:"roundResults"`
 	}
 	// Not there yet (404) or a blip: try again on the next round.
 	if err := s.do(http.MethodGet, s.pd+"/match-details/v1/matches/"+id, nil, 8<<20, &r); err != nil {
@@ -641,6 +665,15 @@ func (s *session) details(id string, hidden map[string]bool) (*Final, bool) {
 			fp.Name, fp.Tag = p.GameName, p.TagLine
 		}
 		f.Players = append(f.Players, fp)
+	}
+	var subjects []string
+	for _, p := range r.Players {
+		if !p.IsObserver && p.Stats != nil {
+			subjects = append(subjects, p.Subject)
+		}
+	}
+	if len(subjects) == len(f.Players) {
+		f.Rounds, f.Weapons = rounds(r.RoundResults, f.Players, subjects)
 	}
 	return f, true
 }
