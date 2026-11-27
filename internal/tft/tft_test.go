@@ -160,3 +160,31 @@ func TestLittleLegendIsRemembered(t *testing.T) {
 		t.Fatalf("junk on disk read as %q", got)
 	}
 }
+
+// A Normal game's end of game file (2026-11-27, names replaced).
+func TestEndOfGameFile(t *testing.T) {
+	b, err := os.ReadFile("testdata/eog.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, ok := parseEndOfGame(b, "me", "test")
+	if !ok || e.Place != 2 || e.Seconds != 2211 || len(e.Players) != 8 || len(e.Board) != 8 {
+		t.Fatalf("place %d seconds %d players %d board %d", e.Place, e.Seconds, len(e.Players), len(e.Board))
+	}
+	tris := e.Board[4]
+	if tris.Champ != "Tristana" || tris.Stars != 3 || strings.Join(tris.Items, ",") != "SpearOfShojin,InfinityEdge,EdgeOfNight" {
+		t.Fatalf("tristana: %+v", tris)
+	}
+	if e.Board[5].Champ != "Lux" || e.Board[7].Champ != "GnarSmall" {
+		t.Fatalf("names: %q %q", e.Board[5].Champ, e.Board[7].Champ)
+	}
+	// Without a Riot ID the file's own marker finds you.
+	if e2, ok := parseEndOfGame(b, "", ""); !ok || e2.Place != 2 {
+		t.Fatalf("by marker: %+v", e2.Place)
+	}
+	for in, want := range map[string]string{"DA_Amumu18": "Amumu", "DA_18_Akali_AD": "Akali", "DA_Cinderling18": "Cinderling", "DA_Lux18_Base": "Lux", "junk": ""} {
+		if got := eogChamp(in); got != want {
+			t.Errorf("%s: %q", in, got)
+		}
+	}
+}

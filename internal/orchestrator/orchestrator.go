@@ -2172,6 +2172,9 @@ func tftActivity(s snapshot.Snapshot, started time.Time, username string) discor
 		details += " · " + t.Queue
 	}
 	state := tftStateLabel(t.State)
+	if t.State == tft.PhasePostGame && t.Place > 0 {
+		state = "Finished " + ordinal(t.Place)
+	}
 	if t.State == tft.PhaseInGame {
 		state = tftUnits(t, 3)
 		if state == "" && t.Set > 0 {
@@ -2683,4 +2686,20 @@ func (o *Orchestrator) readingSince(title string) time.Time {
 		o.readingStart = time.Now()
 	}
 	return o.readingStart
+}
+
+// ordinal is "1st", "2nd", "3rd", "4th"... (places 1 to 8 here).
+func ordinal(n int) string {
+	suffix := "th"
+	if n%100 < 11 || n%100 > 13 {
+		switch n % 10 {
+		case 1:
+			suffix = "st"
+		case 2:
+			suffix = "nd"
+		case 3:
+			suffix = "rd"
+		}
+	}
+	return strconv.Itoa(n) + suffix
 }

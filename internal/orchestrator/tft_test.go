@@ -70,3 +70,15 @@ func TestTFTMenusLogoAndAClock(t *testing.T) {
 		t.Fatalf("badge with a Little Legend: %+v", b.Assets)
 	}
 }
+
+func TestTFTEndScreenSaysThePlace(t *testing.T) {
+	a := tftActivity(snapshot.Snapshot{Tft: &snapshot.TFT{State: "postGame", Place: 2}}, time.Time{}, "")
+	if a.State != "Finished 2nd" {
+		t.Fatalf("got %q", a.State)
+	}
+	for n, want := range map[int]string{1: "1st", 3: "3rd", 4: "4th", 8: "8th", 11: "11th"} {
+		if ordinal(n) != want {
+			t.Errorf("%d: %s", n, ordinal(n))
+		}
+	}
+}

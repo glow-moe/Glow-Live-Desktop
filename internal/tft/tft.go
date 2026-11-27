@@ -57,6 +57,12 @@ type State struct {
 	// OpenedAt is when L!VE first saw the client open this time, so the menus
 	// get a clock that keeps running instead of starting over.
 	OpenedAt time.Time
+	// GameAt is when the last game loaded, kept after it ends.
+	GameAt time.Time
+	// End is TFT's end of game file for the game that just ended, on the end
+	// screen and back in the menus for half an hour (the end screen lasts
+	// seconds): your place and final board, and the other seven.
+	End *EndOfGame
 	// Your Little Legend as the client names its art
 	// ("StyleTwoAhri_Base_Classic_Tier1"), seen in the lobby.
 	Companion string
@@ -119,7 +125,7 @@ func (s *State) feed(r io.Reader) {
 func (s *State) enter(state string, at time.Time) {
 	switch {
 	case state == "InGame":
-		s.Phase, s.Units, s.StartedAt = PhaseInGame, nil, at
+		s.Phase, s.Units, s.StartedAt, s.GameAt = PhaseInGame, nil, at, at
 	case strings.HasPrefix(state, "EndOfGame"):
 		s.Phase, s.StartedAt = PhasePostGame, time.Time{}
 	case strings.Contains(state, "Matchmak") || strings.Contains(state, "Queue") || strings.Contains(state, "ChampSelect"):
@@ -320,6 +326,15 @@ func Current() (State, bool) {
 			if p, ok := l.Own(self, "teamfighttactics"); ok {
 				out.presence(riotclient.Decode(p.PackedData))
 			}
+		}
+	}
+	if out.Phase == PhasePostGame || out.Phase == PhaseMenus {
+		since := out.GameAt
+		if !since.IsZero() {
+			since = since.Add(time.Minute) // written at the end, never at the start
+		}
+		if e, ok := endOfGame(since, out.Name, out.Tag); ok {
+			out.End = &e
 		}
 	}
 	return out, true

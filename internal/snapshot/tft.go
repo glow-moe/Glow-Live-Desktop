@@ -1,6 +1,7 @@
 package snapshot
 
 import (
+	"sort"
 	"strings"
 	"time"
 
@@ -21,6 +22,30 @@ type TFT struct {
 	CompanionIcon string `json:"companionIcon,omitempty"`
 	// Your arena ("Backstage_Day"); glow.moe finds its name and art.
 	Arena string `json:"arena,omitempty"`
+	// The last game, from TFT's end of game file (end screen and menus, half
+	// an hour): your place, final board with items, the lobby by place, and
+	// how long it ran in seconds.
+	Place  int         `json:"place,omitempty"`
+	Final  []TFTPiece  `json:"final,omitempty"`
+	Lobby  []TFTPlayer `json:"lobby,omitempty"`
+	Length int         `json:"length,omitempty"`
+}
+
+// TFTPiece is a champion on a final board, with its items ("InfinityEdge").
+type TFTPiece struct {
+	ChampKey string   `json:"champKey"`
+	Stars    int      `json:"stars"`
+	Items    []string `json:"items,omitempty"`
+}
+
+// TFTPlayer is one of the eight at the end; glow.moe masks the names the
+// member hides.
+type TFTPlayer struct {
+	Name  string    `json:"name"`
+	Tag   string    `json:"tag,omitempty"`
+	Place int       `json:"place"`
+	Me    bool      `json:"me,omitempty"`
+	Units []TFTUnit `json:"units,omitempty"`
 }
 
 // TFTUnit is a champion on your side and the most stars it reached.
@@ -60,6 +85,20 @@ func FromTFT(s tft.State, now time.Time) Snapshot {
 	t := &TFT{State: s.Phase, Queue: TFTQueue(s.QueueID), QueueID: s.QueueID, Set: s.Set, Companion: s.Companion, CompanionIcon: TFTCompanionIcon(s.Companion), Arena: s.Arena}
 	for _, u := range s.Best(tft.MaxUnits) {
 		t.Units = append(t.Units, TFTUnit{ChampKey: u.Champ, Stars: u.Stars})
+	}
+	if e := s.End; e != nil {
+		t.Place, t.Length = e.Place, e.Seconds
+		for _, p := range e.Board {
+			t.Final = append(t.Final, TFTPiece{ChampKey: p.Champ, Stars: p.Stars, Items: p.Items})
+		}
+		for _, p := range e.Players {
+			pl := TFTPlayer{Name: p.Name, Tag: p.Tag, Place: p.Place, Me: p.Me}
+			for _, u := range p.Board {
+				pl.Units = append(pl.Units, TFTUnit{ChampKey: u.Champ, Stars: u.Stars})
+			}
+			t.Lobby = append(t.Lobby, pl)
+		}
+		sort.Slice(t.Lobby, func(i, j int) bool { return t.Lobby[i].Place < t.Lobby[j].Place })
 	}
 	clock := ""
 	if !s.StartedAt.IsZero() {
